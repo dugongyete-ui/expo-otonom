@@ -660,15 +660,59 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
         "echo healthy",
         5000,
       );
-      const healthy = result.exitCode === 0;
+      const sandboxAlive = result.exitCode === 0;
+
+      if (!sandboxAlive) {
+        res.json({ ready: false, status: "unhealthy" });
+        return;
+      }
+
+      // Sandbox is alive — check if VNC stream and browser process are responsive
+      const desktopCheck = await execInSandbox(
+        session.sandboxId,
+        "(pgrep -x x11vnc >/dev/null 2>&1 && echo vnc_ok || echo vnc_down) && " +
+        "(pgrep -E 'chrome|chromium|chromium-browser' >/dev/null 2>&1 && echo browser_ok || echo browser_down)",
+        8000,
+      );
+      const vncAlive = desktopCheck.stdout.includes("vnc_ok");
+      const browserAlive = desktopCheck.stdout.includes("browser_ok");
+      const needsRecovery = !vncAlive || !browserAlive;
+
+      if (needsRecovery && session.status === "running") {
+        const reason = !vncAlive ? "VNC process crashed" : "browser process crashed";
+        console.warn(
+          `[E2B-Desktop] ${reason} for session ${session.id} — attempting re-bootstrap`,
+        );
+        try {
+          const { streamUrl, vncUrl } = await bootstrapDesktop(session.sandboxId);
+          session.streamUrl = streamUrl;
+          session.vncUrl = vncUrl;
+          session.wsProxyUrl = streamUrl;
+          console.log(
+            `[E2B-Desktop] Re-bootstrap successful for session ${session.id}: ${streamUrl}`,
+          );
+        } catch (rebootErr: any) {
+          console.error(
+            `[E2B-Desktop] Re-bootstrap failed for session ${session.id}: ${rebootErr.message}`,
+          );
+          session.status = "error";
+          session.error = `Desktop crashed and re-bootstrap failed: ${rebootErr.message}`;
+          res.json({ ready: false, status: "error", error: session.error });
+          return;
+        }
+      }
+
       touchSession(session);
       res.json({
-        ready: healthy,
+        ready: true,
         status: session.status,
         vnc_url: session.vncUrl,
         ws_proxy_url: session.wsProxyUrl,
         stream_url: session.streamUrl,
         resolution: session.resolution,
+        recovered: needsRecovery,
+        vnc_was_up: vncAlive,
+        browser_was_up: browserAlive,
       });
     } catch {
       res.json({ ready: false, status: "unhealthy" });
@@ -1138,6 +1182,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   // Mouse Move
   app.post(
     "/api/e2b/sessions/:id/move-mouse",
+    requireAuth,
     async (req: any, res: any) => {
       const session = activeSessions.get(req.params.id);
       if (!session) {

@@ -2,9 +2,10 @@
 Web search and browsing tools for Dzeck AI Agent.
 Upgraded to class-based architecture from Ai-DzeckV2 (Manus) pattern.
 Provides: SearchTool class + backward-compatible functions.
-Uses DuckDuckGo (free, no API key required) as primary search engine.
+Uses Tavily API when TAVILY_API_KEY is set, falls back to DuckDuckGo HTML scraper.
 """
 import re
+import os
 import json
 import urllib.request
 import urllib.parse
@@ -37,14 +38,70 @@ _DATE_RANGE_MAP = {
     "past_year": "y",
 }
 
+_TAVILY_DATE_RANGE_MAP = {
+    "past_hour": "day",
+    "past_day": "day",
+    "past_week": "week",
+    "past_month": "month",
+    "past_year": "year",
+}
 
-# ─── Backward-compatible functions ───────────────────────────────────────────
+
+# ─── Tavily search ────────────────────────────────────────────────────────────
+
+def _tavily_search(
+    query: str,
+    date_range: Optional[str] = None,
+    num_results: int = 8,
+    api_key: str = "",
+) -> Optional[List[Dict[str, Any]]]:
+    """Search using Tavily synchronous API client. Returns list of results or None on failure."""
+    try:
+        from tavily import TavilyClient
+
+        client = TavilyClient(api_key=api_key)
+
+        days = None
+        if date_range and date_range != "all":
+            tavily_range = _TAVILY_DATE_RANGE_MAP.get(date_range)
+            if tavily_range == "day":
+                days = 1
+            elif tavily_range == "week":
+                days = 7
+            elif tavily_range == "month":
+                days = 30
+            elif tavily_range == "year":
+                days = 365
+
+        kwargs: Dict[str, Any] = {
+            "query": query,
+            "max_results": num_results,
+            "search_depth": "basic",
+            "include_answer": False,
+        }
+        if days is not None:
+            kwargs["days"] = days
+
+        response = client.search(**kwargs)
+
+        results = []
+        for r in response.get("results", []):
+            results.append({
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "snippet": r.get("content", ""),
+            })
+        return results
+    except Exception:
+        return None
+
+
+# ─── DuckDuckGo fallback ──────────────────────────────────────────────────────
 
 def _parse_ddg_results(html: str, num_results: int = 8) -> List[Dict[str, Any]]:
     """Parse DuckDuckGo HTML search results."""
     results: List[Dict[str, Any]] = []
 
-    # Try combined pattern (title + snippet)
     combined_pattern = re.compile(
         r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?'
         r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
@@ -63,7 +120,6 @@ def _parse_ddg_results(html: str, num_results: int = 8) -> List[Dict[str, Any]]:
         if title and link:
             results.append({"title": title, "url": link, "snippet": snippet})
 
-    # Fallback: just titles + links
     if not results:
         link_pattern = re.compile(
             r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
@@ -84,36 +140,64 @@ def _parse_ddg_results(html: str, num_results: int = 8) -> List[Dict[str, Any]]:
     return results
 
 
+def _ddg_search(
+    query: str,
+    date_range: Optional[str] = None,
+    num_results: int = 8,
+) -> List[Dict[str, Any]]:
+    """Search using DuckDuckGo HTML scraper."""
+    df_param = _DATE_RANGE_MAP.get(date_range or "", "") if date_range and date_range != "all" else ""
+    encoded_query = urllib.parse.quote_plus(query)
+    url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+    if df_param:
+        url += f"&df={df_param}"
+
+    req = urllib.request.Request(url, headers={"User-Agent": _DEFAULT_UA})
+    with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=15) as response:
+        html = response.read().decode("utf-8", errors="replace")
+
+    results = _parse_ddg_results(html, num_results=num_results)
+
+    if not results:
+        url2 = f"https://duckduckgo.com/html/?q={encoded_query}"
+        req2 = urllib.request.Request(url2, headers={"User-Agent": _DEFAULT_UA})
+        try:
+            with urllib.request.urlopen(req2, context=_make_ssl_ctx(), timeout=15) as resp2:
+                html2 = resp2.read().decode("utf-8", errors="replace")
+            results = _parse_ddg_results(html2, num_results=num_results)
+        except Exception:
+            pass
+
+    return results
+
+
+# ─── Backward-compatible functions ───────────────────────────────────────────
+
 def info_search_web(
     query: str,
     date_range: Optional[str] = None,
     num_results: int = 8,
 ) -> ToolResult:
-    """Search the web using DuckDuckGo HTML search (no API key needed)."""
-    df_param = _DATE_RANGE_MAP.get(date_range or "", "") if date_range and date_range != "all" else ""
+    """Search the web using Tavily API when available, falling back to DuckDuckGo."""
+    tavily_key = os.environ.get("TAVILY_API_KEY", "")
 
     try:
-        encoded_query = urllib.parse.quote_plus(query)
-        url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
-        if df_param:
-            url += f"&df={df_param}"
+        results: List[Dict[str, Any]] = []
+        engine = "duckduckgo"
 
-        req = urllib.request.Request(url, headers={"User-Agent": _DEFAULT_UA})
-        with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=15) as response:
-            html = response.read().decode("utf-8", errors="replace")
+        if tavily_key:
+            tavily_results = _tavily_search(
+                query=query,
+                date_range=date_range,
+                num_results=num_results,
+                api_key=tavily_key,
+            )
+            if tavily_results is not None:
+                results = tavily_results
+                engine = "tavily"
 
-        results = _parse_ddg_results(html, num_results=num_results)
-
-        if not results:
-            # Fallback: try different DuckDuckGo URL format
-            url2 = f"https://duckduckgo.com/html/?q={encoded_query}"
-            req2 = urllib.request.Request(url2, headers={"User-Agent": _DEFAULT_UA})
-            try:
-                with urllib.request.urlopen(req2, context=_make_ssl_ctx(), timeout=15) as resp2:
-                    html2 = resp2.read().decode("utf-8", errors="replace")
-                results = _parse_ddg_results(html2, num_results=num_results)
-            except Exception:
-                pass
+        if engine == "duckduckgo":
+            results = _ddg_search(query=query, date_range=date_range, num_results=num_results)
 
         formatted = "\n\n".join(
             f"{i+1}. [{r['title']}]({r['url']})\n   {r['snippet']}"
@@ -123,7 +207,7 @@ def info_search_web(
         return ToolResult(
             success=True,
             message=f"Search results for '{query}' ({len(results)} results):\n\n{formatted}",
-            data={"results": results, "query": query, "count": len(results), "date_range": date_range},
+            data={"results": results, "query": query, "count": len(results), "date_range": date_range, "engine": engine},
         )
 
     except Exception as e:

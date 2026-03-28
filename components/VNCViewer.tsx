@@ -21,7 +21,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { e2bService } from "@/lib/e2b-service";
-import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 
 interface VNCViewerProps {
   sessionId: string;
@@ -181,16 +180,8 @@ export function VNCViewer({
     const scaleY = SANDBOX_DESKTOP_HEIGHT / (containerLayout.height || SANDBOX_DESKTOP_HEIGHT);
     const sandboxX = Math.round(locationX * scaleX);
     const sandboxY = Math.round(locationY * scaleY);
-    const baseUrl = getApiBaseUrl();
     try {
-      const token = getStoredToken();
-      const clickHeaders: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) clickHeaders["Authorization"] = `Bearer ${token}`;
-      await fetch(`${baseUrl}/api/e2b/sessions/${sessionId}/click`, {
-        method: "POST",
-        headers: clickHeaders,
-        body: JSON.stringify({ x: sandboxX, y: sandboxY }),
-      });
+      await e2bService.click(sessionId, sandboxX, sandboxY);
     } catch {
       // ignore click errors
     }
@@ -199,16 +190,8 @@ export function VNCViewer({
   const handleSendKeyboard = useCallback(async () => {
     if (!keyboardText || !sessionId) return;
     setIsSendingInput(true);
-    const baseUrl = getApiBaseUrl();
     try {
-      const token = getStoredToken();
-      const typeHeaders: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) typeHeaders["Authorization"] = `Bearer ${token}`;
-      await fetch(`${baseUrl}/api/e2b/sessions/${sessionId}/type`, {
-        method: "POST",
-        headers: typeHeaders,
-        body: JSON.stringify({ text: keyboardText }),
-      });
+      await e2bService.type(sessionId, keyboardText);
       setKeyboardText("");
       setShowKeyboardModal(false);
     } catch {
