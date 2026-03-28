@@ -273,10 +273,13 @@ def _preflight_ensure_scripts(command: str, exec_dir: str = "") -> Optional[str]
         return None
     script_path = match.group(1)
     try:
-        from server.agent.tools.e2b_sandbox import ensure_file_in_sandbox, WORKSPACE_DIR, get_cached_file_path, _detected_home
+        from server.agent.tools.e2b_sandbox import ensure_file_in_sandbox, WORKSPACE_DIR, get_cached_file_path, _detected_home, _resolve_sandbox_path as _rsp2
         import os as _os
         _eff_dir = exec_dir or _detected_home or WORKSPACE_DIR
-        if not script_path.startswith("/"):
+        # Handle tilde expansion first to avoid /home/user/~/path bugs
+        if script_path.startswith("~/") or script_path == "~":
+            resolved = _rsp2(script_path)
+        elif not script_path.startswith("/"):
             resolved_exec = _os.path.normpath(_os.path.join(_eff_dir, script_path))
             resolved_ws = _os.path.normpath(_os.path.join(WORKSPACE_DIR, script_path))
             cached_exec = get_cached_file_path(resolved_exec)
@@ -360,9 +363,14 @@ def _validate_python_syntax(command: str, exec_dir: str = "") -> Optional[ToolRe
         return None
     script_path = match.group(1)
 
-    # Resolve to absolute path: try exec_dir first, fallback to detected home or WORKSPACE_DIR
-    if not script_path.startswith("/"):
-        from server.agent.tools.e2b_sandbox import WORKSPACE_DIR as _WS, _detected_home as _dh
+    # Resolve to absolute path: handle tilde expansion first, then relative paths
+    from server.agent.tools.e2b_sandbox import WORKSPACE_DIR as _WS, _detected_home as _dh, _resolve_sandbox_path as _rsp
+    # If path contains ~, resolve it via _resolve_sandbox_path to get correct absolute path
+    # (avoids bug: os.path.join("/home/user", "~/output/file.py") → "/home/user/~/output/file.py")
+    if script_path.startswith("~/") or script_path == "~":
+        script_path = _rsp(script_path)
+        _fallback_path = None
+    elif not script_path.startswith("/"):
         _eff_dir = exec_dir or _dh or _WS
         candidate_exec = os.path.normpath(os.path.join(_eff_dir, script_path))
         candidate_ws   = os.path.normpath(os.path.join(_WS, script_path))

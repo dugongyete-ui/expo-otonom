@@ -104,6 +104,7 @@ export function ChatPage({
         if (!res.ok) { setE2bStatus("error"); return; }
         const data = await res.json();
         if (cancelled) return;
+        // Show connected if E2B is enabled (sandbox may not be active until first use)
         setE2bStatus(data?.e2b_enabled === true ? "connected" : "error");
       } catch {
         if (!cancelled) setE2bStatus("error");
@@ -404,6 +405,22 @@ export function ChatPage({
       const notifyText = event.text || event.message || "";
       if (notifyText) {
         setThinking({ active: true, label: notifyText });
+      }
+      // If notify event includes file attachments, show them as a chat message with download buttons
+      const notifyAttachments = event.attachments as Array<{ filename: string; download_url: string; sandbox_path?: string }> | undefined;
+      if (notifyAttachments && notifyAttachments.length > 0) {
+        const filesMsg: ChatMessage = {
+          id: `msg_${Date.now()}_notify_files`,
+          role: "assistant",
+          content: notifyText || "",
+          timestamp: Date.now(),
+          files: notifyAttachments.map(a => ({
+            filename: a.filename,
+            download_url: a.download_url,
+            sandbox_path: a.sandbox_path,
+          })),
+        };
+        setMessages(prev => [...prev, filesMsg]);
       }
       return;
     }

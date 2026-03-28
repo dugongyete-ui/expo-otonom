@@ -789,19 +789,42 @@ if e2b_key:
                 except: pass
             except Exception as fe:
                 results['file_e2e'] = str(fe)[:100]
+            # E2E browser: check if display is available and browser is running/launchable
+            try:
+                display_r = sb.commands.run(
+                    "which xdotool >/dev/null 2>&1 && echo xdotool_ok; "
+                    "DISPLAY=:0 xdpyinfo 2>/dev/null | head -1 && echo display_ok; "
+                    "pgrep -x -E 'chrome|chromium|chromium-browser|google-chrome' 2>/dev/null && echo browser_running || echo browser_not_running",
+                    timeout=10
+                )
+                out = display_r.stdout or ''
+                if 'display_ok' in out:
+                    results['browser_e2e'] = 'display_ok'
+                elif 'xdotool_ok' in out:
+                    results['browser_e2e'] = 'xdotool_ok_no_display'
+                else:
+                    results['browser_e2e'] = 'no_display'
+                results['browser_running'] = 'browser_running' in out
+            except Exception as be:
+                results['browser_e2e'] = str(be)[:100]
+                results['browser_running'] = False
         else:
             results['shell_e2e'] = 'sandbox_unavailable'
             results['file_e2e'] = 'sandbox_unavailable'
+            results['browser_e2e'] = 'sandbox_unavailable'
+            results['browser_running'] = False
     except Exception as e:
         results['e2b_module'] = str(e)
         results['sandbox_active'] = False
         results['shell_e2e'] = 'module_error'
         results['file_e2e'] = 'module_error'
+        results['browser_e2e'] = 'module_error'
 else:
     results['e2b_module'] = 'no_api_key'
     results['sandbox_active'] = False
     results['shell_e2e'] = 'no_api_key'
     results['file_e2e'] = 'no_api_key'
+    results['browser_e2e'] = 'no_api_key'
 print(json.dumps(results))
 `], { env: { ...process.env }, timeout: 45000 });
         let out = "";
@@ -819,6 +842,8 @@ print(json.dumps(results))
     const shellOk = pythonProbe.shell_e2e === "ok";
     const fileOk = pythonProbe.file_e2e === "ok";
     const searchOk = pythonProbe.search === "ok";
+    const browserDisplayOk = pythonProbe.browser_e2e === "display_ok" || pythonProbe.browser_e2e === "xdotool_ok_no_display";
+    const browserRunning = !!pythonProbe.browser_running;
     const e2eOk = e2bOn && sandboxActive && shellOk && fileOk;
 
     const toolStatus = (available: boolean, e2e?: boolean) => {
@@ -828,7 +853,7 @@ print(json.dumps(results))
       return "ready";
     };
 
-    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ connected" : "✗ not connected"} | shell: ${pythonProbe.shell_e2e} | file: ${pythonProbe.file_e2e}`);
+    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ connected" : "✗ not connected"} | shell: ${pythonProbe.shell_e2e} | file: ${pythonProbe.file_e2e} | browser: ${pythonProbe.browser_e2e}`);
 
     res.json({
       status: "ok",
@@ -848,9 +873,12 @@ print(json.dumps(results))
           e2e_ok: fileOk,
         },
         browser: {
-          status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
+          status: e2bOn && importsOk ? (sandboxActive ? (browserDisplayOk ? "active" : "ready") : "ready") : "unavailable",
           requires: "E2B_API_KEY",
           available: e2bOn && importsOk,
+          display_ok: browserDisplayOk,
+          browser_running: browserRunning,
+          e2e_result: pythonProbe.browser_e2e || "not_checked",
         },
         search: { status: searchOk ? "ready" : "degraded", requires: "none", available: searchOk },
         message: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },

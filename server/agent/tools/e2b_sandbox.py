@@ -266,7 +266,20 @@ def _connect_existing_sandbox(sandbox_id: str, max_retries: int = 3) -> Optional
             sb = Sandbox.connect(sandbox_id, api_key=api_key)
             logger.info("[E2B] Successfully connected to sandbox %s", sandbox_id)
             # Detect actual home directory in this sandbox
-            _detect_sandbox_home(sb)
+            home_dir = _detect_sandbox_home(sb)
+            # Auto-create essential directories so file_write and shell tools work without errors
+            try:
+                import shlex as _shlex
+                output_dir = f"{home_dir}/output"
+                sb.commands.run(
+                    f"mkdir -p {_shlex.quote(output_dir)} {_shlex.quote(home_dir + '/Downloads')} "
+                    f"{_shlex.quote(home_dir + '/upload')} {_shlex.quote(home_dir + '/skills')} "
+                    f"/tmp/dzeck_output 2>/dev/null || true",
+                    timeout=10,
+                )
+                logger.info("[E2B] Essential directories created in connected sandbox.")
+            except Exception as _dir_err:
+                logger.warning("[E2B] Failed to create dirs in connected sandbox: %s", _dir_err)
             # Try to get the VNC stream URL for this sandbox.
             # After Sandbox.connect() the internal SDK stream state may not be initialized
             # (the TS server already started streaming, so the sandbox is live).
@@ -351,6 +364,8 @@ def get_sandbox() -> Optional[Any]:
                         try:
                             new_id = _sandbox.sandbox_id
                             new_vnc = _vnc_stream_url or ""
+                            # Update env var so subsequent get_sandbox() calls use the new sandbox
+                            os.environ["DZECK_E2B_SANDBOX_ID"] = new_id
                             import sys as _sys
                             _sys.stdout.write(json.dumps({
                                 "type": "vnc_stream_url",

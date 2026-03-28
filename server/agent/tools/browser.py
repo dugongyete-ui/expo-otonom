@@ -479,27 +479,29 @@ except Exception as e:
                 logger.debug("[Browser] SDK open() failed: %s, falling back to xdotool", sdk_err)
 
         # Strategy 2: xdotool address bar (Ctrl+L + type URL)
+        # Detect the active display first for reliable VNC desktop interaction
+        display = self._detect_display()
         # Focus Chrome window first
         chrome_focus_cmd = (
-            "DISPLAY=:0 wmctrl -a 'Google Chrome' 2>/dev/null || "
-            "DISPLAY=:0 wmctrl -a 'Chromium' 2>/dev/null || true"
+            "DISPLAY={d} wmctrl -a 'Google Chrome' 2>/dev/null || "
+            "DISPLAY={d} wmctrl -a 'Chromium' 2>/dev/null || true".format(d=display)
         )
         self._run(chrome_focus_cmd, timeout=5)
         time.sleep(0.3)
 
         xdo_cmd = (
-            "DISPLAY=:0 xdotool key --clearmodifiers ctrl+l && "
+            "DISPLAY={d} xdotool key --clearmodifiers ctrl+l && "
             "sleep 0.3 && "
-            "DISPLAY=:0 xdotool type --clearmodifiers '{}' && "
+            "DISPLAY={d} xdotool type --clearmodifiers '{u}' && "
             "sleep 0.1 && "
-            "DISPLAY=:0 xdotool key Return".format(safe_url)
+            "DISPLAY={d} xdotool key Return".format(d=display, u=safe_url)
         )
         res2 = self._run(xdo_cmd, timeout=10)
         if res2["exit_code"] == 0:
             return True
 
         # Strategy 3: xdg-open as last resort
-        res3 = self._run("DISPLAY=:0 xdg-open '{}' 2>/dev/null &".format(safe_url), timeout=5)
+        res3 = self._run("DISPLAY={d} xdg-open '{u}' 2>/dev/null &".format(d=display, u=safe_url), timeout=5)
         return True  # xdg-open always returns 0 even when successful
 
     def _ensure_page_deps(self) -> None:

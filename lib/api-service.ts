@@ -37,6 +37,8 @@ export interface AgentEvent {
   sandbox_id?: string;
   e2b_session_id?: string;
   files?: Array<{ filename: string; download_url: string; mime?: string; sandbox_path?: string }>;
+  text?: string;
+  attachments?: Array<{ filename: string; download_url: string; sandbox_path?: string }>;
 }
 
 export interface AgentRequest {

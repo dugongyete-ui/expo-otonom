@@ -1080,8 +1080,41 @@ class DzeckAgent:
         # This prevents mid-execution notifications from rendering as final AI responses
         if resolved == "message_notify_user":
             text = fn_args.get("text", "") or fn_args.get("message", "")
-            if text:
-                yield make_event("notify", text=text)
+            # Convert attachment file paths to download URLs so frontend can show download buttons
+            raw_attachments = fn_args.get("attachments") or []
+            attachment_urls = []
+            if raw_attachments:
+                try:
+                    from server.agent.tools.e2b_sandbox import get_sandbox, _resolve_sandbox_path
+                    _sb = get_sandbox()
+                    _sandbox_id = _sb.sandbox_id if _sb else os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+                    for fpath in raw_attachments:
+                        if not fpath:
+                            continue
+                        fname = os.path.basename(fpath)
+                        sandbox_path = _resolve_sandbox_path(fpath) if not fpath.startswith("/") else fpath
+                        durl = _make_e2b_proxy_url(sandbox_path, fname, _sandbox_id)
+                        attachment_urls.append({"filename": fname, "download_url": durl, "sandbox_path": sandbox_path})
+                        # Also track in _created_files for the end-of-task files event
+                        already = any(f.get("filename") == fname for f in self._created_files)
+                        if not already:
+                            try:
+                                from server.agent.tools.e2b_sandbox import _MIME_MAP_E2B
+                                ext = os.path.splitext(fname)[1].lower()
+                                mime = _MIME_MAP_E2B.get(ext, "application/octet-stream")
+                            except Exception:
+                                mime = "application/octet-stream"
+                            self._created_files.append({
+                                "filename": fname,
+                                "sandbox_path": sandbox_path,
+                                "sandbox_id": _sandbox_id,
+                                "download_url": durl,
+                                "mime": mime,
+                            })
+                except Exception:
+                    pass
+            if text or attachment_urls:
+                yield make_event("notify", text=text, attachments=attachment_urls if attachment_urls else None)
             _res = resolved
             _args = dict(fn_args)
             loop = asyncio.get_event_loop()
