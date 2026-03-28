@@ -1,6 +1,7 @@
 /**
- * Redis client for session persistence.
+ * Redis client for session persistence and agent event streaming.
  * Used by e2b-desktop.ts to persist E2B session metadata across server restarts.
+ * Provides Redis Streams (XADD/XREAD/XRANGE) for agent event queuing per session.
  * Falls back gracefully if Redis is unavailable.
  */
 import Redis from "ioredis";
@@ -118,6 +119,90 @@ export async function redisKeys(pattern: string): Promise<string[]> {
     return await client.keys(pattern);
   } catch (err: any) {
     console.warn("[Redis] KEYS failed:", err.message);
+    return [];
+  }
+}
+
+// ─── Redis Streams (XADD / XREAD / XRANGE) ──────────────────────────────────
+// Used for agent event queuing per session (replay support).
+// ioredis v5 exposes xadd/xread/xrange with full TypeScript types.
+
+type StreamEntry = { id: string; fields: Record<string, string> };
+
+function parseStreamEntries(raw: [id: string, fields: string[]][]): StreamEntry[] {
+  return raw.map(([id, rawFields]) => {
+    const fields: Record<string, string> = {};
+    for (let i = 0; i < rawFields.length; i += 2) {
+      fields[rawFields[i]] = rawFields[i + 1];
+    }
+    return { id, fields };
+  });
+}
+
+/**
+ * XADD: Append an event to a Redis Stream for a session.
+ * @param streamKey e.g. "stream:session:<sessionId>"
+ * @param fields     flat key-value pairs (e.g. { data: "..." })
+ * @returns the stream entry ID, or null on failure
+ */
+export async function redisXAdd(streamKey: string, fields: Record<string, string>): Promise<string | null> {
+  const client = getRedisClient();
+  if (!client) return null;
+  try {
+    const kvPairs: string[] = [];
+    for (const [k, v] of Object.entries(fields)) {
+      kvPairs.push(k, v);
+    }
+    const id = await client.xadd(streamKey, "*", ...kvPairs);
+    return id;
+  } catch (err: any) {
+    console.warn("[Redis] XADD failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * XREAD: Read entries from a Redis Stream starting from a given ID.
+ * @param streamKey   e.g. "stream:session:<sessionId>"
+ * @param lastId      last seen entry ID ("0" to start from beginning, "$" for new only)
+ * @param count       max entries to fetch
+ */
+export async function redisXRead(
+  streamKey: string,
+  lastId: string = "0",
+  count: number = 100,
+): Promise<StreamEntry[]> {
+  const client = getRedisClient();
+  if (!client) return [];
+  try {
+    const results = await client.xread("COUNT", count, "STREAMS", streamKey, lastId);
+    if (!results || !results.length) return [];
+    const [, entries] = results[0];
+    return parseStreamEntries(entries);
+  } catch (err: any) {
+    console.warn("[Redis] XREAD failed:", err.message);
+    return [];
+  }
+}
+
+/**
+ * XRANGE: Get all entries in a stream between start and end IDs.
+ * Use "-" for start (earliest) and "+" for end (latest).
+ */
+export async function redisXRange(
+  streamKey: string,
+  startId: string = "-",
+  endId: string = "+",
+  count: number = 1000,
+): Promise<StreamEntry[]> {
+  const client = getRedisClient();
+  if (!client) return [];
+  try {
+    const entries = await client.xrange(streamKey, startId, endId, "COUNT", count);
+    if (!entries || !entries.length) return [];
+    return parseStreamEntries(entries);
+  } catch (err: any) {
+    console.warn("[Redis] XRANGE failed:", err.message);
     return [];
   }
 }

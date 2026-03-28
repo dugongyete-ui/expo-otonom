@@ -1,7 +1,7 @@
 /**
- * FilePanel - Sandbox file browser panel.
- * Matches ai-manus FilePanel.vue pattern.
- * Shows files created during the session in the sandbox workspace.
+ * FilePanel - Session file tracker panel.
+ * Displays files written during the session, sourced from MongoDB session_files.
+ * Uses GET /api/sessions/:sessionId/files endpoint.
  */
 import React, { useState, useCallback, useEffect } from "react";
 import {
@@ -17,19 +17,20 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { getApiBaseUrl } from "@/lib/api-service";
 
-interface FileInfo {
+interface SessionFile {
   name: string;
   path: string;
   size?: number;
-  modified?: string;
-  is_directory?: boolean;
+  mime_type?: string;
+  created_at?: string;
+  download_url?: string;
 }
 
 interface FilePanelProps {
   sessionId?: string;
   isVisible?: boolean;
   onClose?: () => void;
-  onFileSelect?: (file: FileInfo) => void;
+  onFileSelect?: (file: SessionFile) => void;
 }
 
 export function FilePanel({
@@ -38,56 +39,41 @@ export function FilePanel({
   onClose,
   onFileSelect,
 }: FilePanelProps) {
-  const [files, setFiles] = useState<FileInfo[]>([]);
+  const [files, setFiles] = useState<SessionFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [currentPath, setCurrentPath] = useState("/home/ubuntu");
 
-  const loadFiles = useCallback(async (path?: string) => {
-    const targetPath = path || currentPath;
+  const loadFiles = useCallback(async () => {
+    if (!sessionId) return;
     setLoading(true);
     setError("");
     try {
       const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/files/list?path=${encodeURIComponent(targetPath)}`);
+      const res = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/files`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setFiles(data.files || []);
-      if (path) setCurrentPath(path);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load files");
       setFiles([]);
     } finally {
       setLoading(false);
     }
-  }, [currentPath]);
+  }, [sessionId]);
 
   useEffect(() => {
     if (isVisible && sessionId) {
       loadFiles();
     }
-  }, [isVisible, sessionId]);
+  }, [isVisible, sessionId, loadFiles]);
 
-  const navigateToDir = useCallback((dirPath: string) => {
-    loadFiles(dirPath);
-  }, [loadFiles]);
-
-  const navigateUp = useCallback(() => {
-    const parent = currentPath.replace(/\/[^/]+$/, "") || "/";
-    loadFiles(parent);
-  }, [currentPath, loadFiles]);
-
-  const handleFileClick = useCallback((file: FileInfo) => {
-    if (file.is_directory) {
-      navigateToDir(file.path);
-    } else {
-      onFileSelect?.(file);
-    }
-  }, [navigateToDir, onFileSelect]);
-
-  const downloadFile = useCallback(async (file: FileInfo) => {
+  const downloadFile = useCallback(async (file: SessionFile) => {
     const baseUrl = getApiBaseUrl();
-    const url = `${baseUrl}/api/files/download?path=${encodeURIComponent(file.path)}`;
+    const url = file.download_url
+      ? `${baseUrl}${file.download_url}`
+      : `${baseUrl}/api/files/download?path=${encodeURIComponent(file.path)}&name=${encodeURIComponent(file.name)}`;
     if (Platform.OS === "web") {
       window.open(url, "_blank");
     } else {
@@ -102,9 +88,8 @@ export function FilePanel({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileIcon = (file: FileInfo): keyof typeof Ionicons.glyphMap => {
-    if (file.is_directory) return "folder-outline";
-    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  const getFileIcon = (name: string): keyof typeof Ionicons.glyphMap => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
     const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
       py: "logo-python",
       js: "logo-javascript",
@@ -132,16 +117,15 @@ export function FilePanel({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="folder-open-outline" size={14} color="#FFD60A" />
-          <Text style={styles.headerTitle}>Files</Text>
+          <Text style={styles.headerTitle}>Session Files</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.refreshBtn}
-            onPress={() => loadFiles()}
+            onPress={loadFiles}
             activeOpacity={0.7}
           >
             <Ionicons name="refresh-outline" size={14} color="#636366" />
@@ -158,32 +142,11 @@ export function FilePanel({
         </View>
       </View>
 
-      {/* Breadcrumb */}
-      <View style={styles.breadcrumb}>
-        <TouchableOpacity onPress={() => loadFiles("/home/ubuntu")} activeOpacity={0.7}>
-          <Text style={styles.breadcrumbText}>~</Text>
-        </TouchableOpacity>
-        {currentPath !== "/home/ubuntu" && (
-          <>
-            <Text style={styles.breadcrumbSep}>/</Text>
-            <Text style={styles.breadcrumbCurrent} numberOfLines={1}>
-              {currentPath.replace("/home/ubuntu/", "")}
-            </Text>
-          </>
-        )}
-        {currentPath !== "/home/ubuntu" && (
-          <TouchableOpacity style={styles.upBtn} onPress={navigateUp} activeOpacity={0.7}>
-            <Ionicons name="arrow-up-outline" size={12} color="#636366" />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* File list */}
       <ScrollView style={styles.fileList} showsVerticalScrollIndicator>
         {loading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator size="small" color="#FFD60A" />
-            <Text style={styles.loadingText}>Loading...</Text>
+            <Text style={styles.loadingText}>Loading files...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorState}>
@@ -193,41 +156,36 @@ export function FilePanel({
         ) : files.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="folder-open-outline" size={24} color="#8a8780" />
-            <Text style={styles.emptyText}>Empty directory</Text>
+            <Text style={styles.emptyText}>No files created yet</Text>
           </View>
         ) : (
           files.map((file, index) => (
             <TouchableOpacity
               key={index}
               style={styles.fileItem}
-              onPress={() => handleFileClick(file)}
+              onPress={() => onFileSelect?.(file)}
               activeOpacity={0.7}
             >
-              <View style={[styles.fileIcon, { backgroundColor: file.is_directory ? "rgba(255,214,10,0.12)" : "rgba(90,200,250,0.12)" }]}>
+              <View style={styles.fileIcon}>
                 <Ionicons
-                  name={getFileIcon(file)}
+                  name={getFileIcon(file.name)}
                   size={14}
-                  color={file.is_directory ? "#FFD60A" : "#5AC8FA"}
+                  color="#5AC8FA"
                 />
               </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
-                {!file.is_directory && file.size !== undefined && (
+                {file.size !== undefined && (
                   <Text style={styles.fileSize}>{formatSize(file.size)}</Text>
                 )}
               </View>
-              {!file.is_directory && (
-                <TouchableOpacity
-                  style={styles.downloadBtn}
-                  onPress={() => downloadFile(file)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="download-outline" size={12} color="#636366" />
-                </TouchableOpacity>
-              )}
-              {file.is_directory && (
-                <Ionicons name="chevron-forward" size={12} color="#8a8780" />
-              )}
+              <TouchableOpacity
+                style={styles.downloadBtn}
+                onPress={() => downloadFile(file)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="download-outline" size={12} color="#636366" />
+              </TouchableOpacity>
             </TouchableOpacity>
           ))
         )}
@@ -281,40 +239,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  breadcrumb: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#f5f3ee",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
-    gap: 4,
-  },
-  breadcrumbText: {
-    fontFamily: "monospace",
-    fontSize: 11,
-    color: "#5AC8FA",
-  },
-  breadcrumbSep: {
-    fontFamily: "monospace",
-    fontSize: 11,
-    color: "#8a8780",
-  },
-  breadcrumbCurrent: {
-    fontFamily: "monospace",
-    fontSize: 11,
-    color: "#4a4740",
-    flex: 1,
-  },
-  upBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#edebe3",
-  },
   fileList: {
     flex: 1,
   },
@@ -333,6 +257,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(90,200,250,0.12)",
   },
   fileInfo: {
     flex: 1,

@@ -90,6 +90,56 @@ def _to_int_or_none(v: Any) -> Optional[int]:
         return None
 
 
+# ─── MongoDB file tracking ───────────────────────────────────────────────────
+
+def _track_file_in_mongo(file_path: str, content_size: int, mime_type: str = "") -> None:
+    """Upsert a file record into MongoDB session_files for tracking.
+    This is best-effort — failures are logged but not raised."""
+    session_id = os.environ.get("DZECK_SESSION_ID", "")
+    if not session_id:
+        return
+    try:
+        from server.agent.db.mongo import get_collection as _get_col
+        from datetime import datetime, timezone
+        col = _get_col("session_files")
+        if col is None:
+            return
+        sandbox_id = os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+        name = os.path.basename(file_path)
+        ext = os.path.splitext(name)[1].lower()
+        if not mime_type:
+            mime_type = _MIME_MAP.get(ext, "application/octet-stream")
+        import urllib.parse
+        download_url = ""
+        if sandbox_id:
+            ep = urllib.parse.quote(file_path, safe="")
+            en = urllib.parse.quote(name, safe="")
+            es = urllib.parse.quote(sandbox_id, safe="")
+            download_url = f"/api/files/download?sandbox_id={es}&path={ep}&name={en}"
+        col.update_one(
+            {"session_id": session_id, "path": file_path},
+            {"$set": {
+                "session_id": session_id,
+                "name": name,
+                "path": file_path,
+                "size": content_size,
+                "mime_type": mime_type,
+                "sandbox_id": sandbox_id,
+                "download_url": download_url,
+                "created_at": datetime.now(timezone.utc),
+            }},
+            upsert=True,
+        )
+    except Exception as exc:
+        import logging
+        import traceback
+        logger_ft = logging.getLogger(__name__)
+        logger_ft.warning(
+            "[file_tracking] MongoDB upsert FAILED for session=%s path=%s: %s\n%s",
+            session_id, file_path, exc, traceback.format_exc()
+        )
+
+
 # ─── E2B dependency preflight ────────────────────────────────────────────────
 
 def _preflight_e2b_sandbox() -> Optional[str]:
@@ -251,6 +301,13 @@ def file_write(
             lang=lang_hint, preview=content_preview
         )
 
+        # Track file in MongoDB for FilePanel
+        try:
+            from server.agent.tools.e2b_sandbox import _resolve_sandbox_path as _rsp_fw
+            _track_file_in_mongo(_rsp_fw(file), len(write_content))
+        except Exception:
+            pass
+
         return ToolResult(
             success=True,
             message=msg,
@@ -333,6 +390,13 @@ def file_str_replace(
         msg += "\n\nContent preview:\n```{lang}\n{preview}\n```".format(
             lang=lang_hint, preview=content_preview
         )
+
+        # Track file in MongoDB for FilePanel
+        try:
+            from server.agent.tools.e2b_sandbox import _resolve_sandbox_path as _rsp_fsr
+            _track_file_in_mongo(_rsp_fsr(file), len(new_content))
+        except Exception:
+            pass
 
         return ToolResult(
             success=True,

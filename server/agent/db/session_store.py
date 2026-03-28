@@ -55,11 +55,15 @@ class SessionStore:
         self._connect_attempted = True
 
         if not _motor_available:
-            logger.warning("[SessionStore] motor not available, skipping MongoDB connect.")
-            return False
+            raise RuntimeError(
+                "[SessionStore] motor package is not installed. MongoDB persistence is required. "
+                "Install with: pip install motor"
+            )
         if not self._uri:
-            logger.warning("[SessionStore] MONGODB_URI not set, sessions will be in-memory only.")
-            return False
+            raise RuntimeError(
+                "[SessionStore] MONGODB_URI is not set. MongoDB persistence is required. "
+                "Set MONGODB_URI in your environment variables."
+            )
         try:
             self._client = AsyncIOMotorClient(
                 self._uri,
@@ -75,10 +79,14 @@ class SessionStore:
             self._connected = True
             logger.info("[SessionStore] Connected to MongoDB.")
             return True
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.warning("[SessionStore] MongoDB unavailable (sessions will be in-memory): %s", e)
             self._connected = False
-            return False
+            raise RuntimeError(
+                f"[SessionStore] MongoDB connection failed: {e}. "
+                "Check MONGODB_URI and ensure MongoDB is accessible."
+            ) from e
 
     async def _ensure_indexes(self) -> None:
         """Create indexes for efficient querying."""
@@ -185,7 +193,9 @@ class SessionStore:
     ) -> None:
         """Append a session event (for rollback support)."""
         if not self._connected:
-            return
+            raise RuntimeError(
+                f"[SessionStore] Cannot save event for session {session_id}: MongoDB not connected."
+            )
         try:
             event = {
                 "session_id": session_id,
@@ -196,6 +206,76 @@ class SessionStore:
             await self._events.insert_one(event)
         except Exception as e:
             logger.error("[SessionStore] save_event error: %s", e)
+            raise
+
+    async def add_event(
+        self,
+        session_id: str,
+        event_type: str,
+        data: Dict[str, Any],
+    ) -> None:
+        """Alias for save_event — required by agent event pipeline."""
+        await self.save_event(session_id, event_type, data)
+
+    async def add_step(
+        self,
+        session_id: str,
+        step: Dict[str, Any],
+    ) -> None:
+        """Persist a new plan step to MongoDB session_events for resume/rollback."""
+        if not self._connected:
+            raise RuntimeError(
+                f"[SessionStore] Cannot add step for session {session_id}: MongoDB not connected."
+            )
+        try:
+            doc = {
+                "session_id": session_id,
+                "event_type": "step_added",
+                "timestamp": datetime.now(timezone.utc),
+                "data": step,
+            }
+            await self._events.insert_one(doc)
+            # Also update steps in sessions collection
+            await self._sessions.update_one(
+                {"session_id": session_id},
+                {"$push": {"steps_completed": step}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+                upsert=False,
+            )
+        except Exception as e:
+            logger.error("[SessionStore] add_step error: %s", e)
+            raise
+
+    async def update_step(
+        self,
+        session_id: str,
+        step_id: str,
+        updates: Dict[str, Any],
+    ) -> None:
+        """Update an existing plan step's fields in MongoDB."""
+        if not self._connected:
+            raise RuntimeError(
+                f"[SessionStore] Cannot update step {step_id} for session {session_id}: MongoDB not connected."
+            )
+        try:
+            now = datetime.now(timezone.utc)
+            updates["updated_at"] = now
+            await self._events.insert_one({
+                "session_id": session_id,
+                "event_type": "step_updated",
+                "timestamp": now,
+                "data": {"step_id": step_id, **updates},
+            })
+            # Update matching step in steps_completed array
+            set_fields: Dict[str, Any] = {f"steps_completed.$.{k}": v for k, v in updates.items()}
+            set_fields["updated_at"] = now
+            await self._sessions.update_one(
+                {"session_id": session_id, "steps_completed.id": step_id},
+                {"$set": set_fields},
+                upsert=False,
+            )
+        except Exception as e:
+            logger.error("[SessionStore] update_step error: %s", e)
+            raise
 
     async def get_events(
         self,

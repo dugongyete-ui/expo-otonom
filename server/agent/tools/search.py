@@ -2,7 +2,11 @@
 Web search and browsing tools for Dzeck AI Agent.
 Upgraded to class-based architecture from Ai-DzeckV2 (Manus) pattern.
 Provides: SearchTool class + backward-compatible functions.
-Uses Tavily API when TAVILY_API_KEY is set, falls back to DuckDuckGo HTML scraper.
+
+Search provider priority:
+  1. Bing Web Search API (if BING_SEARCH_API_KEY is set) — primary
+  2. Tavily (if TAVILY_API_KEY is set) — secondary
+  3. DuckDuckGo HTML scraper — last resort (always available)
 """
 import re
 import os
@@ -45,6 +49,67 @@ _TAVILY_DATE_RANGE_MAP = {
     "past_month": "month",
     "past_year": "year",
 }
+
+# Bing API date range freshness mapping
+_BING_FRESHNESS_MAP = {
+    "past_hour": "Hour",
+    "past_day": "Day",
+    "past_week": "Week",
+    "past_month": "Month",
+    "past_year": "Year",
+}
+
+
+# ─── Bing Web Search API ─────────────────────────────────────────────────────
+
+def _bing_api_search(
+    query: str,
+    date_range: Optional[str] = None,
+    num_results: int = 8,
+    api_key: str = "",
+) -> Optional[List[Dict[str, Any]]]:
+    """Search using Bing Web Search API (REST).
+    Requires BING_SEARCH_API_KEY. Returns list of results or None on failure.
+    """
+    if not api_key:
+        return None
+    try:
+        params: Dict[str, str] = {
+            "q": query,
+            "count": str(num_results),
+            "mkt": "en-US",
+            "safeSearch": "Moderate",
+            "textDecorations": "false",
+            "textFormat": "Raw",
+        }
+        if date_range and date_range != "all":
+            freshness = _BING_FRESHNESS_MAP.get(date_range)
+            if freshness:
+                params["freshness"] = freshness
+
+        url = "https://api.bing.microsoft.com/v7.0/search?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Ocp-Apim-Subscription-Key": api_key,
+                "User-Agent": _DEFAULT_UA,
+                "Accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        web_pages = data.get("webPages", {}).get("value", [])
+        results = []
+        for item in web_pages[:num_results]:
+            results.append({
+                "title": item.get("name", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("snippet", ""),
+            })
+        return results if results else None
+    except Exception:
+        return None
 
 
 # ─── Tavily search ────────────────────────────────────────────────────────────
@@ -91,7 +156,7 @@ def _tavily_search(
                 "url": r.get("url", ""),
                 "snippet": r.get("content", ""),
             })
-        return results
+        return results if results else None
     except Exception:
         return None
 
@@ -178,14 +243,30 @@ def info_search_web(
     date_range: Optional[str] = None,
     num_results: int = 8,
 ) -> ToolResult:
-    """Search the web using Tavily API when available, falling back to DuckDuckGo."""
+    """Search the web.
+    Priority: Bing API → Tavily → DuckDuckGo.
+    """
+    bing_key = os.environ.get("BING_SEARCH_API_KEY", "")
     tavily_key = os.environ.get("TAVILY_API_KEY", "")
 
     try:
         results: List[Dict[str, Any]] = []
         engine = "duckduckgo"
 
-        if tavily_key:
+        # 1. Try Bing Web Search API (primary)
+        if bing_key:
+            bing_results = _bing_api_search(
+                query=query,
+                date_range=date_range,
+                num_results=num_results,
+                api_key=bing_key,
+            )
+            if bing_results is not None:
+                results = bing_results
+                engine = "bing"
+
+        # 2. Try Tavily (secondary)
+        if not results and tavily_key:
             tavily_results = _tavily_search(
                 query=query,
                 date_range=date_range,
@@ -196,8 +277,10 @@ def info_search_web(
                 results = tavily_results
                 engine = "tavily"
 
-        if engine == "duckduckgo":
+        # 3. DuckDuckGo fallback (always available)
+        if not results:
             results = _ddg_search(query=query, date_range=date_range, num_results=num_results)
+            engine = "duckduckgo"
 
         formatted = "\n\n".join(
             f"{i+1}. [{r['title']}]({r['url']})\n   {r['snippet']}"
@@ -206,7 +289,7 @@ def info_search_web(
 
         return ToolResult(
             success=True,
-            message=f"Search results for '{query}' ({len(results)} results):\n\n{formatted}",
+            message=f"Search results for '{query}' ({len(results)} results, via {engine}):\n\n{formatted}",
             data={"results": results, "query": query, "count": len(results), "date_range": date_range, "engine": engine},
         )
 

@@ -10,6 +10,7 @@ import multer from "multer";
 import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox } from "./e2b-desktop";
 import { requireAuth } from "./auth-routes";
 import { getCollection } from "./db/mongo";
+import { redisXRead, redisXRange } from "./db/redis";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -169,14 +170,44 @@ export async function registerRoutes(app: any): Promise<Server> {
         if (typeof client.flush === "function") client.flush();
       } catch {}
     }
-    // Throttle sync to MongoDB: update every 10 events to avoid write storm
+
+    const sid: string = (session as any)._sessionId;
+
+    // Persist each non-DONE event line to MongoDB session_events + Redis Stream
+    if (sid && line !== "data: [DONE]\n\n" && line.startsWith("data: ")) {
+      const rawData = line.slice(6).trim();
+      if (rawData && rawData !== "[DONE]") {
+        let parsedData: any = null;
+        try { parsedData = JSON.parse(rawData); } catch {}
+        if (parsedData) {
+          // MongoDB persistence (for session resume/share page)
+          // Python agent is the authoritative Redis Stream publisher; Node only mirrors to MongoDB.
+          getCollection("session_events").then((col) => {
+            if (!col) {
+              console.warn("[session_events] MongoDB not available — session event not persisted");
+              return;
+            }
+            return (col as any).insertOne({
+              session_id: sid,
+              event_type: parsedData.type || "unknown",
+              data: parsedData,
+              raw_line: line,
+              timestamp: new Date(),
+            });
+          }).catch((err: any) => {
+            console.error("[session_events] MongoDB insert failed:", err?.message);
+          });
+        }
+      }
+    }
+
+    // Throttle sync to MongoDB agent_sessions: update every 10 events to avoid write storm
     if ((session as any)._mongoSyncing) return;
     const eventCount = session.eventQueue.length;
     const lastSyncedCount: number = (session as any)._lastSyncedEventCount ?? -1;
     if (eventCount - lastSyncedCount >= 10) {
       (session as any)._mongoSyncing = true;
       (session as any)._lastSyncedEventCount = eventCount;
-      const sid: string = (session as any)._sessionId;
       if (sid) {
         getCollection("agent_sessions").then((col) => {
           if (!col) return;
@@ -290,13 +321,118 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({ session_id: sessionId, is_shared: isShared, share_url: isShared ? shareUrl : null });
   });
 
-  app.get("/api/sessions/:sessionId/events", (req: any, res: any) => {
+  app.get("/api/sessions/:sessionId/events", async (req: any, res: any) => {
     const { sessionId } = req.params;
-    const session = activeAgentSessions.get(sessionId);
     const isShared = sharedSessions.get(sessionId) || false;
-    if (!session) return res.status(404).json({ error: "Session not found" });
     if (!isShared) return res.status(403).json({ error: "Session is not shared" });
-    res.json({ events: session.eventQueue, done: session.done });
+
+    // Serve from in-memory if session is still active
+    const session = activeAgentSessions.get(sessionId);
+    if (session) {
+      return res.json({ events: session.eventQueue, done: session.done });
+    }
+
+    // Serve from MongoDB for historical sessions
+    try {
+      const col = await getCollection("session_events");
+      if (col) {
+        const docs = await (col as any)
+          .find({ session_id: sessionId }, { projection: { _id: 0 }, sort: { timestamp: 1 } })
+          .toArray();
+        if (docs.length > 0) {
+          const events = docs.map((d: any) => d.raw_line || `data: ${JSON.stringify(d.data)}\n\n`);
+          return res.json({ events, done: true });
+        }
+      }
+    } catch (err: any) {
+      console.warn("[session_events] MongoDB fetch failed:", err.message);
+    }
+
+    // Fall back to Redis XRANGE for sessions that were published to stream but not MongoDB
+    try {
+      const streamEntries = await redisXRange(`stream:session:${sessionId}`);
+      if (streamEntries.length > 0) {
+        const events = streamEntries.map((entry) => {
+          const raw = entry.fields.data || "";
+          return `data: ${raw}\n\n`;
+        });
+        return res.json({ events, done: true });
+      }
+    } catch (err: any) {
+      console.warn("[session_events] Redis XRANGE fallback failed:", err.message);
+    }
+
+    return res.status(404).json({ error: "Session not found" });
+  });
+
+  // ─── Session files endpoint (files tracked in MongoDB session_files) ─────
+  app.get("/api/sessions/:sessionId/files", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+
+    // Enforce session ownership (deny-by-default if unverifiable).
+    // Check in-memory active sessions first, then MongoDB. Fail closed.
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      // For live sessions, _userId MUST be present (set at session creation).
+      // If absent, deny access as a conservative fail-closed measure.
+      const sessionOwner: string = (liveSession as any)._userId || "";
+      if (!sessionOwner || requestingUserId !== sessionOwner) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    } else {
+      // Session not in memory — look up ownership in MongoDB.
+      // If MongoDB is unavailable or session not found, deny access.
+      let ownerVerified = false;
+      try {
+        const sessionCol = await getCollection("agent_sessions");
+        if (sessionCol) {
+          const sessionDoc = await (sessionCol as any).findOne(
+            { session_id: sessionId },
+            { projection: { user_id: 1 } },
+          );
+          if (sessionDoc) {
+            const owner: string = sessionDoc.user_id || "";
+            if (!owner) {
+              // Session record exists but has no user_id (legacy record) — deny access
+              return res.status(403).json({ error: "Access denied" });
+            }
+            if (requestingUserId !== owner) {
+              return res.status(403).json({ error: "Access denied" });
+            }
+            ownerVerified = true;
+          }
+        }
+      } catch (err: any) {
+        console.warn("[session_files] Ownership check failed:", err.message);
+      }
+      if (!ownerVerified) {
+        // Session not found in any store — deny access to prevent enumeration
+        return res.status(403).json({ error: "Access denied" });
+      }
+    }
+
+    try {
+      const col = await getCollection("session_files");
+      if (!col) {
+        return res.json({ files: [] });
+      }
+      const docs = await (col as any)
+        .find({ session_id: sessionId }, { projection: { _id: 0 }, sort: { created_at: 1 } })
+        .toArray();
+      const files = docs.map((d: any) => ({
+        name: d.name,
+        path: d.path,
+        size: d.size,
+        mime_type: d.mime_type,
+        created_at: d.created_at,
+        download_url: d.download_url || "",
+      }));
+      res.json({ files });
+    } catch (err: any) {
+      console.warn("[session_files] MongoDB fetch failed:", err.message);
+      res.status(500).json({ error: "Failed to fetch session files" });
+    }
   });
 
   // ─── Delete a session ─────────────────────────────────────────────────────
@@ -415,6 +551,8 @@ export async function registerRoutes(app: any): Promise<Server> {
     activeAgentSessions.set(sid, session);
 
     // Sync new session to MongoDB for persistent history
+    const sessionUserId: string = req.user?.id || "unknown";
+    (session as any)._userId = sessionUserId;
     (async () => {
       try {
         const col = await getCollection("agent_sessions");
@@ -424,6 +562,7 @@ export async function registerRoutes(app: any): Promise<Server> {
             {
               $set: {
                 session_id: sid,
+                user_id: sessionUserId,
                 done: false,
                 startedAt: sessionStartedAt,
                 eventCount: 0,
@@ -575,25 +714,165 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Reconnect to existing agent session ──────────────────────────────────
-  app.get("/api/agent/stream/:sid", requireAuth, (req: any, res: any) => {
+  // Replay uses Redis XRANGE as primary durable log, with in-memory fallback.
+  app.get("/api/agent/stream/:sid", requireAuth, async (req: any, res: any) => {
     const { sid } = req.params;
     const replay = req.query.replay === "true";
+    const lastId: string = (req.query.last_id as string) || "0";
+    const requestingUserIdStream: string = req.user?.id || "";
+
     const session = activeAgentSessions.get(sid);
     if (!session) {
-      return res.status(404).json({ error: "Session not found or expired" });
+      // Allow historical replay via MongoDB ownership check
+      let histVerified = false;
+      try {
+        const hc = await getCollection("agent_sessions");
+        if (hc) {
+          const hd = await (hc as any).findOne({ session_id: sid }, { projection: { user_id: 1 } });
+          if (hd) {
+            const ho: string = hd.user_id || "";
+            if (ho && requestingUserIdStream === ho) histVerified = true;
+          }
+        }
+      } catch {}
+      if (!histVerified) {
+        return res.status(404).json({ error: "Session not found or expired" });
+      }
+      // Session is done — fall through to XRANGE replay below with an empty session shell
+      // (no active session to add client to, so just replay events and close)
+      setupSSEHeaders(res);
+      try {
+        const streamEntries = await redisXRange(`stream:session:${sid}`, lastId);
+        for (const entry of streamEntries) {
+          const raw = entry.fields.data || "";
+          if (raw) { try { res.write(`data: ${raw}\n\n`); } catch {} }
+        }
+      } catch {}
+      try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
+      return;
     }
-    setupSSEHeaders(res);
 
+    // Live session — enforce ownership
+    const streamOwner: string = (session as any)._userId || "";
+    if (!streamOwner || requestingUserIdStream !== streamOwner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    setupSSEHeaders(res);
     session.clients.add(res);
+
     if (replay) {
-      for (const line of session.eventQueue) {
-        try { res.write(line); } catch {}
+      // Attempt Redis XRANGE replay first (durable log), fall back to in-memory
+      let replayed = false;
+      try {
+        const streamEntries = await redisXRange(`stream:session:${sid}`, lastId);
+        if (streamEntries.length > 0) {
+          replayed = true;
+          for (const entry of streamEntries) {
+            const raw = entry.fields.data || "";
+            if (raw) {
+              try { res.write(`data: ${raw}\n\n`); } catch {}
+            }
+          }
+        }
+      } catch (streamErr: any) {
+        console.warn("[stream] Redis XRANGE replay failed:", streamErr.message);
+      }
+      if (!replayed) {
+        for (const line of session.eventQueue) {
+          try { res.write(line); } catch {}
+        }
       }
     }
     if (session.done) {
       try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
     }
     res.on("close", () => { session.clients.delete(res); });
+  });
+
+  // ─── Redis-Stream SSE consumer endpoint ───────────────────────────────────
+  // Reads events from Redis Stream via XREAD cursor for SSE delivery.
+  // This is the stream-first consumer path when Redis is available.
+  // Client sends ?last_id=<last-seen-stream-id> (default "0" = from start).
+  app.get("/api/agent/stream-redis/:sid", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const lastId: string = (req.query.last_id as string) || "0";
+    const requestingUserId: string = req.user?.id || "";
+    const streamKey = `stream:session:${sid}`;
+
+    // Enforce session ownership before streaming (same deny-by-default logic as /files)
+    const liveForStream = activeAgentSessions.get(sid);
+    if (liveForStream) {
+      const streamOwner: string = (liveForStream as any)._userId || "";
+      if (!streamOwner || requestingUserId !== streamOwner) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    } else {
+      let streamVerified = false;
+      try {
+        const sc = await getCollection("agent_sessions");
+        if (sc) {
+          const sd = await (sc as any).findOne({ session_id: sid }, { projection: { user_id: 1 } });
+          if (sd) {
+            const o: string = sd.user_id || "";
+            if (!o || requestingUserId !== o) {
+              return res.status(403).json({ error: "Access denied" });
+            }
+            streamVerified = true;
+          }
+        }
+      } catch {}
+      if (!streamVerified) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    }
+
+    setupSSEHeaders(res);
+
+    // Poll Redis XREAD in a loop until session done or client disconnects
+    let cursor = lastId;
+    let closed = false;
+    res.on("close", () => { closed = true; });
+
+    // Send any already-available events via XRANGE first (catch-up)
+    try {
+      const catchUp = await redisXRange(streamKey, cursor);
+      for (const entry of catchUp) {
+        const raw = entry.fields.data || "";
+        if (raw) {
+          try { res.write(`data: ${raw}\n\n`); } catch {}
+          cursor = entry.id;
+        }
+      }
+    } catch {}
+
+    // Poll for new events
+    const pollInterval = 500;
+    const maxWaitMs = 30 * 60 * 1000;
+    const started = Date.now();
+
+    while (!closed && Date.now() - started < maxWaitMs) {
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (closed) break;
+      try {
+        const entries = await redisXRead(streamKey, cursor);
+        for (const entry of entries) {
+          const raw = entry.fields.data || "";
+          if (raw) {
+            try { res.write(`data: ${raw}\n\n`); } catch {}
+            cursor = entry.id;
+          }
+        }
+        // Check if session is done (done event emitted)
+        const session = activeAgentSessions.get(sid);
+        if (session?.done) {
+          try { res.write("data: [DONE]\n\n"); } catch {}
+          break;
+        }
+        if (!session && entries.length === 0) break; // Session completed and cleaned up
+      } catch {}
+    }
+    try { res.end(); } catch {}
   });
 
   // ─── Agent session status endpoint ────────────────────────────────────────

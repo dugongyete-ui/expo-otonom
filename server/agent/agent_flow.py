@@ -2536,6 +2536,19 @@ def main() -> None:
                     chat_history = chat_history[:-1]
 
         async def _run():
+            # Initialize Redis Stream queue — Python is the authoritative stream publisher.
+            # Node.js reads from stdout for live SSE delivery; Redis Streams serve durable replay.
+            _stream_q = None
+            if session_id:
+                try:
+                    from server.agent.db.redis_stream_queue import get_stream_queue as _get_sq
+                    _stream_q = await _get_sq(session_id)
+                except Exception as _sq_err:
+                    import logging as _sqlog
+                    _sqlog.getLogger(__name__).warning(
+                        "[agent_flow] Redis stream queue unavailable (replay disabled): %s", _sq_err
+                    )
+
             async for event in run_agent_async(
                 user_message,
                 attachments=attachments or [],
@@ -2545,8 +2558,18 @@ def main() -> None:
                 is_continuation=is_continuation,
             ):
                 line = json.dumps(event, default=str)
+                # Write to stdout first for immediate Node.js SSE delivery
                 sys.stdout.write(line + "\n")
                 sys.stdout.flush()
+                # Publish to Redis Stream for durable replay/resume (authoritative publisher)
+                if _stream_q is not None and _stream_q.is_connected:
+                    try:
+                        await _stream_q.xadd(event)
+                    except Exception as _xadd_err:
+                        import logging as _xlog
+                        _xlog.getLogger(__name__).warning(
+                            "[agent_flow] Redis XADD failed (event not durable): %s", _xadd_err
+                        )
 
         try:
             loop = asyncio.get_event_loop()

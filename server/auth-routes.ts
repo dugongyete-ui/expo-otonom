@@ -1,15 +1,17 @@
 /**
  * JWT Authentication Routes for Dzeck AI
- * Supports three modes: password (full DB), local (env vars), none (auto-login)
+ * Supports three modes: password (MongoDB-backed), local (env vars), none (auto-login)
  *
  * Security:
  * - JWT_SECRET must be set in env for non-none modes; fails fast if missing
  * - Passwords hashed with bcrypt (12 rounds) with per-user salt
- * - Tokens revoked on logout
+ * - Tokens revoked on logout (in-memory revocation list; restart clears it)
+ * - "password" mode stores users in MongoDB `users` collection via MongoUserRepository
  */
 import { randomUUID } from "node:crypto";
 import * as crypto from "node:crypto";
 import * as bcrypt from "bcryptjs";
+import { getCollection } from "./db/mongo";
 
 interface User {
   id: string;
@@ -26,6 +28,10 @@ interface TokenPayload {
   role: string;
   type: "access" | "refresh";
   exp: number;
+}
+
+function getAuthMode(): "password" | "local" | "none" {
+  return (process.env.AUTH_PROVIDER as any) || "none";
 }
 
 function getJwtSecret(): string {
@@ -48,11 +54,6 @@ const REFRESH_TOKEN_EXPIRE_DAYS = 30;
 const BCRYPT_ROUNDS = 12;
 
 const revokedTokens = new Set<string>();
-const inMemoryUsers = new Map<string, User & { passwordHash: string }>();
-
-function getAuthMode(): "password" | "local" | "none" {
-  return (process.env.AUTH_PROVIDER as any) || "none";
-}
 
 function hmacSha256(data: string, key: string): string {
   return crypto.createHmac("sha256", key).update(data).digest("base64url");
@@ -96,6 +97,70 @@ async function comparePassword(password: string, hash: string): Promise<boolean>
   return bcrypt.compare(password, hash);
 }
 
+// ─── MongoDB user helpers (password mode) ────────────────────────────────────
+
+async function mongoFindUserByEmail(email: string): Promise<(User & { passwordHash: string }) | null> {
+  const col = await getCollection("users");
+  if (!col) throw new Error("MongoDB unavailable — cannot authenticate user");
+  const doc = await (col as any).findOne({ email }, { projection: { _id: 0 } });
+  return doc || null;
+}
+
+async function mongoFindUserById(id: string): Promise<(User & { passwordHash: string }) | null> {
+  const col = await getCollection("users");
+  if (!col) throw new Error("MongoDB unavailable — cannot look up user");
+  const doc = await (col as any).findOne({ id }, { projection: { _id: 0 } });
+  return doc || null;
+}
+
+async function mongoCreateUser(user: User & { passwordHash: string }): Promise<void> {
+  const col = await getCollection("users");
+  if (!col) throw new Error("MongoDB unavailable — cannot create user");
+  await (col as any).insertOne({ ...user });
+}
+
+// ─── Token → User resolution ─────────────────────────────────────────────────
+
+async function getUserFromTokenAsync(token: string): Promise<User | null> {
+  const payload = verifyJwt(token);
+  if (!payload || payload.type !== "access") return null;
+
+  const mode = getAuthMode();
+  if (mode === "none") {
+    return {
+      id: "auto-user",
+      email: process.env.LOCAL_USER_EMAIL || "user@dzeck.ai",
+      fullname: process.env.LOCAL_USER_NAME || "Dzeck User",
+      role: "admin",
+      active: true,
+      createdAt: 0,
+    };
+  }
+  if (mode === "local") {
+    const email = process.env.LOCAL_USER_EMAIL || "";
+    if (payload.email === email) {
+      return {
+        id: "local-user",
+        email,
+        fullname: process.env.LOCAL_USER_NAME || "Local User",
+        role: "admin",
+        active: true,
+        createdAt: 0,
+      };
+    }
+    return null;
+  }
+  // password mode — look up in MongoDB
+  try {
+    const user = await mongoFindUserById(payload.userId);
+    if (!user || !user.active) return null;
+    return { id: user.id, email: user.email, fullname: user.fullname, role: user.role, active: user.active, createdAt: user.createdAt };
+  } catch (err: any) {
+    console.error("[auth] MongoDB user lookup failed:", err.message);
+    return null;
+  }
+}
+
 function getUserFromToken(token: string): User | null {
   const payload = verifyJwt(token);
   if (!payload || payload.type !== "access") return null;
@@ -125,9 +190,16 @@ function getUserFromToken(token: string): User | null {
     }
     return null;
   }
-  const user = inMemoryUsers.get(payload.userId);
-  if (!user || !user.active) return null;
-  return { id: user.id, email: user.email, fullname: user.fullname, role: user.role, active: user.active, createdAt: user.createdAt };
+  // password mode — synchronous path returns a stub; async resolution happens in middleware
+  // Return a partial user with ID so downstream can fetch full record if needed
+  return {
+    id: payload.userId,
+    email: payload.email,
+    fullname: "",
+    role: (payload.role as "user" | "admin") || "user",
+    active: true,
+    createdAt: 0,
+  };
 }
 
 function createTokensForUser(user: User): { accessToken: string; refreshToken: string } {
@@ -207,21 +279,26 @@ export function registerAuthRoutes(app: any) {
       return res.json({ user: { id: user.id, email: user.email, fullname: user.fullname, role: user.role }, access_token: accessToken, refresh_token: refreshToken, token_type: "bearer" });
     }
 
+    // password mode — look up user in MongoDB
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    for (const [, user] of inMemoryUsers) {
-      if (user.email === email && user.active) {
-        const valid = await comparePassword(password, user.passwordHash);
-        if (valid) {
-          const { accessToken, refreshToken } = createTokensForUser(user);
-          return res.json({ user: { id: user.id, email: user.email, fullname: user.fullname, role: user.role }, access_token: accessToken, refresh_token: refreshToken, token_type: "bearer" });
-        }
+    try {
+      const user = await mongoFindUserByEmail(email);
+      if (!user || !user.active) {
+        return res.status(401).json({ error: "Invalid credentials" });
       }
+      const valid = await comparePassword(password, user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const { accessToken, refreshToken } = createTokensForUser(user);
+      return res.json({ user: { id: user.id, email: user.email, fullname: user.fullname, role: user.role }, access_token: accessToken, refresh_token: refreshToken, token_type: "bearer" });
+    } catch (err: any) {
+      console.error("[auth/login] Error:", err.message);
+      return res.status(503).json({ error: "Authentication service unavailable. Check MONGODB_URI." });
     }
-
-    return res.status(401).json({ error: "Invalid credentials" });
   });
 
   app.post("/api/auth/register", async (req: any, res: any) => {
@@ -238,27 +315,31 @@ export function registerAuthRoutes(app: any) {
       return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
 
-    for (const [, u] of inMemoryUsers) {
-      if (u.email === email) {
+    try {
+      const existing = await mongoFindUserByEmail(email);
+      if (existing) {
         return res.status(409).json({ error: "Email already registered" });
       }
+
+      const id = randomUUID();
+      const passwordHash = await hashPassword(password);
+      const user: User & { passwordHash: string } = {
+        id,
+        email,
+        fullname,
+        role: "user",
+        active: true,
+        createdAt: Date.now(),
+        passwordHash,
+      };
+      await mongoCreateUser(user);
+
+      const { accessToken, refreshToken } = createTokensForUser(user);
+      return res.status(201).json({ user: { id, email, fullname, role: user.role }, access_token: accessToken, refresh_token: refreshToken, token_type: "bearer" });
+    } catch (err: any) {
+      console.error("[auth/register] Error:", err.message);
+      return res.status(503).json({ error: "Registration service unavailable. Check MONGODB_URI." });
     }
-
-    const id = randomUUID();
-    const passwordHash = await hashPassword(password);
-    const user: User & { passwordHash: string } = {
-      id,
-      email,
-      fullname,
-      role: "user",
-      active: true,
-      createdAt: Date.now(),
-      passwordHash,
-    };
-    inMemoryUsers.set(id, user);
-
-    const { accessToken, refreshToken } = createTokensForUser(user);
-    return res.status(201).json({ user: { id, email, fullname, role: user.role }, access_token: accessToken, refresh_token: refreshToken, token_type: "bearer" });
   });
 
   app.post("/api/auth/logout", (req: any, res: any) => {
@@ -270,7 +351,7 @@ export function registerAuthRoutes(app: any) {
     res.json({ message: "Logged out" });
   });
 
-  app.post("/api/auth/refresh", (req: any, res: any) => {
+  app.post("/api/auth/refresh", async (req: any, res: any) => {
     const { refresh_token } = req.body || {};
     if (!refresh_token) return res.status(400).json({ error: "refresh_token is required" });
 
@@ -287,8 +368,12 @@ export function registerAuthRoutes(app: any) {
     } else if (mode === "local") {
       outUser = { id: "local-user", email: payload.email, fullname: process.env.LOCAL_USER_NAME || "Local User", role: "admin", active: true, createdAt: 0 };
     } else {
-      for (const [, u] of inMemoryUsers) {
-        if (u.id === payload.userId && u.active) { outUser = u; break; }
+      try {
+        const u = await mongoFindUserById(payload.userId);
+        if (u && u.active) outUser = u;
+      } catch (err: any) {
+        console.error("[auth/refresh] MongoDB lookup failed:", err.message);
+        return res.status(503).json({ error: "Authentication service unavailable. Check MONGODB_URI." });
       }
     }
 
@@ -299,14 +384,19 @@ export function registerAuthRoutes(app: any) {
     return res.json({ access_token: accessToken, refresh_token: newRefresh, token_type: "bearer" });
   });
 
-  app.get("/api/auth/me", (req: any, res: any) => {
+  app.get("/api/auth/me", async (req: any, res: any) => {
     const authHeader = req.headers["authorization"] || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
     if (!token) return res.status(401).json({ error: "Authentication required" });
 
-    const user = getUserFromToken(token);
-    if (!user) return res.status(401).json({ error: "Invalid or expired token" });
-    return res.json({ id: user.id, email: user.email, fullname: user.fullname, role: user.role });
+    try {
+      const user = await getUserFromTokenAsync(token);
+      if (!user) return res.status(401).json({ error: "Invalid or expired token" });
+      return res.json({ id: user.id, email: user.email, fullname: user.fullname, role: user.role });
+    } catch (err: any) {
+      console.error("[auth/me] Error:", err.message);
+      return res.status(503).json({ error: "Authentication service unavailable" });
+    }
   });
 
   app.post("/api/auth/reset-password", (req: any, res: any) => {
