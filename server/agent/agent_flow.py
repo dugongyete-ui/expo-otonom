@@ -452,6 +452,18 @@ _LANG_MAP = {
 }
 
 
+def _make_e2b_proxy_url(sandbox_path: str, filename: str, sandbox_id: str = "") -> str:
+    """Generate a proxy download URL that streams file content directly from E2B sandbox.
+    The server endpoint reads from sandbox_id + path without copying to local disk."""
+    import urllib.parse as _up
+    encoded_path = _up.quote(sandbox_path, safe="")
+    encoded_name = _up.quote(filename, safe="")
+    if sandbox_id:
+        encoded_sid = _up.quote(sandbox_id, safe="")
+        return f"/api/files/download?sandbox_id={encoded_sid}&path={encoded_path}&name={encoded_name}"
+    return f"/api/files/download?path={encoded_path}&name={encoded_name}"
+
+
 def _infer_language(filepath: str) -> str:
     if not filepath:
         return ""
@@ -1283,46 +1295,59 @@ class DzeckAgent:
         # preventing premature download links from appearing in chat mid-task.
         if tool_result.success and resolved in ("file_write", "file_str_replace"):
             data = tool_result.data or {}
-            durl = data.get("download_url", "")
             fpath = data.get("file", data.get("path", fn_args.get("file", fn_args.get("path", ""))))
             fname = os.path.basename(fpath) if fpath else ""
-            if durl and fname:
-                already = any(f["download_url"] == durl for f in self._created_files)
+            if fname and fpath:
+                already = any(f.get("filename") == fname for f in self._created_files)
                 if not already:
+                    try:
+                        from server.agent.tools.e2b_sandbox import get_sandbox, _resolve_sandbox_path
+                        sb = get_sandbox()
+                        sandbox_id = sb.sandbox_id if sb else os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+                        sandbox_path = _resolve_sandbox_path(fpath) if not fpath.startswith("/") else fpath
+                    except Exception:
+                        sandbox_id = ""
+                        sandbox_path = fpath
+                    ext = os.path.splitext(fname)[1].lower()
+                    try:
+                        from server.agent.tools.e2b_sandbox import _MIME_MAP_E2B
+                        mime = _MIME_MAP_E2B.get(ext, "application/octet-stream")
+                    except Exception:
+                        mime = "application/octet-stream"
+                    durl = _make_e2b_proxy_url(sandbox_path, fname, sandbox_id)
                     self._created_files.append({
                         "filename": fname,
-                        "path": fpath,
+                        "sandbox_path": sandbox_path,
+                        "sandbox_id": sandbox_id,
                         "download_url": durl,
-                        "mime": data.get("mime", ""),
+                        "mime": mime,
                     })
             # Also strip download_url from tool_content to prevent premature display
             if tool_content and tool_content.get("type") == "file":
                 tool_content = {k: v for k, v in tool_content.items() if k != "download_url"}
 
-        # ── Sync E2B OUTPUT files back after shell commands ──
+        # ── Track E2B OUTPUT files created by shell commands ──
         if tool_result.success and resolved == "shell_exec" and bool(os.environ.get("E2B_API_KEY", "")):
             try:
-                from server.agent.tools.e2b_sandbox import list_output_files, sync_file_from_sandbox
-                from server.agent.tools.file import _make_download_url
+                from server.agent.tools.e2b_sandbox import list_output_files, get_sandbox, _MIME_MAP_E2B
                 e2b_files = list_output_files()
-                _sess_dir = os.environ.get("DZECK_SESSION_ID", "")
-                _files_base = f"/tmp/dzeck_files/{_sess_dir}" if _sess_dir else "/tmp/dzeck_files"
-                os.makedirs(_files_base, exist_ok=True)
+                sb = get_sandbox()
+                sandbox_id = sb.sandbox_id if sb else os.environ.get("DZECK_E2B_SANDBOX_ID", "")
                 synced_fnames = {f.get("filename", "") for f in self._created_files}
                 for ef in e2b_files:
                     fname = os.path.basename(ef)
-                    local_target = os.path.join(_files_base, fname)
                     if fname and fname not in synced_fnames:
-                        local = sync_file_from_sandbox(ef, local_target)
-                        if local:
-                            durl = _make_download_url(local)
-                            self._created_files.append({
-                                "filename": fname,
-                                "path": local,
-                                "download_url": durl,
-                                "mime": "",
-                            })
-                            synced_fnames.add(fname)
+                        ext = os.path.splitext(fname)[1].lower()
+                        mime = _MIME_MAP_E2B.get(ext, "application/octet-stream")
+                        durl = _make_e2b_proxy_url(ef, fname, sandbox_id)
+                        self._created_files.append({
+                            "filename": fname,
+                            "sandbox_path": ef,
+                            "sandbox_id": sandbox_id,
+                            "download_url": durl,
+                            "mime": mime,
+                        })
+                        synced_fnames.add(fname)
             except Exception:
                 pass
 
@@ -1732,29 +1757,34 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             from server.agent.tools.e2b_sandbox import (
                 list_output_files as _list_output,
                 list_workspace_files as _list_workspace,
-                sync_file_from_sandbox as _sync_from_sb,
                 ensure_zip_output,
+                get_sandbox as _get_sb,
                 OUTPUT_DIR as _OUTPUT_DIR,
                 WORKSPACE_DIR as _WS_DIR,
+                _MIME_MAP_E2B,
             )
-            from server.agent.tools.file import _make_download_url, _get_files_dir, _MIME_MAP
 
             try:
                 ensure_zip_output()
             except Exception:
                 pass
 
+            # Get sandbox_id for proxy URL generation
+            try:
+                _sb = _get_sb()
+                _sandbox_id = _sb.sandbox_id if _sb else os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+            except Exception:
+                _sandbox_id = os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+
             # ── 1. Output dir files (primary deliverables) ──
             output_files = _list_output()
             # ── 2. Workspace root files (scripts, docs, etc. not in /output/) ──
-            _deliverable_exts = set(_MIME_MAP.keys())
             try:
                 workspace_files_raw = _list_workspace()
             except Exception:
                 workspace_files_raw = []
 
             # Filter workspace files: skip system/hidden/skills dirs
-            # Accept ALL file extensions — unknown ones get application/octet-stream
             _skip_prefixes = (
                 f"{_WS_DIR}/skills/", f"{_WS_DIR}/.local", f"{_WS_DIR}/.cache",
                 f"{_WS_DIR}/.npm", f"{_WS_DIR}/.config", f"{_WS_DIR}/.bashrc",
@@ -1769,7 +1799,6 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     continue
                 if wf.startswith(_OUTPUT_DIR):
                     continue  # already covered by output_files
-                # Accept all files — no extension filter
                 workspace_files.append(wf)
 
             all_e2b_files = output_files + workspace_files
@@ -1778,7 +1807,6 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                 output_files_info = "\n".join(
                     f"- {os.path.basename(f)} ({f})" for f in all_e2b_files
                 )
-                _files_base = _get_files_dir()
                 synced_fnames = {f.get("filename", "") for f in self._created_files}
                 for ef in all_e2b_files:
                     fname = os.path.basename(ef)
@@ -1786,17 +1814,17 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                         continue
                     if fname in synced_fnames:
                         continue
-                    local_target = os.path.join(_files_base, fname)
-                    local = _sync_from_sb(ef, local_target)
-                    if local:
-                        durl = _make_download_url(local)
-                        self._created_files.append({
-                            "filename": fname,
-                            "path": local,
-                            "download_url": durl,
-                            "mime": _MIME_MAP.get(os.path.splitext(fname)[1].lower(), "application/octet-stream"),
-                        })
-                        synced_fnames.add(fname)
+                    ext = os.path.splitext(fname)[1].lower()
+                    mime = _MIME_MAP_E2B.get(ext, "application/octet-stream")
+                    durl = _make_e2b_proxy_url(ef, fname, _sandbox_id)
+                    self._created_files.append({
+                        "filename": fname,
+                        "sandbox_path": ef,
+                        "sandbox_id": _sandbox_id,
+                        "download_url": durl,
+                        "mime": mime,
+                    })
+                    synced_fnames.add(fname)
         except Exception:
             pass
 

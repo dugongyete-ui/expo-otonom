@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text } from "react-native";
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
 import { AgentThinking } from "./AgentThinking";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage } from "../lib/api-service";
 import { randomUUID } from "expo-crypto";
+import { Ionicons } from "@expo/vector-icons";
 
 interface AgentPlanStep {
   id: string;
@@ -21,6 +22,13 @@ interface AgentPlan {
   status: "pending" | "running" | "completed" | "failed";
 }
 
+interface CreatedFile {
+  filename: string;
+  download_url: string;
+  mime?: string;
+  sandbox_path?: string;
+}
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "ask";
@@ -30,6 +38,7 @@ interface ChatMessage {
   isStreaming?: boolean;
   error?: string;
   attachments?: any[];
+  files?: CreatedFile[];
 }
 
 export interface VncSessionInfo {
@@ -338,7 +347,6 @@ export function ChatPage({
 
     if (type === "message_end" || type === "done") {
       if (streamingMsgIdRef.current) {
-        const isAskEnd = event.role === "ask";
         setMessages(prev => prev.map(m =>
           m.id === streamingMsgIdRef.current
             ? { ...m, isStreaming: false }
@@ -346,12 +354,11 @@ export function ChatPage({
         ));
         streamingMsgIdRef.current = null;
         setStreamingContent("");
-        if (isAskEnd) {
-          setThinking({ active: false, label: "" });
-        }
       }
       if (type === "done") {
-        setThinking({ active: false, label: "" });
+        streamingMsgIdRef.current = null;
+        setStreamingContent("");
+        setThinking({ active: false, label: "", stepLabel: undefined });
         setIsLoading(false);
       }
       return;
@@ -402,14 +409,14 @@ export function ChatPage({
     }
 
     if (type === "files") {
-      const files = event.files as Array<{ filename: string; download_url: string; mime?: string }> | undefined;
+      const files = event.files as Array<{ filename: string; download_url: string; mime?: string; sandbox_path?: string }> | undefined;
       if (files && files.length > 0) {
-        const fileList = files.map(f => `📎 [${f.filename}](${f.download_url})`).join("\n");
         const fileMsg: ChatMessage = {
           id: `msg_${Date.now()}_files`,
           role: "assistant",
-          content: "File yang dibuat:\n" + fileList,
+          content: "",
           timestamp: Date.now(),
+          files,
         };
         setMessages(prev => [...prev, fileMsg]);
       }
@@ -566,12 +573,40 @@ export function ChatPage({
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <MessageComponent
-            message={item}
-            tools={item.id === planMsgIdRef.current ? tools : undefined}
-          />
-        )}
+        renderItem={({ item }) => {
+          if (item.files && item.files.length > 0) {
+            const base = typeof window !== "undefined" ? window.location.origin : "";
+            return (
+              <View style={styles.fileCardContainer}>
+                <View style={styles.fileCardHeader}>
+                  <Ionicons name="document-outline" size={15} color="#636366" />
+                  <Text style={styles.fileCardTitle}>File yang dibuat:</Text>
+                </View>
+                {item.files.map((f, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.fileCard}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const url = f.download_url.startsWith("http") ? f.download_url : `${base}${f.download_url}`;
+                      Linking.openURL(url).catch(() => {});
+                    }}
+                  >
+                    <Ionicons name="download-outline" size={16} color="#1a73e8" />
+                    <Text style={styles.fileCardName} numberOfLines={1}>{f.filename}</Text>
+                    <Text style={styles.fileCardAction}>Unduh</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          }
+          return (
+            <MessageComponent
+              message={item}
+              tools={item.id === planMsgIdRef.current ? tools : undefined}
+            />
+          );
+        }}
         contentContainerStyle={styles.messageList}
         ListFooterComponent={
           thinking.active ? (
@@ -639,5 +674,44 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1a1916",
     letterSpacing: 0.3,
+  },
+  fileCardContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  fileCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  fileCardTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: "#636366",
+  },
+  fileCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd9d0",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  fileCardName: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: "#1a1916",
+  },
+  fileCardAction: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: "#1a73e8",
+    fontWeight: "600",
   },
 });

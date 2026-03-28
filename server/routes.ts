@@ -478,9 +478,13 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── File Download endpoint ─────────────────────────────────────────────────
-  app.get("/api/files/download", (req: any, res: any) => {
+  // Supports two modes:
+  //   1. E2B proxy:  ?sandbox_id=xxx&path=/home/user/output/file.py&name=file.py
+  //   2. Local file: ?path=/tmp/dzeck_files/uploads/file.zip&name=file.zip  (uploads only)
+  app.get("/api/files/download", async (req: any, res: any) => {
     const rawPath = req.query.path as string;
     const rawName = req.query.name as string;
+    const rawSandboxId = req.query.sandbox_id as string | undefined;
 
     if (!rawPath) {
       return res.status(400).json({ error: "path is required" });
@@ -495,20 +499,6 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     if (filePath.includes("..")) {
       return res.status(403).json({ error: "access denied: path not allowed" });
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: `File not found: ${filePath}` });
-    }
-
-    const realFilePath = fs.realpathSync(filePath);
-    if (!realFilePath.startsWith("/tmp/dzeck_files/")) {
-      return res.status(403).json({ error: "access denied: path not allowed" });
-    }
-
-    const stat = fs.lstatSync(realFilePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) {
-      return res.status(400).json({ error: "path is not a regular file" });
     }
 
     const fileName = rawName ? decodeURIComponent(rawName) : path.basename(filePath);
@@ -553,6 +543,97 @@ export async function registerRoutes(app: any): Promise<Server> {
     };
 
     const mimeType = MIME[ext] || "application/octet-stream";
+
+    // ── Mode 1: E2B proxy — stream file directly from E2B sandbox ─────────────
+    // sandbox_id in query takes priority; fall back to active sandbox
+    const sandboxId = rawSandboxId || getActiveE2BSandboxId();
+    if (sandboxId && process.env.E2B_API_KEY) {
+      try {
+        console.log(`[FileDownload] E2B proxy: sandbox=${sandboxId} path=${filePath} name=${fileName}`);
+
+        // Stream file from E2B sandbox via Python subprocess:
+        // Python writes base64-encoded file to stdout; we chunk-decode it here.
+        const streamed = await new Promise<boolean>((resolve, reject) => {
+          const py = spawn("python3", ["-c", `
+import sys, base64, os
+e2b_key = os.environ.get("E2B_API_KEY", "")
+sandbox_id = sys.argv[1]
+file_path = sys.argv[2]
+try:
+    from e2b_desktop import Sandbox
+    sb = Sandbox.connect(sandbox_id, api_key=e2b_key)
+    data = sb.files.read(file_path, format="bytes")
+    if data is None:
+        data = b""
+    if isinstance(data, (bytes, bytearray)):
+        raw = bytes(data)
+    elif isinstance(data, str):
+        raw = data.encode("utf-8", errors="replace")
+    else:
+        raw = bytes(data)
+    sys.stdout.buffer.write(base64.b64encode(raw))
+    sys.stdout.buffer.flush()
+except Exception as ex:
+    sys.stderr.write(str(ex))
+    sys.exit(1)
+`, sandboxId, filePath], {
+            env: { ...process.env },
+            timeout: 60000,
+          });
+
+          let errOut = "";
+
+          // Collect base64 output in chunks; decode progressively to avoid full-buffer spike.
+          // We wait for close to send headers so we can fall back to local on error.
+          let b64Chunks: Buffer[] = [];
+          py.stdout.on("data", (chunk: Buffer) => { b64Chunks.push(chunk); });
+          py.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+
+          py.on("close", (code: number | null) => {
+            if (code === 0) {
+              // Decode base64 in one pass (avoid allocating double buffers for small files;
+              // for large files this is still memory-efficient: we only have base64 chunks
+              // in memory momentarily while decoding then they are GC'd).
+              const b64 = Buffer.concat(b64Chunks).toString("ascii");
+              const rawBuf = Buffer.from(b64, "base64");
+              res.setHeader("Content-Type", mimeType);
+              res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+              res.setHeader("Content-Length", rawBuf.length);
+              res.setHeader("Cache-Control", "no-cache");
+              res.end(rawBuf);
+              resolve(true);
+            } else {
+              console.warn(`[FileDownload] E2B proxy Python exited ${code}: ${errOut.trim()}`);
+              resolve(false);
+            }
+          });
+
+          py.on("error", (err: Error) => { reject(err); });
+        });
+
+        if (streamed) return;
+        // fall through to local
+      } catch (e2bErr: any) {
+        console.warn(`[FileDownload] E2B proxy failed (${e2bErr.message}), falling back to local`);
+        // fall through to local file serve
+      }
+    }
+
+    // ── Mode 2: Local file (uploads stored on server disk) ───────────────────
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: `File not found: ${filePath}` });
+    }
+
+    const realFilePath = fs.realpathSync(filePath);
+    if (!realFilePath.startsWith("/tmp/dzeck_files/")) {
+      return res.status(403).json({ error: "access denied: path not allowed" });
+    }
+
+    const stat = fs.lstatSync(realFilePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      return res.status(400).json({ error: "path is not a regular file" });
+    }
+
     const fileSize = stat.size;
 
     res.setHeader("Content-Type", mimeType);
@@ -654,10 +735,13 @@ export async function registerRoutes(app: any): Promise<Server> {
     const cerebrasConfigured = !!getCerebrasConfig().apiKey;
     const timestamp = new Date().toISOString();
 
-    // Run a lightweight Python probe to verify tool imports are working
+    // Run a Python probe that verifies tool imports AND performs E2E sandbox checks:
+    // 1. Import verification (modules OK)
+    // 2. E2B sandbox connect/create
+    // 3. Shell: run echo command inside sandbox
+    // 4. File: write then read back a test file inside sandbox
     let pythonProbe: Record<string, any> = {};
     try {
-      const { spawn } = await import("child_process");
       const probe = await new Promise<string>((resolve) => {
         const py = spawn("python3", ["-c", `
 import json, sys, os
@@ -668,13 +752,6 @@ try:
 except Exception as e:
     results['imports'] = str(e)
 try:
-    from server.agent.tools.e2b_sandbox import get_sandbox, _detected_home, WORKSPACE_DIR
-    results['e2b_module'] = 'ok'
-    results['sandbox_active'] = get_sandbox() is not None
-    results['detected_home'] = _detected_home or ''
-except Exception as e:
-    results['e2b_module'] = str(e)
-try:
     import requests
     results['requests'] = 'ok'
 except ImportError:
@@ -684,12 +761,53 @@ try:
     results['search'] = 'ok'
 except Exception as e:
     results['search'] = str(e)
+
+# E2B end-to-end verification
+e2b_key = os.environ.get("E2B_API_KEY", "")
+if e2b_key:
+    try:
+        from server.agent.tools.e2b_sandbox import get_sandbox, _detected_home, WORKSPACE_DIR
+        results['e2b_module'] = 'ok'
+        sb = get_sandbox()
+        results['sandbox_active'] = sb is not None
+        results['detected_home'] = _detected_home or ''
+        if sb is not None:
+            # E2E shell: run a simple echo command
+            try:
+                shell_r = sb.commands.run("echo dzeck_health_ok", timeout=10)
+                results['shell_e2e'] = 'ok' if 'dzeck_health_ok' in (shell_r.stdout or '') else 'fail'
+            except Exception as se:
+                results['shell_e2e'] = str(se)[:100]
+            # E2E file: write then read test file
+            try:
+                test_path = (_detected_home or WORKSPACE_DIR) + '/.dzeck_health_test'
+                sb.files.write(test_path, 'health_check')
+                read_back = sb.files.read(test_path)
+                results['file_e2e'] = 'ok' if read_back and 'health_check' in read_back else 'fail'
+                # Clean up
+                try: sb.commands.run(f"rm -f {test_path}", timeout=5)
+                except: pass
+            except Exception as fe:
+                results['file_e2e'] = str(fe)[:100]
+        else:
+            results['shell_e2e'] = 'sandbox_unavailable'
+            results['file_e2e'] = 'sandbox_unavailable'
+    except Exception as e:
+        results['e2b_module'] = str(e)
+        results['sandbox_active'] = False
+        results['shell_e2e'] = 'module_error'
+        results['file_e2e'] = 'module_error'
+else:
+    results['e2b_module'] = 'no_api_key'
+    results['sandbox_active'] = False
+    results['shell_e2e'] = 'no_api_key'
+    results['file_e2e'] = 'no_api_key'
 print(json.dumps(results))
-`], { env: { ...process.env }, timeout: 10000 });
+`], { env: { ...process.env }, timeout: 45000 });
         let out = "";
         py.stdout.on("data", (d: any) => { out += d.toString(); });
         py.on("close", () => resolve(out.trim()));
-        setTimeout(() => { try { py.kill(); } catch {} resolve("{}"); }, 9000);
+        setTimeout(() => { try { py.kill(); } catch {} resolve("{}"); }, 40000);
       });
       pythonProbe = JSON.parse(probe || "{}");
     } catch (err: any) {
@@ -698,22 +816,36 @@ print(json.dumps(results))
 
     const importsOk = pythonProbe.imports === "ok";
     const sandboxActive = !!pythonProbe.sandbox_active;
+    const shellOk = pythonProbe.shell_e2e === "ok";
+    const fileOk = pythonProbe.file_e2e === "ok";
     const searchOk = pythonProbe.search === "ok";
+    const e2eOk = e2bOn && sandboxActive && shellOk && fileOk;
+
+    const toolStatus = (available: boolean, e2e?: boolean) => {
+      if (!available) return "unavailable";
+      if (e2e === true) return "active";
+      if (e2e === false) return "error";
+      return "ready";
+    };
+
+    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ connected" : "✗ not connected"} | shell: ${pythonProbe.shell_e2e} | file: ${pythonProbe.file_e2e}`);
 
     res.json({
       status: "ok",
       timestamp,
       tools: {
         shell: {
-          status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
+          status: toolStatus(e2bOn && importsOk, sandboxActive ? shellOk : undefined),
           requires: "E2B_API_KEY",
           available: e2bOn && importsOk,
           sandbox_active: sandboxActive,
+          e2e_ok: shellOk,
         },
         file: {
-          status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
+          status: toolStatus(e2bOn && importsOk, sandboxActive ? fileOk : undefined),
           requires: "E2B_API_KEY",
           available: e2bOn && importsOk,
+          e2e_ok: fileOk,
         },
         browser: {
           status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
@@ -731,7 +863,8 @@ print(json.dumps(results))
       cerebras_configured: cerebrasConfigured,
       python_probe: pythonProbe,
       detected_home: pythonProbe.detected_home || null,
-      all_tools_ready: e2bOn && cerebrasConfigured && importsOk,
+      all_tools_ready: e2bOn && cerebrasConfigured && importsOk && e2eOk,
+      e2e_verified: e2eOk,
     });
   });
 

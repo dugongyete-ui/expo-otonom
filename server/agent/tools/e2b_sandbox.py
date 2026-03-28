@@ -28,6 +28,51 @@ logger = logging.getLogger(__name__)
 _E2B_API_KEY_AT_IMPORT = os.environ.get("E2B_API_KEY", "")
 E2B_API_KEY = _E2B_API_KEY_AT_IMPORT
 
+# MIME type map for E2B sandbox files (used when generating proxy download URLs)
+_MIME_MAP_E2B: dict = {
+    ".txt": "text/plain", ".md": "text/markdown", ".markdown": "text/markdown",
+    ".csv": "text/csv", ".tsv": "text/tab-separated-values",
+    ".json": "application/json", ".jsonl": "application/json",
+    ".html": "text/html", ".htm": "text/html", ".xml": "application/xml",
+    ".js": "application/javascript", ".mjs": "application/javascript",
+    ".ts": "application/typescript", ".tsx": "application/typescript",
+    ".py": "text/x-python", ".ipynb": "application/x-ipynb+json",
+    ".sql": "text/x-sql", ".sh": "application/x-sh", ".bash": "application/x-sh",
+    ".yaml": "text/yaml", ".yml": "text/yaml", ".toml": "text/plain",
+    ".svg": "image/svg+xml", ".css": "text/css",
+    ".r": "text/plain", ".R": "text/plain",
+    ".go": "text/plain", ".rs": "text/plain", ".java": "text/plain",
+    ".cpp": "text/plain", ".c": "text/plain", ".h": "text/plain",
+    ".rb": "text/plain", ".php": "text/plain", ".kt": "text/plain",
+    ".swift": "text/plain", ".dart": "text/plain",
+    ".ini": "text/plain", ".cfg": "text/plain", ".conf": "text/plain",
+    ".env": "text/plain", ".log": "text/plain",
+    ".zip": "application/zip", ".tar": "application/x-tar",
+    ".gz": "application/gzip", ".bz2": "application/x-bzip2",
+    ".7z": "application/x-7z-compressed", ".rar": "application/x-rar-compressed",
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc": "application/msword",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".odt": "application/vnd.oasis.opendocument.text",
+    ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    ".rtf": "application/rtf",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".ico": "image/x-icon", ".tiff": "image/tiff", ".tif": "image/tiff",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+    ".mp4": "video/mp4", ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+    ".mov": "video/quicktime", ".webm": "video/webm",
+    ".parquet": "application/octet-stream", ".feather": "application/octet-stream",
+    ".pkl": "application/octet-stream", ".pickle": "application/octet-stream",
+    ".npy": "application/octet-stream", ".npz": "application/octet-stream",
+    ".db": "application/octet-stream", ".sqlite": "application/octet-stream",
+    ".bin": "application/octet-stream",
+}
+
 
 def _get_api_key() -> str:
     """Re-read E2B_API_KEY from env each time — handles late-set secrets."""
@@ -868,42 +913,6 @@ def sync_file_to_sandbox(local_path: str, sandbox_path: str = "") -> bool:
         logger.warning("[E2B] Failed to sync file to sandbox: %s", e)
         return False
 
-
-def sync_file_from_sandbox(sandbox_path: str, local_path: str = "") -> Optional[str]:
-    """Copy a file from E2B sandbox to local filesystem (binary-safe via base64). Returns local path or None."""
-    if not _get_api_key():
-        return None
-    sb = get_sandbox()
-    if sb is None:
-        return None
-    try:
-        import shlex
-        if not local_path:
-            _sess = os.environ.get("DZECK_SESSION_ID", "")
-            _base = f"/tmp/dzeck_files/{_sess}" if _sess else "/tmp/dzeck_files"
-            local_path = os.path.join(_base, os.path.basename(sandbox_path))
-        parent = os.path.dirname(local_path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        result = sb.commands.run(
-            f"base64 -w0 {shlex.quote(sandbox_path)}",
-            timeout=60
-        )
-        if result.exit_code != 0 or not result.stdout:
-            content = sb.files.read(sandbox_path)
-            if content is None:
-                return None
-            with open(local_path, "w", encoding="utf-8") as f:
-                f.write(content)
-        else:
-            raw = base64.b64decode(result.stdout.strip())
-            with open(local_path, "wb") as f:
-                f.write(raw)
-        logger.info("[E2B] Synced sandbox %s → local %s", sandbox_path, local_path)
-        return local_path
-    except Exception as e:
-        logger.warning("[E2B] Failed to sync file from sandbox: %s", e)
-        return None
 
 
 def list_workspace_files() -> list:

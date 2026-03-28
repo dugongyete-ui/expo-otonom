@@ -76,39 +76,6 @@ _MIME_MAP = {
 }
 
 
-def _make_download_url(file_path: str) -> str:
-    """Generate a download URL for a file with proper MIME type handling."""
-    filename = os.path.basename(file_path)
-    ext = os.path.splitext(filename)[1].lower()
-    mime_type = _MIME_MAP.get(ext, "application/octet-stream")
-    encoded_path = urllib.parse.quote(file_path, safe="")
-    encoded_name = urllib.parse.quote(filename, safe="")
-    return f"/api/files/download?path={encoded_path}&name={encoded_name}&type={urllib.parse.quote(mime_type, safe='')}"
-
-
-def _register_file_for_download(file_path: str) -> str:
-    """
-    Copy the file to the session files dir so it's accessible for download,
-    and return the download URL pointing to the copy in the session files dir.
-    """
-    files_dir = _get_files_dir()
-    dest = file_path
-    try:
-        if os.path.isfile(file_path):
-            filename = os.path.basename(file_path)
-            dest = os.path.join(files_dir, filename)
-            if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(file_path):
-                base, ext = os.path.splitext(filename)
-                import hashlib, time
-                tag = hashlib.md5(str(time.time()).encode()).hexdigest()[:6]
-                filename = f"{base}_{tag}{ext}"
-                dest = os.path.join(files_dir, filename)
-            if os.path.abspath(file_path) != os.path.abspath(dest):
-                shutil.copy2(file_path, dest)
-    except Exception:
-        pass
-    return _make_download_url(dest)
-
 
 # ─── Utility helpers ─────────────────────────────────────────────────────────
 
@@ -280,23 +247,6 @@ def file_write(
                 data={"error": e2b_error, "file": file, "e2b_write_failed": True},
             )
 
-        # In E2B-only mode, we still register the file for download by reading it back
-        # This is required because users need to download the generated files (ZIP, PDF, etc.)
-        download_url = ""
-        local_path = os.path.join(_get_files_dir(), os.path.basename(file))
-        try:
-            from server.agent.tools.e2b_sandbox import read_file_bytes, _resolve_sandbox_path
-            data = read_file_bytes(_resolve_sandbox_path(file))
-            if data:
-                parent_dir = os.path.dirname(local_path)
-                if parent_dir and not os.path.exists(parent_dir):
-                    os.makedirs(parent_dir, exist_ok=True)
-                with open(local_path, "wb") as f:
-                    f.write(data)
-                download_url = _register_file_for_download(local_path)
-        except Exception:
-            pass
-
         operation = "appended" if append else "written"
         content_preview = content[:1000]
         if len(content) > 1000:
@@ -307,8 +257,6 @@ def file_write(
 
         msg = "File {op} successfully: {f} ({b} bytes)".format(op=operation, f=file, b=len(write_content))
         msg += "\n✅ File tersimpan di E2B sandbox."
-        if download_url:
-            msg += "\n📎 File siap didownload."
         msg += "\n\nContent preview:\n```{lang}\n{preview}\n```".format(
             lang=lang_hint, preview=content_preview
         )
@@ -318,10 +266,8 @@ def file_write(
             message=msg,
             data={
                 "file": file,
-                "local_path": local_path,
                 "operation": operation,
                 "bytes_written": len(write_content),
-                "download_url": download_url,
                 "filename": os.path.basename(file),
                 "content_preview": content_preview,
             },
@@ -386,19 +332,6 @@ def file_str_replace(
                 data={"error": e2b_replace_err, "file": file, "e2b_write_failed": True},
             )
 
-        # Register for download
-        download_url = ""
-        local_path = os.path.join(_get_files_dir(), os.path.basename(file))
-        try:
-            parent_dir = os.path.dirname(local_path)
-            if parent_dir and not os.path.exists(parent_dir):
-                os.makedirs(parent_dir, exist_ok=True)
-            with open(local_path, "w", encoding="utf-8") as f:
-                f.write(new_content)
-            download_url = _register_file_for_download(local_path)
-        except Exception:
-            pass
-
         ext = os.path.splitext(file)[1].lstrip(".") if "." in os.path.basename(file) else ""
         lang_hint = ext if ext in ("py", "js", "ts", "tsx", "jsx", "html", "css", "json", "yaml", "yml", "sh", "bash", "sql", "md", "xml", "svg", "java", "cpp", "c", "go", "rs", "rb") else ""
         content_preview = new_content[:1000]
@@ -406,23 +339,18 @@ def file_str_replace(
             content_preview += "\n... (truncated, total {} chars)".format(len(new_content))
 
         msg = f"Replaced {count} occurrence(s) in {file}"
-        if download_url:
-            msg += "\n📎 File siap didownload."
+        msg += "\n✅ File tersimpan di E2B sandbox."
         msg += "\n\nContent preview:\n```{lang}\n{preview}\n```".format(
             lang=lang_hint, preview=content_preview
         )
 
-        is_deliverable = "/output/" in file or file.startswith("~/output")
         return ToolResult(
             success=True,
             message=msg,
             data={
                 "file": file,
-                "local_path": local_path,
                 "replacements": count,
-                "download_url": download_url,
                 "filename": os.path.basename(file),
-                "is_deliverable": is_deliverable,
             },
         )
     except Exception as e:
