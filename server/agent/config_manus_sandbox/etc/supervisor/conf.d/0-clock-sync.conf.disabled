@@ -1,0 +1,6 @@
+[program:clock-sync]
+command=/opt/.manus/.packages/scripts/start-clock-sync.sh
+user=root
+stdout_logfile=/var/log/supervisor/clock-sync.log
+stderr_logfile=/var/log/supervisor/clock-sync.err.log
+priority=1

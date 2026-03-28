@@ -1,0 +1,7 @@
+[program:Openbox]
+command=openbox
+priority=3
+stderr_logfile=/var/log/supervisor/openbox.err.log
+stdout_logfile=/var/log/supervisor/openbox.log
+environment=DISPLAY=":0"
+

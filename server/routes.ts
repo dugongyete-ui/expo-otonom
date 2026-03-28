@@ -1,0 +1,947 @@
+import * as nodeHttp from "node:http";
+import { type Server, createServer } from "node:http";
+import { spawn } from "node:child_process";
+import * as https from "node:https";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import multer from "multer";
+import { getActiveE2BSandboxId, createAndRegisterE2BSandbox } from "./e2b-desktop";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const _require = createRequire(import.meta.url);
+
+// ─── File Download Store ─────────────────────────────────────────────────────
+const DZECK_FILES_DIR = "/tmp/dzeck_files";
+const DZECK_UPLOADS_DIR = "/tmp/dzeck_files/uploads";
+if (!fs.existsSync(DZECK_FILES_DIR)) {
+  fs.mkdirSync(DZECK_FILES_DIR, { recursive: true });
+}
+if (!fs.existsSync(DZECK_UPLOADS_DIR)) {
+  fs.mkdirSync(DZECK_UPLOADS_DIR, { recursive: true });
+}
+
+// ─── Multer Upload Config ─────────────────────────────────────────────────────
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, DZECK_UPLOADS_DIR),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${Date.now()}-${randomUUID().slice(0,8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+// ─── E2B Cloud Sandbox (replaces VNC) ────────────────────────────────────────
+// NOTE: E2B_ENABLED must be a function, not a const, because .env is loaded
+// AFTER ESM imports are evaluated. A const here would always be false when
+// E2B_API_KEY is only set in .env (not in the actual process environment).
+function isE2BEnabled(): boolean {
+  return !!process.env.E2B_API_KEY;
+}
+
+function getCerebrasConfig() {
+  const apiKey = process.env.CEREBRAS_API_KEY || "";
+  const model = process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507";
+  const agentModel = process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507";
+  const hostname = "api.cerebras.ai";
+  const path = "/v1/chat/completions";
+  return { apiKey, model, agentModel, hostname, path };
+}
+
+function setupSSEHeaders(res: any) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+}
+
+export async function registerRoutes(app: any): Promise<Server> {
+  const startupCfg = getCerebrasConfig();
+  if (!startupCfg.apiKey) {
+    console.warn("[WARNING] CEREBRAS_API_KEY is not set. AI features will not work.");
+  }
+
+  app.get("/status", (_req: any, res: any) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  app.get("/api/status", (_req: any, res: any) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString(), e2bEnabled: isE2BEnabled() });
+  });
+
+  // ─── Chat endpoint (Streaming) ───────────────────────────────────────────
+  app.post("/api/chat", async (req: any, res: any) => {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "messages array is required" });
+    }
+
+    const { apiKey, model, hostname, path: apiPath } = getCerebrasConfig();
+
+    if (!apiKey) {
+      setupSSEHeaders(res);
+      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set CEREBRAS_API_KEY di environment." })}\n\n`);
+      return res.end();
+    }
+
+    const requestBody = JSON.stringify({ 
+      model, 
+      messages, 
+      stream: true, 
+      max_tokens: 8192,
+      temperature: 0.7,
+      top_p: 1,
+    });
+    const options: https.RequestOptions = {
+      hostname: hostname,
+      port: 443,
+      path: apiPath,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+    };
+
+    setupSSEHeaders(res);
+    res.flushHeaders(); // Ensure headers are sent immediately
+
+    const apiReq = https.request(options, (apiRes) => {
+      if (apiRes.statusCode !== 200) {
+        res.write(`data: ${JSON.stringify({ type: "error", error: "AI service error " + apiRes.statusCode })}\n\n`);
+        return res.end();
+      }
+
+      let buffer = "";
+      apiRes.on("data", (chunk: Buffer) => {
+        buffer += chunk.toString();
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "data: [DONE]") continue;
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const parsed = JSON.parse(trimmed.slice(6));
+              const content = parsed.response ?? parsed.choices?.[0]?.delta?.content ?? "";
+              if (content) {
+                res.write(`data: ${JSON.stringify({ type: "message_chunk", chunk: content })}\n\n`);
+                if (typeof (res as any).flush === "function") (res as any).flush();
+              }
+            } catch (e) {}
+          }
+        }
+      });
+
+      apiRes.on("end", () => {
+        res.write(`data: ${JSON.stringify({ type: "message_end" })}\n\n`);
+        res.end();
+      });
+    });
+
+    apiReq.on("error", (err) => {
+      res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`);
+      res.end();
+    });
+
+    apiReq.write(requestBody);
+    apiReq.end();
+  });
+
+  // ─── Active Agent Sessions (persistence across SSE reconnects) ───────────
+  interface AgentSession {
+    proc: any;
+    eventQueue: string[];
+    clients: Set<any>;
+    done: boolean;
+    startedAt: number;
+    stderrBuffer: string;
+  }
+  const activeAgentSessions = new Map<string, AgentSession>();
+
+  // Clean up sessions older than 30 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [sid, session] of activeAgentSessions.entries()) {
+      if (session.done && now - session.startedAt > 30 * 60 * 1000) {
+        activeAgentSessions.delete(sid);
+      }
+    }
+  }, 5 * 60 * 1000);
+
+  function _broadcastToSession(session: AgentSession, line: string) {
+    session.eventQueue.push(line);
+    for (const client of session.clients) {
+      try {
+        client.write(line);
+        if (typeof client.flush === "function") client.flush();
+      } catch {}
+    }
+  }
+
+  // ─── Session list endpoint ────────────────────────────────────────────────
+  app.get("/api/sessions", (_req: any, res: any) => {
+    const sessions = Array.from(activeAgentSessions.entries()).map(([sid, session]) => ({
+      session_id: sid,
+      done: session.done,
+      startedAt: session.startedAt,
+      eventCount: session.eventQueue.length,
+    }));
+    res.json({ sessions });
+  });
+
+  // ─── Delete a session ─────────────────────────────────────────────────────
+  app.delete("/api/sessions/:sessionId", (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const session = activeAgentSessions.get(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    if (!session.done) {
+      try { session.proc.kill("SIGTERM"); } catch {}
+      session.done = true;
+      _broadcastToSession(session, `data: ${JSON.stringify({ type: "error", error: "Session dihentikan." })}\n\n`);
+      _broadcastToSession(session, "data: [DONE]\n\n");
+      for (const client of session.clients) { try { client.end(); } catch {} }
+    }
+    activeAgentSessions.delete(sessionId);
+    res.json({ deleted: true, session_id: sessionId });
+  });
+
+  // ─── Agent endpoint with SSE ───────────────────────────────────────────────
+  app.post("/api/agent", async (req: any, res: any) => {
+    const { message, messages, attachments, session_id, resume_from_session, is_continuation } = req.body;
+    if (!message && (!messages || !Array.isArray(messages))) {
+      return res.status(400).json({ error: "message or messages array is required" });
+    }
+
+    setupSSEHeaders(res);
+    res.flushHeaders();
+
+    const { apiKey, agentModel } = getCerebrasConfig();
+
+    if (!apiKey) {
+      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set CEREBRAS_API_KEY di environment lalu restart server." })}\n\n`);
+      res.write("data: [DONE]\n\n");
+      return res.end();
+    }
+
+    const sid = session_id || randomUUID();
+
+    // All execution now happens in E2B cloud sandbox — no local VNC needed
+    const e2bKey = process.env.E2B_API_KEY || "";
+    if (!e2bKey) {
+      console.warn("[Agent] E2B_API_KEY not set — sandbox features will be unavailable");
+    } else {
+      console.log(`[Agent] E2B_API_KEY available (${e2bKey.length} chars) for session ${sid}`);
+    }
+
+    // ── Task 1 & 2: Unify sandboxes ───────────────────────────────────────────
+    // Determine which E2B sandbox the Python agent should use.
+    // Priority: existing running TS session > create new TS sandbox > Python creates its own.
+    let dzeckSandboxId = "";
+    let preLaunchE2BSessionId = "";
+    let preLaunchStreamUrl = "";
+
+    if (e2bKey) {
+      // Check if there's an existing running TS sandbox from "Komputer Dzeck"
+      const existingSandboxId = getActiveE2BSandboxId();
+      if (existingSandboxId) {
+        dzeckSandboxId = existingSandboxId;
+        console.log(`[Agent] Reusing existing TS sandbox ${dzeckSandboxId} for Python agent`);
+      } else {
+        // No existing sandbox — create one now so Python uses the same sandbox user sees
+        console.log(`[Agent] No active E2B session, creating new sandbox for Python agent...`);
+        try {
+          const newSession = await createAndRegisterE2BSandbox("https://www.google.com");
+          if (newSession) {
+            dzeckSandboxId = newSession.sandboxId;
+            preLaunchE2BSessionId = newSession.sessionId;
+            preLaunchStreamUrl = newSession.streamUrl || "";
+            console.log(`[Agent] Created new sandbox ${dzeckSandboxId} (session ${preLaunchE2BSessionId})`);
+          }
+        } catch (sandboxErr: any) {
+          console.warn(`[Agent] Failed to pre-create sandbox: ${sandboxErr.message}. Python will create its own.`);
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const proc = spawn("python3", ["-u", "-m", "server.agent.agent_flow"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        CEREBRAS_API_KEY: apiKey,
+        CEREBRAS_AGENT_MODEL: agentModel,
+        PYTHONPATH: process.cwd(),
+        PYTHONUNBUFFERED: "1",
+        DZECK_SESSION_ID: sid,
+        E2B_API_KEY: e2bKey,
+        ...(dzeckSandboxId ? { DZECK_E2B_SANDBOX_ID: dzeckSandboxId } : {}),
+      },
+    });
+
+    proc.stdin.write(JSON.stringify({
+      message: message || "",
+      messages: messages || [],
+      model: agentModel,
+      attachments: attachments || [],
+      session_id: sid,
+      resume_from_session: resume_from_session || null,
+      is_continuation: is_continuation || false,
+    }));
+    proc.stdin.end();
+
+    const session: AgentSession = {
+      proc,
+      eventQueue: [],
+      clients: new Set([res]),
+      done: false,
+      startedAt: Date.now(),
+      stderrBuffer: "",
+    };
+    activeAgentSessions.set(sid, session);
+
+    const sessionLine = `data: ${JSON.stringify({ type: "session", session_id: sid, e2b_enabled: isE2BEnabled() })}\n\n`;
+    _broadcastToSession(session, sessionLine);
+
+    // If we pre-created a sandbox before spawning Python, emit a vnc_stream_url event
+    // immediately so the frontend switches to that sandbox's VNC view right away.
+    if (preLaunchE2BSessionId && preLaunchStreamUrl) {
+      const vncEvent = {
+        type: "vnc_stream_url",
+        vnc_url: preLaunchStreamUrl,
+        sandbox_id: dzeckSandboxId,
+        e2b_session_id: preLaunchE2BSessionId,
+      };
+      _broadcastToSession(session, `data: ${JSON.stringify(vncEvent)}\n\n`);
+      console.log(`[Agent] Emitted pre-launch vnc_stream_url for session ${preLaunchE2BSessionId}`);
+    }
+
+    let buf = "";
+
+    proc.stdout.on("data", (data: Buffer) => {
+      buf += data.toString();
+      const lines = buf.split("\n");
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.type === "done") {
+            session.done = true;
+            _broadcastToSession(session, "data: [DONE]\n\n");
+            for (const client of session.clients) { try { client.end(); } catch {} }
+          } else {
+            // When the Python agent emits a vnc_stream_url event, forward it AND
+            // auto-connect to the sandbox so the frontend gets a unified session.
+            // This bridges the Python agent's sandbox with the TS e2b-desktop session
+            // system, enabling click/scroll/type interactions on the SAME sandbox.
+            if (parsed.type === "vnc_stream_url" && parsed.vnc_url) {
+              console.log(`[Agent] VNC stream URL received from Python sandbox: ${parsed.vnc_url}`);
+              // Auto-register the agent's sandbox in the e2b-desktop session system
+              // so that interaction endpoints (click, scroll, type) work on this sandbox
+              if (parsed.sandbox_id) {
+                const connectBody = JSON.stringify({
+                  sandbox_id: parsed.sandbox_id,
+                  vnc_url: parsed.vnc_url,
+                });
+                const connectReq = nodeHttp.request({
+                  hostname: "127.0.0.1",
+                  port: parseInt(process.env.PORT || "5000"),
+                  path: "/api/e2b/sessions/connect",
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(connectBody) },
+                }, (connectRes: nodeHttp.IncomingMessage) => {
+                  let body = "";
+                  connectRes.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+                  connectRes.on("end", () => {
+                    try {
+                      const result = JSON.parse(body);
+                      console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.session_id}`);
+                      // Emit the session_id back to the frontend so it can use it for VNC
+                      const enriched = { ...parsed, e2b_session_id: result.session_id };
+                      _broadcastToSession(session, `data: ${JSON.stringify(enriched)}\n\n`);
+                    } catch {
+                      _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+                    }
+                  });
+                });
+                connectReq.on("error", () => {
+                  // If connect fails, still forward the original VNC URL event
+                  _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+                });
+                connectReq.write(connectBody);
+                connectReq.end();
+              } else {
+                _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+              }
+            } else {
+              _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+            }
+          }
+        } catch (parseErr) {
+          console.error("[SSE parse error] Failed to parse line:", line.substring(0, 200), parseErr);
+        }
+      }
+    });
+
+    proc.stderr.on("data", (data: Buffer) => {
+      session.stderrBuffer += data.toString();
+      console.error("[Agent stderr]:", data.toString());
+    });
+
+    proc.on("error", (err: Error) => {
+      console.error("[Agent] Failed to spawn Python agent:", err.message);
+      session.done = true;
+      const errLine = `data: ${JSON.stringify({ type: "error", error: "Python agent tidak tersedia. Pastikan Python terinstall." })}\n\n`;
+      _broadcastToSession(session, errLine);
+      _broadcastToSession(session, "data: [DONE]\n\n");
+      for (const client of session.clients) { try { client.end(); } catch {} }
+    });
+
+    const BENIGN = [/redis/i, /mongodb/i, /motor/i, /DNS/i, /Name or service not known/i,
+      /ConnectionRefusedError/i, /\[CacheStore\]/i, /\[SessionStore\]/i, /\[SessionService\]/i,
+      /WARNING:/i, /DeprecationWarning/i, /connection failed/i, /Traceback/i,
+      /aioredis/i, /pymongo/i, /socket\.gaierror/i, /\[agent\]/i,
+      /Config push failed/i, /fork\/exec/i, /permission denied/i,
+      /\[E2B\]/i, /\[E2B-Desktop\]/i, /\[Browser\]/i, /Authentication required/i,
+      /MONGODB_URI not set/i, /sessions will be in-memory/i,
+      /Sandbox health check/i, /sandbox creation failed/i];
+
+    proc.on("close", (code: number | null) => {
+      if (!session.done) {
+        if (code !== 0 && session.stderrBuffer) {
+          const hasRealError = !BENIGN.some(p => p.test(session.stderrBuffer));
+          if (hasRealError) {
+            _broadcastToSession(session, `data: ${JSON.stringify({ type: "error", error: "Agen mengalami kesalahan internal. Silakan coba lagi." })}\n\n`);
+          }
+        }
+        session.done = true;
+        _broadcastToSession(session, "data: [DONE]\n\n");
+        for (const client of session.clients) { try { client.end(); } catch {} }
+      }
+      if (code !== 0) console.error(`Agent process exited with code ${code}. Stderr: ${session.stderrBuffer.slice(-500)}`);
+    });
+
+    res.on("close", () => { session.clients.delete(res); });
+  });
+
+  // ─── Reconnect to existing agent session ──────────────────────────────────
+  app.get("/api/agent/stream/:sid", (req: any, res: any) => {
+    const { sid } = req.params;
+    const replay = req.query.replay === "true";
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found or expired" });
+    }
+    setupSSEHeaders(res);
+
+    session.clients.add(res);
+    if (replay) {
+      for (const line of session.eventQueue) {
+        try { res.write(line); } catch {}
+      }
+    }
+    if (session.done) {
+      try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
+    }
+    res.on("close", () => { session.clients.delete(res); });
+  });
+
+  // ─── Agent session status endpoint ────────────────────────────────────────
+  app.get("/api/agent/status/:sid", (req: any, res: any) => {
+    const { sid } = req.params;
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.json({ exists: false });
+    }
+    res.json({
+      exists: true,
+      done: session.done,
+      eventCount: session.eventQueue.length,
+      clients: session.clients.size,
+    });
+  });
+
+  // ─── Stop an active agent session ─────────────────────────────────────────
+  app.post("/api/agent/stop/:sid", (req: any, res: any) => {
+    const { sid } = req.params;
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.json({ stopped: false, reason: "not_found" });
+    }
+    if (!session.done) {
+      try { session.proc.kill("SIGTERM"); } catch {}
+      session.done = true;
+      _broadcastToSession(session, `data: ${JSON.stringify({ type: "error", error: "Agen dihentikan oleh pengguna." })}\n\n`);
+      _broadcastToSession(session, "data: [DONE]\n\n");
+      for (const client of session.clients) { try { client.end(); } catch {} }
+    }
+    res.json({ stopped: true });
+  });
+
+  app.get("/api/test", (_req: any, res: any) => {
+    res.json({
+      message: "API is working",
+      timestamp: new Date().toISOString(),
+      cerebrasConfigured: !!startupCfg.apiKey,
+      e2bEnabled: isE2BEnabled(),
+    });
+  });
+
+  // ─── File Download endpoint ─────────────────────────────────────────────────
+  app.get("/api/files/download", (req: any, res: any) => {
+    const rawPath = req.query.path as string;
+    const rawName = req.query.name as string;
+
+    if (!rawPath) {
+      return res.status(400).json({ error: "path is required" });
+    }
+
+    let filePath: string;
+    try {
+      filePath = decodeURIComponent(rawPath);
+    } catch {
+      return res.status(400).json({ error: "invalid path encoding" });
+    }
+
+    if (filePath.includes("..")) {
+      return res.status(403).json({ error: "access denied: path not allowed" });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: `File not found: ${filePath}` });
+    }
+
+    const realFilePath = fs.realpathSync(filePath);
+    if (!realFilePath.startsWith("/tmp/dzeck_files/")) {
+      return res.status(403).json({ error: "access denied: path not allowed" });
+    }
+
+    const stat = fs.lstatSync(realFilePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      return res.status(400).json({ error: "path is not a regular file" });
+    }
+
+    const fileName = rawName ? decodeURIComponent(rawName) : path.basename(filePath);
+    const ext = path.extname(fileName).toLowerCase().slice(1);
+
+    const MIME: Record<string, string> = {
+      zip: "application/zip", rar: "application/x-rar-compressed",
+      "7z": "application/x-7z-compressed", tar: "application/x-tar",
+      gz: "application/gzip", bz2: "application/x-bzip2", xz: "application/x-xz",
+      iso: "application/x-iso9660-image",
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      xls: "application/vnd.ms-excel",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      odt: "application/vnd.oasis.opendocument.text",
+      ods: "application/vnd.oasis.opendocument.spreadsheet",
+      txt: "text/plain", md: "text/markdown", rtf: "application/rtf",
+      csv: "text/csv", tsv: "text/tab-separated-values",
+      json: "application/json", xml: "application/xml",
+      yaml: "application/x-yaml", yml: "application/x-yaml",
+      toml: "application/toml", ini: "text/plain",
+      sql: "application/sql", db: "application/x-sqlite3",
+      sqlite: "application/x-sqlite3", sqlite3: "application/x-sqlite3",
+      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+      gif: "image/gif", bmp: "image/bmp", webp: "image/webp",
+      svg: "image/svg+xml", ico: "image/x-icon",
+      mp4: "video/mp4", mkv: "video/x-matroska", avi: "video/x-msvideo",
+      mov: "video/quicktime", webm: "video/webm", flv: "video/x-flv",
+      mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
+      aac: "audio/aac", flac: "audio/flac", m4a: "audio/mp4",
+      py: "text/x-python", js: "text/javascript", ts: "text/typescript",
+      tsx: "text/typescript", jsx: "text/javascript", html: "text/html",
+      htm: "text/html", css: "text/css", sh: "text/x-shellscript",
+      bash: "text/x-shellscript", java: "text/x-java-source",
+      cpp: "text/x-c", c: "text/x-c", go: "text/x-go",
+      rs: "text/x-rust", rb: "text/x-ruby", php: "text/x-php",
+      exe: "application/x-msdownload", msi: "application/x-msinstaller",
+      apk: "application/vnd.android.package-archive",
+      deb: "application/x-debian-package", rpm: "application/x-rpm",
+      wasm: "application/wasm",
+    };
+
+    const mimeType = MIME[ext] || "application/octet-stream";
+    const fileSize = stat.size;
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Content-Length", fileSize);
+    res.setHeader("Cache-Control", "no-cache");
+
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", (err) => {
+      console.error("[FileDownload] Stream error:", err);
+      if (!res.headersSent) res.status(500).json({ error: "Failed to stream file" });
+    });
+    stream.pipe(res);
+  });
+
+  // ─── File Upload endpoint ────────────────────────────────────────────────────
+  app.post("/api/upload", (req: any, res: any, next: any) => {
+    upload.array("files", 10)(req, res, (multerErr: any) => {
+      if (multerErr) {
+        const msg = multerErr.code === "LIMIT_FILE_SIZE"
+          ? "File terlalu besar (max 50MB)"
+          : multerErr.message || "Upload gagal";
+        return res.status(400).json({ error: msg });
+      }
+      try {
+        const files = (req.files as any[]) || [];
+        if (files.length === 0) {
+          return res.status(400).json({ error: "Tidak ada file yang diunggah" });
+        }
+        if (!fs.existsSync(DZECK_UPLOADS_DIR)) {
+          fs.mkdirSync(DZECK_UPLOADS_DIR, { recursive: true });
+        }
+        const result = files.map((f: any) => {
+          const filePath = f.path;
+          const fileName = f.originalname;
+          const mime = f.mimetype || "application/octet-stream";
+          const size = f.size;
+          const isImage = mime.startsWith("image/");
+          const isText = mime.startsWith("text/") || /\.(txt|md|py|js|ts|json|csv|xml|html|css|sh|yaml|yml|toml|ini|log)$/i.test(fileName);
+          let preview: string | null = null;
+          if (isText && size < 500 * 1024) {
+            try { preview = fs.readFileSync(filePath, "utf-8"); } catch {}
+          }
+          return {
+            filename: fileName,
+            path: filePath,
+            mime,
+            size,
+            is_image: isImage,
+            is_text: isText,
+            preview,
+            download_url: `/api/files/download?path=${encodeURIComponent(filePath)}&name=${encodeURIComponent(fileName)}`,
+          };
+        });
+        res.json({ files: result });
+      } catch (err: any) {
+        res.status(500).json({ error: "Upload gagal: " + err.message });
+      }
+    });
+  });
+
+  // ─── File list endpoint (files created by AI) ───────────────────────────────
+  app.get("/api/files/list", (_req: any, res: any) => {
+    try {
+      if (!fs.existsSync(DZECK_FILES_DIR)) {
+        return res.json({ files: [] });
+      }
+      const files = fs.readdirSync(DZECK_FILES_DIR).map(name => {
+        const full = path.join(DZECK_FILES_DIR, name);
+        const stat = fs.statSync(full);
+        return {
+          name,
+          size: stat.size,
+          created: stat.birthtime,
+          download_url: `/api/files/download?path=${encodeURIComponent(full)}&name=${encodeURIComponent(name)}`,
+        };
+      });
+      res.json({ files });
+    } catch (e) {
+      res.json({ files: [] });
+    }
+  });
+
+  // ─── E2B Desktop VNC viewer page ────────────────────────────────────────────
+  app.get("/vnc-view", (_req: any, res: any) => {
+    const html = path.join(__dirname, "templates", "e2b-vnc-view.html");
+    if (fs.existsSync(html)) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      res.sendFile(html);
+    } else {
+      res.status(404).send("e2b-vnc-view.html not found");
+    }
+  });
+
+  // ─── Tools health check endpoint ─────────────────────────────────────────
+  app.get("/api/health/tools", async (_req: any, res: any) => {
+    const e2bOn = isE2BEnabled();
+    const cerebrasConfigured = !!getCerebrasConfig().apiKey;
+    const timestamp = new Date().toISOString();
+
+    // Run a lightweight Python probe to verify tool imports are working
+    let pythonProbe: Record<string, any> = {};
+    try {
+      const { spawn } = await import("child_process");
+      const probe = await new Promise<string>((resolve) => {
+        const py = spawn("python3", ["-c", `
+import json, sys, os
+results = {}
+try:
+    from server.agent.tools import ShellTool, FileTool, BrowserTool, SearchTool, MessageTool, idle, TodoTool, TaskTool, IdleTool
+    results['imports'] = 'ok'
+except Exception as e:
+    results['imports'] = str(e)
+try:
+    from server.agent.tools.e2b_sandbox import get_sandbox, _detected_home, WORKSPACE_DIR
+    results['e2b_module'] = 'ok'
+    results['sandbox_active'] = get_sandbox() is not None
+    results['detected_home'] = _detected_home or ''
+except Exception as e:
+    results['e2b_module'] = str(e)
+try:
+    import requests
+    results['requests'] = 'ok'
+except ImportError:
+    results['requests'] = 'missing'
+try:
+    from server.agent.tools.search import web_search as _ws
+    results['search'] = 'ok'
+except Exception as e:
+    results['search'] = str(e)
+print(json.dumps(results))
+`], { env: { ...process.env }, timeout: 10000 });
+        let out = "";
+        py.stdout.on("data", (d: any) => { out += d.toString(); });
+        py.on("close", () => resolve(out.trim()));
+        setTimeout(() => { try { py.kill(); } catch {} resolve("{}"); }, 9000);
+      });
+      pythonProbe = JSON.parse(probe || "{}");
+    } catch (err: any) {
+      pythonProbe = { error: String(err) };
+    }
+
+    const importsOk = pythonProbe.imports === "ok";
+    const sandboxActive = !!pythonProbe.sandbox_active;
+    const searchOk = pythonProbe.search === "ok";
+
+    res.json({
+      status: "ok",
+      timestamp,
+      tools: {
+        shell: {
+          status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
+          requires: "E2B_API_KEY",
+          available: e2bOn && importsOk,
+          sandbox_active: sandboxActive,
+        },
+        file: {
+          status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
+          requires: "E2B_API_KEY",
+          available: e2bOn && importsOk,
+        },
+        browser: {
+          status: e2bOn && importsOk ? (sandboxActive ? "active" : "ready") : "unavailable",
+          requires: "E2B_API_KEY",
+          available: e2bOn && importsOk,
+        },
+        search: { status: searchOk ? "ready" : "degraded", requires: "none", available: searchOk },
+        message: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
+        todo: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
+        task: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
+        idle: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
+        mcp: { status: "ready", requires: "none", available: true },
+      },
+      e2b_enabled: e2bOn,
+      cerebras_configured: cerebrasConfigured,
+      python_probe: pythonProbe,
+      detected_home: pythonProbe.detected_home || null,
+      all_tools_ready: e2bOn && cerebrasConfigured && importsOk,
+    });
+  });
+
+  // ─── E2B Sandbox health check endpoint ───────────────────────────────────
+  app.get("/api/e2b/health", (_req: any, res: any) => {
+    const e2bOn = isE2BEnabled();
+    res.json({
+      e2b_enabled: e2bOn,
+      e2b_api_key_set: !!process.env.E2B_API_KEY,
+      status: e2bOn ? "ready" : "disabled",
+      timestamp: new Date().toISOString(),
+      message: e2bOn
+        ? "E2B cloud sandbox is configured and ready"
+        : "E2B_API_KEY not set. Set it in environment variables to enable cloud sandbox.",
+    });
+  });
+
+  // ─── VNC status endpoint (E2B-based) ──────────────────────────────────────
+  app.get("/api/vnc/status", (_req: any, res: any) => {
+    const e2bOn = isE2BEnabled();
+    res.json({
+      ready: e2bOn,
+      mode: "e2b",
+      e2b_enabled: e2bOn,
+      message: e2bOn
+        ? "VNC tersedia melalui E2B Desktop Sandbox"
+        : "E2B_API_KEY belum diset",
+    });
+  });
+
+  // ─── Shell view endpoint (live shell output from E2B sandbox) ─────────────
+  app.get("/api/sandbox/shell/:sessionId", async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const shellId = req.query.shell_id as string;
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+    try {
+      // Return shell output from agent session event queue
+      const session = activeAgentSessions.get(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      // Extract shell tool events from event queue
+      const shellEvents = session.eventQueue
+        .filter(line => line.startsWith("data: "))
+        .map(line => {
+          try { return JSON.parse(line.slice(6)); } catch { return null; }
+        })
+        .filter((evt: any) => evt && evt.type === "tool" && evt.tool_content?.type === "shell")
+        .map((evt: any) => ({
+          tool_call_id: evt.tool_call_id,
+          function_name: evt.function_name,
+          status: evt.status,
+          command: evt.tool_content?.command || "",
+          console: evt.tool_content?.console || "",
+          return_code: evt.tool_content?.return_code,
+          id: evt.tool_content?.id || "",
+        }));
+
+      const filtered = shellId
+        ? shellEvents.filter((e: any) => e.id === shellId || e.tool_call_id === shellId)
+        : shellEvents;
+
+      res.json({ shells: filtered, total: shellEvents.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ─── File view endpoint (file content from E2B sandbox) ────────────────────
+  app.get("/api/sandbox/file/:sessionId", async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const filePath = req.query.path as string;
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+    try {
+      const session = activeAgentSessions.get(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      // Extract file tool events from event queue
+      const fileEvents = session.eventQueue
+        .filter(line => line.startsWith("data: "))
+        .map(line => {
+          try { return JSON.parse(line.slice(6)); } catch { return null; }
+        })
+        .filter((evt: any) => evt && evt.type === "tool" && evt.tool_content?.type === "file")
+        .map((evt: any) => ({
+          tool_call_id: evt.tool_call_id,
+          function_name: evt.function_name,
+          status: evt.status,
+          file: evt.tool_content?.file || evt.function_args?.file || "",
+          content: evt.tool_content?.content || "",
+          operation: evt.tool_content?.operation || "",
+          language: evt.tool_content?.language || "",
+        }));
+
+      const filtered = filePath
+        ? fileEvents.filter((e: any) => e.file === filePath || e.file?.endsWith(filePath))
+        : fileEvents;
+
+      res.json({ files: filtered, total: fileEvents.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ─── VNC URL endpoint (E2B desktop stream URL) ────────────────────────────
+  app.get("/api/sandbox/vnc-url/:sessionId", async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+    try {
+      const session = activeAgentSessions.get(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      // Extract the latest browser tool event to get VNC/screenshot info
+      const browserEvents = session.eventQueue
+        .filter(line => line.startsWith("data: "))
+        .map(line => {
+          try { return JSON.parse(line.slice(6)); } catch { return null; }
+        })
+        .filter((evt: any) => evt && evt.type === "tool" && evt.tool_content?.type === "browser");
+
+      const latest = browserEvents[browserEvents.length - 1];
+      const e2bOn = isE2BEnabled();
+
+      res.json({
+        vnc_available: e2bOn,
+        session_id: sessionId,
+        url: latest?.tool_content?.url || "",
+        title: latest?.tool_content?.title || "",
+        screenshot_b64: latest?.tool_content?.screenshot_b64 || "",
+        vnc_viewer_url: e2bOn ? `/vnc-view?session=${sessionId}` : null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ─── Sandbox tools summary endpoint ────────────────────────────────────────
+  app.get("/api/sandbox/tools/:sessionId", async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const session = activeAgentSessions.get(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    try {
+      const allToolEvents = session.eventQueue
+        .filter(line => line.startsWith("data: "))
+        .map(line => {
+          try { return JSON.parse(line.slice(6)); } catch { return null; }
+        })
+        .filter((evt: any) => evt && evt.type === "tool");
+
+      const summary = {
+        total: allToolEvents.length,
+        by_type: {} as Record<string, number>,
+        latest: allToolEvents.slice(-5).map((evt: any) => ({
+          tool_call_id: evt.tool_call_id,
+          function_name: evt.function_name,
+          tool_name: evt.tool_name,
+          status: evt.status,
+          content_type: evt.tool_content?.type || "unknown",
+        })),
+      };
+
+      for (const evt of allToolEvents) {
+        const type = (evt as any).tool_content?.type || "unknown";
+        summary.by_type[type] = (summary.by_type[type] || 0) + 1;
+      }
+
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const httpServer = createServer(app);
+
+  if (isE2BEnabled()) {
+    console.log("[E2B] Cloud sandbox mode enabled. Browser/shell tools run in isolated E2B environment.");
+  } else {
+    console.warn("[E2B] E2B_API_KEY not set. Python agent will check env dynamically at request time.");
+  }
+
+  return httpServer;
+}

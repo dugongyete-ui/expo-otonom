@@ -1,0 +1,25 @@
+#!/bin/bash
+# browser_list_tabs - List open Chrome tabs via CDP
+# Equivalent to Manus.im browser tab listing
+CDP_PORT=${CDP_PORT:-9222}
+result=$(curl -s --max-time 3 "http://localhost:${CDP_PORT}/json" 2>/dev/null)
+if [ -z "$result" ]; then
+    echo "No Chrome tabs found (CDP not available on port ${CDP_PORT})"
+    echo "Hint: Use browser_navigate to open a URL in Chrome first."
+    exit 0
+fi
+echo "$result" | python3 -c "
+import sys, json
+try:
+    tabs = json.load(sys.stdin)
+    pages = [t for t in tabs if isinstance(t, dict) and t.get('type') == 'page']
+    if not pages:
+        print('No open page tabs found.')
+    else:
+        print(f'Open tabs ({len(pages)}):')
+        for i, t in enumerate(pages):
+            print(f'  [{i}] {t.get(\"title\", \"(no title)\")} - {t.get(\"url\", \"\")}')
+except Exception as e:
+    print(f'Error parsing tabs: {e}')
+    print(sys.stdin.read())
+" 2>/dev/null || echo "$result"

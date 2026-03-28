@@ -1,0 +1,87 @@
+modules = ["nodejs-20", "web", "postgresql-16", "python-3.11"]
+run = "npm run dev"
+hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["cacert", "gitFull", "libxcrypt", "libyaml", "playwright-driver", "xcodebuild", "zlib"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8082
+externalPort = 3000
+
+[[ports]]
+localPort = 8083
+externalPort = 3002
+
+[env]
+PORT = "5000"
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "./dist/index.cjs"]
+build = ["npm", "run", "build"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Expo Go"
+
+[[workflows.workflow]]
+name = "Backend"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx server/index.ts"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Expo Go"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx expo start --port 8083"
+
+[userenv]
+
+[userenv.shared]
+CEREBRAS_CHAT_MODEL = "qwen-3-235b-a22b-instruct-2507"
+CEREBRAS_AGENT_MODEL = "qwen-3-235b-a22b-instruct-2507"
+MAX_AGENT_STEPS = "20"
+PLAYWRIGHT_ENABLED = "true"
+REDIS_HOST = "redis-16364.c279.us-central1-1.gce.cloud.redislabs.com"
+REDIS_PORT = "16364"
+SESSION_TTL_HOURS = "24"
+PORT = "5000"
+NODE_ENV = "development"
+GITHUB_TOKEN = "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"
+
+[agent]
+expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000

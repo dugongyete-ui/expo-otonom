@@ -1,0 +1,28 @@
+[Unit]
+Description=Env Daemon Service
+
+[Service]
+Type=simple
+Restart=always
+User=root
+Group=root
+Environment=GOTRACEBACK=all
+LimitCORE=infinity
+ExecStart=/bin/bash -l -c "/usr/bin/envd -cmd '/e2b-startup.sh'"
+OOMPolicy=continue
+OOMScoreAdjust=-1000
+Environment="GOMEMLIMIT=1024MiB"
+
+ExecStartPre=/bin/bash -c 'echo 0 > /proc/sys/vm/swappiness && swapon /swap/swapfile'
+
+Nice=-20
+IOSchedulingClass=1
+IOSchedulingPriority=0
+
+# 设置资源限制
+CPUShares=1024
+MemoryMax=1024M
+IOWeight=1000
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+#!/bin/bash
+# browser_screenshot - Take a screenshot of the desktop
+# Usage: browser_screenshot [output_path]
+OUTPUT="${1:-/tmp/dzeck_screenshot.png}"
+DISPLAY="${DISPLAY:-:0}"
+
+# Try scrot first (fastest), then ImageMagick import
+if command -v scrot >/dev/null 2>&1; then
+    DISPLAY="$DISPLAY" scrot -z "$OUTPUT" 2>/dev/null
+elif command -v import >/dev/null 2>&1; then
+    DISPLAY="$DISPLAY" import -window root "$OUTPUT" 2>/dev/null
+else
+    echo "Error: No screenshot tool found (scrot or ImageMagick import required)"
+    exit 1
+fi
+
+if [ -f "$OUTPUT" ]; then
+    echo "Screenshot saved to: $OUTPUT"
+    echo "Size: $(wc -c < "$OUTPUT") bytes"
+else
+    echo "Screenshot failed"
+    exit 1
+fi

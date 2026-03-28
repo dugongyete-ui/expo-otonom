@@ -1,0 +1,141 @@
+# Terminal Full Output
+# Terminal: clone_repo
+# Command: gh repo clone dugongyete-ui/Agent-Auto /home/ubuntu/Agent-Auto && cd /home/ubuntu/Agent-Auto && ls -R
+# PID: 3672
+# Timestamp: 2026-03-18_06-51-36.961592
+# Original Length: 5956 characters
+# ----------------------------------------
+
+Cloning into '/home/ubuntu/Agent-Auto'...
+remote: Enumerating objects: 1219, done.        
+remote: Counting objects: 100% (413/413), done.        
+remote: Compressing objects: 100% (155/155), done.        
+remote: Total 1219 (delta 274), reused 373 (delta 253), pack-reused 806 (from 1)        
+Receiving objects: 100% (1219/1219), 38.70 MiB | 14.21 MiB/s, done.
+Resolving deltas: 100% (715/715), done.
+remote: Enumerating objects: 127, done.        
+remote: Counting objects: 100% (127/127), done.        
+remote: Compressing objects: 100% (48/48), done.        
+remote: Total 97 (delta 59), reused 74 (delta 45), pack-reused 0 (from 0)        
+Unpacking objects: 100% (97/97), 192.83 KiB | 4.94 MiB/s, done.
+From https://github.com/Dzakiart19/Agent-Autonomous
+ * [new branch]      main       -> upstream/main
+[0;33m![0m Repository [0;1;39mDzakiart19/Agent-Autonomous[0m set as the default repository. To learn more about the default repository, run: gh repo set-default --help
+.:
+CHANGES.md         catatan.md          [0m[01;34mlib[0m                [01;34mserver[0m
+Dockerfile         [01;34mclient[0m              metro.config.js    [01;34mserver_dist[0m
+IMPLEMENTATION.md  [01;34mcomponents[0m          package-lock.json  [01;32msetup.sh[0m
+QUICK_START.md     components.json     package.json       [01;34mshared[0m
+SUMMARY.md         [01;34mconstants[0m           [01;34mpatches[0m            tailwind.config.ts
+[01;34mapp[0m                [01;34mdist[0m                postcss.config.js  tsconfig.json
+app.json           docker-compose.yml  replit.md          vite.config.ts
+[01;34massets[0m             drizzle.config.ts   requirements.txt
+[01;34mattached_assets[0m    eas.json            [01;34mscript[0m
+babel.config.js    eslint.config.js    [01;34mscripts[0m
+./app:
+[01;34m'(tabs)'[0m   +native-intent.tsx   +not-found.tsx   _layout.tsx
+'./app/(tabs)':
+_layout.tsx  index.tsx
+./assets:
+[01;34mimages[0m
+./assets/images:
+android-icon-background.png  dzeck-logo-transparent.png  icon.png
+android-icon-foreground.png  dzeck-logo.jpg              icon.png.jpg
+android-icon-monochrome.png  favicon.png                 splash-icon.png
+./attached_assets:
+6818c7d8a275700434de20dc_Chart-01-1px_1773790383446.png
+Screenshot_2026-03-18-07-02-18-358_com.android.chrome_1773792787420.jpg
+Screenshot_2026-03-18-07-12-37-634_com.android.chrome_1773792771606.jpg
+Screenshot_2026-03-18-07-12-41-174_com.android.chrome_1773792771642.jpg
+Screenshot_2026-03-18-07-29-16-639_com.android.chrome_1773794108822.jpg
+Screenshot_2026-03-18-07-29-43-269_com.android.chrome_1773794108846.jpg
+./client:
+index.html  [01;34mpublic[0m  [01;34msrc[0m
+./client/public:
+favicon.png
+./client/src:
+App.tsx  [01;34mcomponents[0m  [01;34mhooks[0m  index.css  [01;34mlib[0m  main.tsx  [01;34mpages[0m
+./client/src/components:
+[01;34mui[0m
+./client/src/components/ui:
+accordion.tsx     checkbox.tsx       menubar.tsx          skeleton.tsx
+alert-dialog.tsx  collapsible.tsx    navigation-menu.tsx  slider.tsx
+alert.tsx         command.tsx        pagination.tsx       switch.tsx
+aspect-ratio.tsx  context-menu.tsx   popover.tsx          table.tsx
+avatar.tsx        dialog.tsx         progress.tsx         tabs.tsx
+badge.tsx         drawer.tsx         radio-group.tsx      textarea.tsx
+breadcrumb.tsx    dropdown-menu.tsx  resizable.tsx        toast.tsx
+button.tsx        form.tsx           scroll-area.tsx      toaster.tsx
+calendar.tsx      hover-card.tsx     select.tsx           toggle-group.tsx
+card.tsx          input-otp.tsx      separator.tsx        toggle.tsx
+carousel.tsx      input.tsx          sheet.tsx            tooltip.tsx
+chart.tsx         label.tsx          sidebar.tsx
+./client/src/hooks:
+use-mobile.tsx  use-toast.ts
+./client/src/lib:
+queryClient.ts  utils.ts
+./client/src/pages:
+not-found.tsx
+./components:
+AgentMessage.tsx      ComputerView.tsx
+AgentPlanView.tsx     ErrorBoundary.tsx
+AgentStatusBar.tsx    ErrorFallback.tsx
+AgentThinking.tsx     KeyboardAwareScrollViewCompat.tsx
+AgentToolCard.tsx     KeyboardAwareScrollViewCompat.web.tsx
+AgentToolView.tsx     KeyboardProviderWrapper.tsx
+ChatBox.tsx           KeyboardProviderWrapper.web.tsx
+ChatCard.tsx          LeftPanel.tsx
+ChatHistoryModal.tsx  MainLayout.tsx
+ChatInput.tsx         PlanPanel.tsx
+ChatMessage.tsx       ToolDetailModal.tsx
+ChatPage.tsx          ToolPanel.tsx
+ChatScreen.tsx        TypingIndicator.tsx
+CodeBlock.tsx
+./constants:
+colors.ts
+./dist:
+[01;34m_expo[0m  favicon.ico  index.html  metadata.json
+./dist/_expo:
+[01;34mstatic[0m
+./dist/_expo/static:
+[01;34mjs[0m
+./dist/_expo/static/js:
+[01;34mweb[0m
+./dist/_expo/static/js/web:
+entry-a58a021085cac8e44776fb9719e00cae.js
+./lib:
+agent-service.ts  chat.ts          storage.ts
+api-service.ts    query-client.ts  useChat.ts
+./patches:
+expo-asset+12.0.12.patch
+./script:
+build.ts
+./scripts:
+build.js  [01;32mpost-merge.sh[0m  [01;32msetup.sh[0m
+./server:
+[01;34magent[0m  g4f_chat.py  index.ts  routes.ts  storage.ts  [01;34mtemplates[0m
+./server/agent:
+__init__.py  agent_flow.py  [01;34mdb[0m  [01;34mmodels[0m  [01;34mprompts[0m  [01;34mservices[0m  [01;34mtools[0m  [01;34mutils[0m
+./server/agent/db:
+__init__.py  cache.py  session_store.py
+./server/agent/models:
+__init__.py  event.py  memory.py  message.py  plan.py  tool_result.py
+./server/agent/prompts:
+__init__.py  [01;34magents[0m  execution.py  planner.py  system.py
+./server/agent/prompts/agents:
+__init__.py    data_agent.py   orchestrator.py
+code_agent.py  files_agent.py  web_agent.py
+./server/agent/services:
+__init__.py  session_service.py
+./server/agent/tools:
+__init__.py  e2b_sandbox.py  mcp.py       search.py  todo.py
+base.py      executor.py     message.py   shell.py
+browser.py   file.py         registry.py  task.py
+./server/agent/utils:
+__init__.py  robust_json_parser.py
+./server/templates:
+landing-page.html  vnc-view.html  web-chat.html
+./server_dist:
+index.js
+./shared:
+schema.ts

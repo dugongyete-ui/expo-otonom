@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Komputer Dzeck — Live VNC</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a0f;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #fff;
+    touch-action: none;
+  }
+
+  #status-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px;
+    background: #0a0a0f;
+    transition: opacity 0.4s ease;
+  }
+  #status-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .scan-box {
+    width: 80px; height: 80px; position: relative;
+    border: 1px solid rgba(108,92,231,0.3); border-radius: 6px; overflow: hidden;
+  }
+  .scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: #6C5CE7; box-shadow: 0 0 8px #6C5CE7;
+    animation: scan 1.8s ease-in-out infinite;
+  }
+  .scan-corner { position: absolute; width: 12px; height: 12px; border-color: #6C5CE7; border-style: solid; }
+  .scan-corner.tl { top: 4px; left: 4px; border-width: 2px 0 0 2px; }
+  .scan-corner.tr { top: 4px; right: 4px; border-width: 2px 2px 0 0; }
+  .scan-corner.bl { bottom: 4px; left: 4px; border-width: 0 0 2px 2px; }
+  .scan-corner.br { bottom: 4px; right: 4px; border-width: 0 2px 2px 0; }
+  @keyframes scan { 0%{transform:translateY(0)} 50%{transform:translateY(76px)} 100%{transform:translateY(0)} }
+
+  #status-text { font-size: 13px; color: #8E8E93; text-align: center; max-width: 240px; line-height: 1.5; }
+  #retry-count { font-size: 11px; color: #4A4A55; }
+  #error-msg { font-size: 12px; color: #FF453A; display: none; text-align: center; max-width: 240px; }
+
+  #vnc-canvas {
+    width: 100%; height: 100%; display: none;
+  }
+  #vnc-canvas canvas {
+    width: 100% !important; height: 100% !important;
+    object-fit: contain; cursor: default;
+  }
+  #vnc-canvas.interactive canvas { cursor: crosshair; }
+
+  /* Mobile Toolbar - Left side */
+  #mobile-toolbar {
+    position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+    z-index: 300; display: none; flex-direction: column; gap: 2px;
+    padding: 4px; background: rgba(20,20,30,0.9);
+    border-radius: 0 12px 12px 0;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(108,92,231,0.3); border-left: none;
+  }
+  #mobile-toolbar.show { display: flex; }
+
+  .tb-btn {
+    width: 40px; height: 40px; border: none;
+    background: rgba(255,255,255,0.08); color: #ccc;
+    border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; position: relative;
+  }
+  .tb-btn:active, .tb-btn.active {
+    background: rgba(108,92,231,0.5); color: #fff;
+  }
+  .tb-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .tb-btn .filled { fill: currentColor; stroke: none; }
+
+  .tb-sep { height: 1px; background: rgba(255,255,255,0.1); margin: 2px 4px; }
+
+  /* Toolbar toggle button (always visible) */
+  #tb-toggle {
+    position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+    z-index: 299; width: 20px; height: 60px;
+    background: rgba(20,20,30,0.7); color: #888;
+    border: 1px solid rgba(108,92,231,0.2); border-left: none;
+    border-radius: 0 8px 8px 0; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(5px);
+  }
+  #tb-toggle.show { display: flex; }
+  #tb-toggle svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* Virtual keyboard input */
+  #kb-input {
+    position: fixed; bottom: -100px; left: 0; width: 1px; height: 1px;
+    opacity: 0; z-index: -1;
+  }
+
+  /* Takeover banner */
+  #takeover-banner {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+    background: rgba(108,92,231,0.95); padding: 8px 16px;
+    display: none; align-items: center; justify-content: space-between;
+    backdrop-filter: blur(8px);
+  }
+  #takeover-banner.show { display: flex; }
+  #takeover-banner span { font-size: 12px; font-weight: 500; }
+  #takeover-banner button {
+    background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+    color: #fff; border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer;
+  }
+
+  /* Clipboard dialog */
+  #clip-dialog {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    z-index: 400; display: none; flex-direction: column; gap: 10px;
+    background: #1a1a2e; border: 1px solid rgba(108,92,231,0.4);
+    border-radius: 12px; padding: 16px; width: 90%; max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #clip-dialog.show { display: flex; }
+  #clip-dialog h3 { font-size: 14px; color: #ddd; font-weight: 600; }
+  #clip-dialog textarea {
+    width: 100%; height: 80px; background: #0e0e1a; color: #eee;
+    border: 1px solid rgba(108,92,231,0.3); border-radius: 8px;
+    padding: 8px; font-size: 13px; resize: none; outline: none;
+  }
+  #clip-dialog .clip-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  #clip-dialog button {
+    padding: 6px 14px; border-radius: 6px; border: none;
+    font-size: 12px; cursor: pointer; font-weight: 500;
+  }
+  #clip-dialog .clip-send { background: #6C5CE7; color: #fff; }
+  #clip-dialog .clip-cancel { background: rgba(255,255,255,0.1); color: #ccc; }
+  #clip-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 399; display: none; }
+  #clip-overlay.show { display: block; }
+</style>
+</head>
+<body>
+
+<div id="status-overlay">
+  <div class="scan-box">
+    <div class="scan-line"></div>
+    <div class="scan-corner tl"></div>
+    <div class="scan-corner tr"></div>
+    <div class="scan-corner bl"></div>
+    <div class="scan-corner br"></div>
+  </div>
+  <div id="status-text">Menghubungkan ke Komputer Dzeck...</div>
+  <div id="retry-count"></div>
+  <div id="error-msg"></div>
+</div>
+
+<div id="vnc-canvas"></div>
+
+<!-- Toolbar toggle tab -->
+<div id="tb-toggle" onclick="toggleToolbar()">
+  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+</div>
+
+<!-- Mobile toolbar -->
+<div id="mobile-toolbar" class="show">
+  <button class="tb-btn" onclick="toggleTakeover()" id="tb-takeover" title="Ambil/Lepas Kendali">
+    <svg viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+  </button>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" onclick="showKeyboard()" title="Keyboard">
+    <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="10" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="14" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
+  </button>
+
+  <button class="tb-btn" onclick="openClipboard()" title="Clipboard">
+    <svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+  </button>
+
+  <button class="tb-btn" onclick="sendCtrlAltDel()" title="Ctrl+Alt+Del">
+    <svg viewBox="0 0 24 24"><path class="filled" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-4.5h-3V7h3v5z"/></svg>
+  </button>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" onclick="sendKey('Escape')" title="Esc">
+    <svg viewBox="0 0 24 24"><text x="4" y="17" font-size="12" fill="currentColor" stroke="none" font-weight="bold">Esc</text></svg>
+  </button>
+
+  <button class="tb-btn" onclick="sendKey('Tab')" title="Tab">
+    <svg viewBox="0 0 24 24"><path d="M4 12h12M12 8l4 4-4 4M20 6v12"/></svg>
+  </button>
+
+  <button class="tb-btn" onclick="sendKey('F5')" title="Refresh (F5)">
+    <svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+  </button>
+
+  <button class="tb-btn" onclick="sendKey('F11')" title="Fullscreen (F11)">
+    <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+  </button>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" onclick="toggleToolbar()" title="Sembunyikan">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+</div>
+
+<!-- Clipboard dialog -->
+<div id="clip-overlay" onclick="closeClipboard()"></div>
+<div id="clip-dialog">
+  <h3>Clipboard</h3>
+  <textarea id="clip-text" placeholder="Ketik atau paste teks di sini..."></textarea>
+  <div class="clip-btns">
+    <button class="clip-cancel" onclick="closeClipboard()">Batal</button>
+    <button class="clip-send" onclick="sendClipboard()">Kirim ke Komputer</button>
+  </div>
+</div>
+
+<div id="takeover-banner">
+  <span>Mode Interaktif — Kamu mengontrol</span>
+  <button onclick="releaseTakeover()">Lepas Kendali</button>
+</div>
+
+<!-- Hidden input for mobile keyboard -->
+<input type="text" id="kb-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+<script type="module">
+  const NOVNC_CDNS = [
+    'https://cdn.jsdelivr.net/gh/novnc/noVNC@v1.5.0/core/rfb.js',
+    'https://unpkg.com/@novnc/novnc@1.5.0/core/rfb.js',
+  ];
+
+  const statusEl   = document.getElementById('status-text');
+  const retryEl    = document.getElementById('retry-count');
+  const errorEl    = document.getElementById('error-msg');
+  const overlay    = document.getElementById('status-overlay');
+  const vncCanvas  = document.getElementById('vnc-canvas');
+  const banner     = document.getElementById('takeover-banner');
+  const toolbar    = document.getElementById('mobile-toolbar');
+  const tbToggle   = document.getElementById('tb-toggle');
+  const kbInput    = document.getElementById('kb-input');
+
+  let RFB = null;
+  let rfb = null;
+  let retries = 0;
+  const MAX_RETRIES = 25;
+  const RETRY_MS = 2000;
+  let retryTimer = null;
+  let takeover = false;
+
+  const params = new URLSearchParams(location.search);
+  const autoTakeover = params.get('takeover') === '1';
+
+  function setStatus(msg, sub = '') {
+    statusEl.textContent = msg;
+    retryEl.textContent = sub;
+    errorEl.style.display = 'none';
+  }
+
+  function setError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+    statusEl.textContent = '';
+    retryEl.textContent = '';
+  }
+
+  async function loadNoVNC() {
+    for (const url of NOVNC_CDNS) {
+      try {
+        const m = await import(url);
+        RFB = m.default || m;
+        console.log('[VNC] noVNC loaded from', url);
+        return true;
+      } catch(e) {
+        console.warn('[VNC] Failed to load from', url, e.message);
+      }
+    }
+    return false;
+  }
+
+  async function checkVncReady() {
+    try {
+      const r = await fetch('/api/vnc/status');
+      const d = await r.json();
+      return d.ready === true;
+    } catch { return false; }
+  }
+
+  async function startVnc() {
+    try { await fetch('/api/vnc/start', { method: 'POST' }); } catch {}
+  }
+
+  async function connect() {
+    if (rfb) return;
+    clearTimeout(retryTimer);
+
+    if (!RFB) {
+      setStatus('Memuat noVNC...');
+      const ok = await loadNoVNC();
+      if (!ok) { setError('Gagal memuat noVNC. Cek koneksi internet.'); return; }
+    }
+
+    if (retries === 0) {
+      setStatus('Memulai komputer virtual...');
+      await startVnc();
+    }
+
+    const ready = await checkVncReady();
+    if (!ready) {
+      retries++;
+      if (retries <= MAX_RETRIES) {
+        setStatus('Memulai komputer virtual...', `(${retries}/${MAX_RETRIES})`);
+        retryTimer = setTimeout(connect, RETRY_MS);
+      } else {
+        setError('Komputer virtual tidak tersedia.\nCoba refresh halaman ini.');
+        retries = 0;
+      }
+      return;
+    }
+
+    retries = 0;
+    disconnect();
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${proto}//${location.host}/vnc-ws`;
+
+    setStatus('Menghubungkan...');
+
+    try {
+      rfb = new RFB(vncCanvas, wsUrl, {
+        credentials: { password: '' },
+        shared: true,
+        wsProtocols: ['binary'],
+      });
+      rfb.scaleViewport = true;
+      rfb.resizeSession = false;
+      rfb.viewOnly = !autoTakeover && !takeover;
+      rfb.showDotCursor = false;
+      rfb.background = '#0a0a0f';
+      rfb.clipViewport = true;
+
+      vncCanvas.style.display = 'none';
+      let connected = false;
+
+      rfb.addEventListener('connect', () => {
+        connected = true;
+        overlay.classList.add('hidden');
+        vncCanvas.style.display = 'block';
+        toolbar.classList.add('show');
+        tbToggle.classList.add('show');
+        console.log('[VNC] Connected');
+        window.vncConnected = true;
+        sendToParent({ type: 'vnc_connected' });
+        if (autoTakeover || takeover) enableTakeover();
+      });
+
+      rfb.addEventListener('disconnect', (e) => {
+        vncCanvas.style.display = 'none';
+        overlay.classList.remove('hidden');
+        banner.classList.remove('show');
+        toolbar.classList.remove('show');
+        tbToggle.classList.remove('show');
+        rfb = null;
+
+        if (connected) {
+          setStatus('Koneksi terputus — menghubungkan ulang...');
+          sendToParent({ type: 'vnc_disconnected' });
+          retryTimer = setTimeout(connect, 3000);
+        } else {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            setStatus('Menghubungkan ulang...', `(${retries}/${MAX_RETRIES})`);
+            retryTimer = setTimeout(connect, RETRY_MS);
+          } else {
+            setError('Gagal terhubung ke komputer virtual.');
+            retries = 0;
+          }
+        }
+      });
+
+      rfb.addEventListener('credentialsrequired', () => {
+        rfb.sendCredentials({ password: '' });
+      });
+
+    } catch(e) {
+      console.error('[VNC]', e);
+      setError('Error: ' + e.message);
+      rfb = null;
+    }
+  }
+
+  function disconnect() {
+    clearTimeout(retryTimer);
+    if (rfb) {
+      try { rfb.disconnect(); } catch {}
+      rfb = null;
+    }
+  }
+
+  function enableTakeover() {
+    takeover = true;
+    if (rfb) {
+      rfb.viewOnly = false;
+      vncCanvas.classList.add('interactive');
+      try { vncCanvas.focus(); rfb.focus(); } catch {}
+    }
+    banner.classList.add('show');
+    document.getElementById('tb-takeover').classList.add('active');
+    sendToParent({ type: 'takeover_enabled' });
+  }
+
+  window.releaseTakeover = function() {
+    takeover = false;
+    if (rfb) {
+      rfb.viewOnly = true;
+      vncCanvas.classList.remove('interactive');
+    }
+    banner.classList.remove('show');
+    document.getElementById('tb-takeover').classList.remove('active');
+    sendToParent({ type: 'takeover_released' });
+  };
+
+  window.toggleTakeover = function() {
+    if (takeover) window.releaseTakeover();
+    else enableTakeover();
+  };
+
+  window.toggleToolbar = function() {
+    const isShown = toolbar.classList.contains('show');
+    if (isShown) {
+      toolbar.classList.remove('show');
+    } else {
+      toolbar.classList.add('show');
+    }
+  };
+
+  window.showKeyboard = function() {
+    if (!takeover) enableTakeover();
+    kbInput.style.position = 'fixed';
+    kbInput.style.bottom = '0';
+    kbInput.style.left = '0';
+    kbInput.style.width = '100%';
+    kbInput.style.height = '40px';
+    kbInput.style.opacity = '0.01';
+    kbInput.style.zIndex = '250';
+    kbInput.focus();
+    kbInput.click();
+  };
+
+  kbInput.addEventListener('input', (e) => {
+    if (!rfb || rfb.viewOnly) return;
+    const val = kbInput.value;
+    if (val) {
+      for (const ch of val) {
+        rfb.sendKey(ch.charCodeAt(0), null, true);
+        rfb.sendKey(ch.charCodeAt(0), null, false);
+      }
+      kbInput.value = '';
+    }
+  });
+
+  kbInput.addEventListener('keydown', (e) => {
+    if (!rfb || rfb.viewOnly) return;
+    const keyMap = {
+      'Enter': 0xFF0D, 'Backspace': 0xFF08, 'Tab': 0xFF09,
+      'Escape': 0xFF1B, 'Delete': 0xFFFF,
+      'ArrowLeft': 0xFF51, 'ArrowUp': 0xFF52,
+      'ArrowRight': 0xFF53, 'ArrowDown': 0xFF54,
+    };
+    if (keyMap[e.key]) {
+      e.preventDefault();
+      rfb.sendKey(keyMap[e.key], null, true);
+      rfb.sendKey(keyMap[e.key], null, false);
+    }
+  });
+
+  window.sendKey = function(keyName) {
+    if (!rfb) return;
+    if (!takeover) enableTakeover();
+    const keyMap = {
+      'Escape': 0xFF1B, 'Tab': 0xFF09, 'Enter': 0xFF0D,
+      'F1': 0xFFBE, 'F2': 0xFFBF, 'F3': 0xFFC0, 'F4': 0xFFC1,
+      'F5': 0xFFC2, 'F6': 0xFFC3, 'F7': 0xFFC4, 'F8': 0xFFC5,
+      'F9': 0xFFC6, 'F10': 0xFFC7, 'F11': 0xFFC8, 'F12': 0xFFC9,
+    };
+    const code = keyMap[keyName];
+    if (code) {
+      rfb.sendKey(code, null, true);
+      rfb.sendKey(code, null, false);
+    }
+  };
+
+  window.sendCtrlAltDel = function() {
+    if (!rfb) return;
+    if (!takeover) enableTakeover();
+    rfb.sendCtrlAltDel();
+  };
+
+  window.openClipboard = function() {
+    document.getElementById('clip-overlay').classList.add('show');
+    document.getElementById('clip-dialog').classList.add('show');
+  };
+
+  window.closeClipboard = function() {
+    document.getElementById('clip-overlay').classList.remove('show');
+    document.getElementById('clip-dialog').classList.remove('show');
+  };
+
+  window.sendClipboard = function() {
+    if (!rfb) { closeClipboard(); return; }
+    if (!takeover) enableTakeover();
+    const text = document.getElementById('clip-text').value;
+    if (text) {
+      rfb.clipboardPasteFrom(text);
+      for (const ch of text) {
+        rfb.sendKey(ch.charCodeAt(0), null, true);
+        rfb.sendKey(ch.charCodeAt(0), null, false);
+      }
+    }
+    closeClipboard();
+    document.getElementById('clip-text').value = '';
+  };
+
+  function sendToParent(data) {
+    try {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(data));
+      } else if (window.parent !== window) {
+        window.parent.postMessage(JSON.stringify(data), '*');
+      }
+    } catch {}
+  }
+
+  window.addEventListener('message', (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'takeover') enableTakeover();
+      else if (msg.type === 'release') window.releaseTakeover();
+      else if (msg.type === 'connect') connect();
+      else if (msg.type === 'disconnect') disconnect();
+    } catch {}
+  });
+
+  connect();
+</script>
+</body>
+</html>

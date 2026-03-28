@@ -1,0 +1,16 @@
+node_modules
+.expo
+dist
+web-build
+ios
+android
+.git
+.env
+.env.local
+*.tsbuildinfo
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+server_dist
+static-build

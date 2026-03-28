@@ -1,0 +1,13 @@
+[program:slidev]
+command=pnpm dev
+directory=/opt/.manus/.packages/slidev_for_docker
+user=ubuntu
+stderr_logfile=/var/log/supervisor/slidev.err.log
+stdout_logfile=/var/log/supervisor/slidev.log
+environment=
+    PATH="/usr/local/bin:/usr/bin:/bin:/home/ubuntu/.local/bin:/home/ubuntu/.local/share/pnpm:/home/ubuntu/.nvm/versions/node/v22.13.0/bin",
+    HOME="/home/ubuntu",
+    TZ="UTC"
+exitcodes=0
+startsecs=0
+priority=8

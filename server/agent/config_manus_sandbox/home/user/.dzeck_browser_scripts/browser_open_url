@@ -1,0 +1,36 @@
+#!/bin/bash
+# browser_open_url - Open a URL in the existing Chrome browser
+# Usage: browser_open_url <url>
+URL="$1"
+if [ -z "$URL" ]; then
+    echo "Usage: browser_open_url <url>"
+    exit 1
+fi
+
+# Add protocol if missing
+if [[ "$URL" != http://* ]] && [[ "$URL" != https://* ]]; then
+    URL="https://$URL"
+fi
+
+DISPLAY="${DISPLAY:-:0}"
+
+# Try to focus existing Chrome and navigate via address bar
+DISPLAY="$DISPLAY" wmctrl -a 'Google Chrome' 2>/dev/null || \
+DISPLAY="$DISPLAY" wmctrl -a 'Chromium' 2>/dev/null || true
+
+sleep 0.3
+
+# Use xdotool to navigate
+DISPLAY="$DISPLAY" xdotool key --clearmodifiers ctrl+l 2>/dev/null
+sleep 0.2
+DISPLAY="$DISPLAY" xdotool type --clearmodifiers "$URL" 2>/dev/null
+sleep 0.1
+DISPLAY="$DISPLAY" xdotool key Return 2>/dev/null
+
+if [ $? -eq 0 ]; then
+    echo "Navigated to: $URL"
+else
+    # Fallback: xdg-open
+    DISPLAY="$DISPLAY" xdg-open "$URL" 2>/dev/null &
+    echo "Opened URL via xdg-open: $URL"
+fi

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>E2B Desktop — Live Browser</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a0f;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #fff;
+    touch-action: none;
+  }
+
+  #status-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px;
+    background: #0a0a0f;
+    transition: opacity 0.4s ease;
+  }
+  #status-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .scan-box {
+    width: 80px; height: 80px; position: relative;
+    border: 1px solid rgba(108,92,231,0.3); border-radius: 6px; overflow: hidden;
+  }
+  .scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: #6C5CE7; box-shadow: 0 0 8px #6C5CE7;
+    animation: scan 1.8s ease-in-out infinite;
+  }
+  .scan-corner { position: absolute; width: 12px; height: 12px; border-color: #6C5CE7; border-style: solid; }
+  .scan-corner.tl { top: 4px; left: 4px; border-width: 2px 0 0 2px; }
+  .scan-corner.tr { top: 4px; right: 4px; border-width: 2px 2px 0 0; }
+  .scan-corner.bl { bottom: 4px; left: 4px; border-width: 0 0 2px 2px; }
+  .scan-corner.br { bottom: 4px; right: 4px; border-width: 0 2px 2px 0; }
+  @keyframes scan { 0%{transform:translateY(0)} 50%{transform:translateY(76px)} 100%{transform:translateY(0)} }
+
+  #status-text { font-size: 13px; color: #8E8E93; text-align: center; max-width: 280px; line-height: 1.5; }
+  #retry-count { font-size: 11px; color: #4A4A55; }
+  #error-msg { font-size: 12px; color: #FF453A; display: none; text-align: center; max-width: 280px; }
+
+  #vnc-canvas {
+    width: 100%; height: 100%; display: none;
+  }
+  #vnc-canvas canvas {
+    width: 100% !important; height: 100% !important;
+    object-fit: contain; cursor: default;
+  }
+  #vnc-canvas.interactive canvas { cursor: crosshair; }
+
+  /* Top bar with session info */
+  #top-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    height: 36px; display: none;
+    align-items: center; justify-content: space-between;
+    padding: 0 12px;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(108,92,231,0.2);
+    font-size: 11px;
+  }
+  #top-bar.show { display: flex; }
+  #top-bar .session-info { color: #8E8E93; display: flex; align-items: center; gap: 8px; }
+  #top-bar .session-info .dot { width: 6px; height: 6px; border-radius: 50%; background: #30D158; }
+  #top-bar .session-info .dot.error { background: #FF453A; }
+  #top-bar .session-info .dot.starting { background: #FF9F0A; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  #top-bar .actions { display: flex; gap: 6px; }
+  #top-bar .actions button {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    color: #ccc; border-radius: 4px; padding: 3px 8px; font-size: 10px; cursor: pointer;
+  }
+  #top-bar .actions button:hover { background: rgba(108,92,231,0.3); color: #fff; }
+  #top-bar .actions button.danger:hover { background: rgba(255,69,58,0.3); }
+
+  /* Mobile Toolbar */
+  #mobile-toolbar {
+    position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+    z-index: 300; display: none; flex-direction: column; gap: 2px;
+    padding: 4px; background: rgba(20,20,30,0.9);
+    border-radius: 0 12px 12px 0;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(108,92,231,0.3); border-left: none;
+  }
+  #mobile-toolbar.show { display: flex; }
+
+  .tb-btn {
+    width: 40px; height: 40px; border: none;
+    background: rgba(255,255,255,0.08); color: #ccc;
+    border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .tb-btn:active, .tb-btn.active { background: rgba(108,92,231,0.5); color: #fff; }
+  .tb-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+  .tb-sep { height: 1px; background: rgba(255,255,255,0.1); margin: 2px 4px; }
+
+  #tb-toggle {
+    position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+    z-index: 299; width: 20px; height: 60px;
+    background: rgba(20,20,30,0.7); color: #888;
+    border: 1px solid rgba(108,92,231,0.2); border-left: none;
+    border-radius: 0 8px 8px 0; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(5px);
+  }
+  #tb-toggle.show { display: flex; }
+  #tb-toggle svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  #kb-input {
+    position: fixed; bottom: -100px; left: 0; width: 1px; height: 1px;
+    opacity: 0; z-index: -1;
+  }
+
+  /* Clipboard dialog */
+  #clip-dialog {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    z-index: 400; display: none; flex-direction: column; gap: 10px;
+    background: #1a1a2e; border: 1px solid rgba(108,92,231,0.4);
+    border-radius: 12px; padding: 16px; width: 90%; max-width: 320px;
+  }
+  #clip-dialog.show { display: flex; }
+  #clip-dialog h3 { font-size: 14px; color: #ddd; }
+  #clip-dialog textarea {
+    width: 100%; height: 80px; background: #0e0e1a; color: #eee;
+    border: 1px solid rgba(108,92,231,0.3); border-radius: 8px;
+    padding: 8px; font-size: 13px; resize: none; outline: none;
+  }
+  #clip-dialog .clip-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  #clip-dialog button {
+    padding: 6px 14px; border-radius: 6px; border: none;
+    font-size: 12px; cursor: pointer; font-weight: 500;
+  }
+  #clip-dialog .clip-send { background: #6C5CE7; color: #fff; }
+  #clip-dialog .clip-cancel { background: rgba(255,255,255,0.1); color: #ccc; }
+  #clip-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 399; display: none; }
+  #clip-overlay.show { display: block; }
+</style>
+</head>
+<body>
+
+<div id="status-overlay">
+  <div class="scan-box">
+    <div class="scan-line"></div>
+    <div class="scan-corner tl"></div>
+    <div class="scan-corner tr"></div>
+    <div class="scan-corner bl"></div>
+    <div class="scan-corner br"></div>
+  </div>
+  <div id="status-text">Memulai E2B Desktop Sandbox...</div>
+  <div id="retry-count"></div>
+  <div id="error-msg"></div>
+</div>
+
+<div id="vnc-canvas"></div>
+
+<!-- Top bar -->
+<div id="top-bar">
+  <div class="session-info">
+    <div class="dot starting" id="status-dot"></div>
+    <span id="session-label">E2B Desktop</span>
+    <span id="resolution-label"></span>
+  </div>
+  <div class="actions">
+    <button onclick="captureScreenshot()" title="Screenshot">Screenshot</button>
+    <button onclick="location.reload()" title="Reconnect">Reconnect</button>
+    <button class="danger" onclick="destroySession()" title="Tutup">Tutup</button>
+  </div>
+</div>
+
+<!-- Toolbar toggle -->
+<div id="tb-toggle" onclick="toggleToolbar()">
+  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+</div>
+
+<!-- Mobile toolbar -->
+<div id="mobile-toolbar">
+  <button class="tb-btn" onclick="toggleTakeover()" id="tb-takeover" title="Ambil Kendali">
+    <svg viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+  </button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="showKeyboard()" title="Keyboard">
+    <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
+  </button>
+  <button class="tb-btn" onclick="openClipboard()" title="Clipboard">
+    <svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+  </button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="sendKey('Escape')" title="Esc">
+    <svg viewBox="0 0 24 24"><text x="4" y="17" font-size="12" fill="currentColor" stroke="none" font-weight="bold">Esc</text></svg>
+  </button>
+  <button class="tb-btn" onclick="sendKey('Tab')" title="Tab">
+    <svg viewBox="0 0 24 24"><path d="M4 12h12M12 8l4 4-4 4M20 6v12"/></svg>
+  </button>
+  <button class="tb-btn" onclick="sendKey('F5')" title="Refresh">
+    <svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+  </button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="toggleToolbar()" title="Sembunyikan">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+</div>
+
+<!-- Clipboard dialog -->
+<div id="clip-overlay" onclick="closeClipboard()"></div>
+<div id="clip-dialog">
+  <h3>Clipboard</h3>
+  <textarea id="clip-text" placeholder="Ketik atau paste teks di sini..."></textarea>
+  <div class="clip-btns">
+    <button class="clip-cancel" onclick="closeClipboard()">Batal</button>
+    <button class="clip-send" onclick="sendClipboard()">Kirim ke Desktop</button>
+  </div>
+</div>
+
+<input type="text" id="kb-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+<script type="module">
+  // ─── noVNC CDN sources ────────────────────────────────────────────────────
+  const NOVNC_CDNS = [
+    '/novnc/rfb.js',
+    'https://cdn.jsdelivr.net/gh/novnc/noVNC@v1.5.0/core/rfb.js',
+    'https://unpkg.com/@novnc/novnc@1.5.0/core/rfb.js',
+  ];
+
+  const statusEl   = document.getElementById('status-text');
+  const retryEl    = document.getElementById('retry-count');
+  const errorEl    = document.getElementById('error-msg');
+  const overlay    = document.getElementById('status-overlay');
+  const vncCanvas  = document.getElementById('vnc-canvas');
+  const topBar     = document.getElementById('top-bar');
+  const toolbar    = document.getElementById('mobile-toolbar');
+  const tbToggle   = document.getElementById('tb-toggle');
+  const kbInput    = document.getElementById('kb-input');
+  const statusDot  = document.getElementById('status-dot');
+  const sessionLabel = document.getElementById('session-label');
+  const resLabel   = document.getElementById('resolution-label');
+
+  let RFB = null;
+  let rfb = null;
+  let retries = 0;
+  const MAX_RETRIES = 30;
+  const RETRY_MS = 2000;
+  let retryTimer = null;
+  let takeover = false;
+  let currentSessionId = null;
+
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get('session');
+  const directWsUrl = params.get('ws');
+  const autoTakeover = params.get('takeover') === '1';
+
+  // ─── Status helpers ───────────────────────────────────────────────────────
+
+  function setStatus(msg, sub = '') {
+    statusEl.textContent = msg;
+    retryEl.textContent = sub;
+    errorEl.style.display = 'none';
+  }
+
+  function setError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+    statusEl.textContent = '';
+    retryEl.textContent = '';
+  }
+
+  function setDotStatus(status) {
+    statusDot.className = 'dot ' + status;
+  }
+
+  // ─── noVNC loader ─────────────────────────────────────────────────────────
+
+  async function loadNoVNC() {
+    for (const url of NOVNC_CDNS) {
+      try {
+        const m = await import(url);
+        RFB = m.default || m;
+        console.log('[E2B-VNC] noVNC loaded from', url);
+        return true;
+      } catch (e) {
+        console.warn('[E2B-VNC] Failed to load from', url, e.message);
+      }
+    }
+    return false;
+  }
+
+  // ─── E2B Session API ──────────────────────────────────────────────────────
+
+  async function createSession() {
+    setStatus('Membuat E2B Desktop Sandbox...');
+    try {
+      const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+      const resolution = isMobile
+        ? { width: 800, height: 600 }
+        : { width: 1280, height: 720 };
+
+      const r = await fetch('/api/e2b/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resolution,
+          timeout: 3600,
+          startUrl: 'https://www.google.com',
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Failed to create session');
+      currentSessionId = data.session_id;
+      sessionLabel.textContent = `E2B Desktop (${data.session_id})`;
+      resLabel.textContent = `${resolution.width}x${resolution.height}`;
+      setStatus('Sandbox dimulai, menunggu desktop siap...');
+      setDotStatus('starting');
+      return data.session_id;
+    } catch (e) {
+      setError('Gagal membuat sandbox: ' + e.message);
+      return null;
+    }
+  }
+
+  async function waitForReady(sid) {
+    setStatus('Menunggu desktop environment siap...');
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      retryEl.textContent = `Percobaan ${i + 1}/${MAX_RETRIES}`;
+      try {
+        const r = await fetch(`/api/e2b/sessions/${sid}/health`);
+        const d = await r.json();
+        if (d.ready) {
+          return d;
+        }
+        if (d.status === 'error') {
+          setError('Desktop error: ' + (d.error || 'Unknown'));
+          return null;
+        }
+      } catch {}
+      await new Promise(ok => setTimeout(ok, RETRY_MS));
+    }
+    setError('Timeout menunggu desktop siap');
+    return null;
+  }
+
+  async function getVncUrl(sid) {
+    // Retry up to 5 times with 2s delay — the endpoint returns 202 while VNC
+    // is still starting, so we poll until it gives us 200 with stream data.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const r = await fetch(`/api/e2b/sessions/${sid}/vnc-url`);
+        const d = await r.json();
+        if (r.ok && d.stream_url) return d;
+        // 202 means "not ready yet, retry"
+        if (r.status === 202) {
+          const wait = d.retry_after_ms || 2000;
+          await new Promise(ok => setTimeout(ok, wait));
+          continue;
+        }
+        // Other non-ok status — return what we got
+        return d;
+      } catch {
+        await new Promise(ok => setTimeout(ok, 2000));
+      }
+    }
+    return null;
+  }
+
+  // ─── VNC Connection ───────────────────────────────────────────────────────
+
+  function connectVnc(wsUrl) {
+    if (rfb) return;
+
+    setStatus('Menghubungkan ke VNC...');
+
+    try {
+      rfb = new RFB(vncCanvas, wsUrl, {
+        shared: true,
+        credentials: { password: '' },
+        wsProtocols: ['binary'],
+      });
+
+      rfb.scaleViewport = true;
+      rfb.resizeSession = false;
+      rfb.showDotCursor = true;
+      rfb.qualityLevel = 6;
+      rfb.compressionLevel = 2;
+      rfb.viewOnly = !takeover;
+
+      rfb.addEventListener('connect', () => {
+        console.log('[E2B-VNC] Connected');
+        overlay.classList.add('hidden');
+        vncCanvas.style.display = 'block';
+        topBar.classList.add('show');
+        setDotStatus('');
+
+        const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+        if (isMobile) {
+          toolbar.classList.add('show');
+        } else {
+          tbToggle.classList.add('show');
+        }
+
+        if (autoTakeover) toggleTakeover();
+      });
+
+      rfb.addEventListener('disconnect', (ev) => {
+        console.log('[E2B-VNC] Disconnected', ev.detail);
+        rfb = null;
+        vncCanvas.style.display = 'none';
+        overlay.classList.remove('hidden');
+        setDotStatus('error');
+
+        if (ev.detail && !ev.detail.clean) {
+          retries++;
+          if (retries < MAX_RETRIES) {
+            setStatus('Koneksi terputus, mencoba ulang...',
+              `Percobaan ${retries}/${MAX_RETRIES}`);
+            retryTimer = setTimeout(() => connectVnc(wsUrl), RETRY_MS);
+          } else {
+            setError('Gagal menghubungkan ke desktop setelah banyak percobaan');
+          }
+        } else {
+          setStatus('Terputus dari desktop');
+        }
+      });
+
+      rfb.addEventListener('credentialsrequired', () => {
+        rfb.sendCredentials({ password: '' });
+      });
+
+    } catch (e) {
+      console.error('[E2B-VNC] Connection error:', e);
+      setError('Error koneksi: ' + e.message);
+    }
+  }
+
+  // ─── Check for existing agent sandbox session ──────────────────────────
+
+  async function findActiveSession() {
+    try {
+      const r = await fetch('/api/e2b/sessions/active');
+      const d = await r.json();
+      if (d.found && d.session_id) {
+        console.log('[E2B-VNC] Found existing agent sandbox session:', d.session_id);
+        return d.session_id;
+      }
+    } catch {}
+    return null;
+  }
+
+  // ─── Main flow ────────────────────────────────────────────────────────────
+  // Priority: 1) direct WS URL  2) explicit session ID  3) existing agent session  4) create new
+
+  async function main() {
+    setStatus('Memuat noVNC...');
+    const loaded = await loadNoVNC();
+    if (!loaded) {
+      setError('Gagal memuat noVNC library');
+      return;
+    }
+
+    let wsUrl = directWsUrl;
+
+    if (!wsUrl) {
+      let sid = sessionId;
+
+      // If no explicit session ID, check for an existing agent sandbox session
+      // This ensures the VNC viewer connects to the SAME sandbox the agent is using
+      // (matching ai-manus pattern where VNC shows the agent's actual desktop)
+      if (!sid) {
+        setStatus('Mencari sandbox yang aktif...');
+        sid = await findActiveSession();
+      }
+
+      if (!sid) {
+        // No existing agent session found — create a new one
+        sid = await createSession();
+        if (!sid) return;
+      } else {
+        currentSessionId = sid;
+        sessionLabel.textContent = `E2B Desktop (${sid})`;
+      }
+
+      const health = await waitForReady(sid);
+      if (!health) return;
+
+      // Get the VNC WebSocket URL
+      const vncInfo = await getVncUrl(sid);
+      if (!vncInfo) {
+        setError('Gagal mendapatkan VNC URL');
+        return;
+      }
+
+      // Use the local WS proxy endpoint for reliable connection
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${proto}//${location.host}/api/e2b/sessions/${sid}/ws`;
+    }
+
+    setStatus('Menghubungkan ke desktop...');
+    connectVnc(wsUrl);
+  }
+
+  main();
+
+  // ─── Toolbar functions (exposed to window) ────────────────────────────────
+
+  window.toggleToolbar = function() {
+    const visible = toolbar.classList.toggle('show');
+    tbToggle.classList.toggle('show', !visible);
+  };
+
+  window.toggleTakeover = function() {
+    takeover = !takeover;
+    if (rfb) rfb.viewOnly = !takeover;
+    const btn = document.getElementById('tb-takeover');
+    btn.classList.toggle('active', takeover);
+    vncCanvas.classList.toggle('interactive', takeover);
+  };
+
+  window.showKeyboard = function() {
+    kbInput.focus();
+    kbInput.click();
+  };
+
+  window.sendKey = function(key) {
+    if (!rfb) return;
+    const keyMap = {
+      'Escape': 0xFF1B,
+      'Tab': 0xFF09,
+      'F5': 0xFFC2,
+      'F11': 0xFFC8,
+    };
+    const keysym = keyMap[key];
+    if (keysym) {
+      rfb.sendKey(keysym, null, true);
+      rfb.sendKey(keysym, null, false);
+    }
+  };
+
+  window.openClipboard = function() {
+    document.getElementById('clip-overlay').classList.add('show');
+    document.getElementById('clip-dialog').classList.add('show');
+  };
+
+  window.closeClipboard = function() {
+    document.getElementById('clip-overlay').classList.remove('show');
+    document.getElementById('clip-dialog').classList.remove('show');
+  };
+
+  window.sendClipboard = function() {
+    const text = document.getElementById('clip-text').value;
+    if (rfb && text) {
+      rfb.clipboardPasteFrom(text);
+    }
+    window.closeClipboard();
+  };
+
+  window.captureScreenshot = async function() {
+    if (!currentSessionId) return;
+    try {
+      const r = await fetch(`/api/e2b/sessions/${currentSessionId}/screenshot`);
+      if (r.ok) {
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `e2b-screenshot-${Date.now()}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error('Screenshot failed:', e);
+    }
+  };
+
+  window.destroySession = async function() {
+    if (!currentSessionId) return;
+    if (!confirm('Tutup desktop sandbox ini?')) return;
+    try {
+      await fetch(`/api/e2b/sessions/${currentSessionId}`, { method: 'DELETE' });
+      if (rfb) rfb.disconnect();
+      setStatus('Desktop sandbox ditutup');
+      setDotStatus('error');
+    } catch {}
+  };
+
+  // ─── postMessage bridge (React Native WebView <-> VNC HTML) ─────────────
+  // Receives messages from parent WebView (ComputerView.tsx / TakeOverView.tsx)
+  // and sends status updates back via window.ReactNativeWebView.postMessage()
+
+  function postStatusToParent(payload) {
+    try {
+      // React Native WebView injects ReactNativeWebView
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      }
+      // Also post to parent window for iframe/web embedding
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(payload, '*');
+      }
+    } catch (e) {
+      console.warn('[E2B-VNC] postMessage error:', e);
+    }
+  }
+
+  // Expose postStatusToParent on window so parent frames / test code can call it
+  window.postStatusToParent = postStatusToParent;
+
+  // Listen for messages from parent (React Native WebView or iframe parent)
+  window.addEventListener('message', (event) => {
+    let data = event.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch { return; }
+    }
+    if (!data || !data.type) return;
+
+    console.log('[E2B-VNC] Received message from parent:', data.type);
+
+    if (data.type === 'takeover') {
+      if (!takeover) window.toggleTakeover();
+    } else if (data.type === 'release') {
+      if (takeover) window.toggleTakeover();
+    } else if (data.type === 'screenshot') {
+      window.captureScreenshot();
+    } else if (data.type === 'sendKey') {
+      if (data.key) window.sendKey(data.key);
+    } else if (data.type === 'sendClipboard') {
+      if (rfb && data.text) rfb.clipboardPasteFrom(data.text);
+    } else if (data.type === 'getStatus') {
+      postStatusToParent({
+        type: 'vnc_status',
+        connected: !!rfb,
+        takeover: takeover,
+        sessionId: currentSessionId,
+      });
+    }
+  });
+
+  // Also listen on document for React Native WebView's onMessage
+  document.addEventListener('message', (event) => {
+    let data = event.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch { return; }
+    }
+    if (!data || !data.type) return;
+    // Re-dispatch to window handler
+    window.dispatchEvent(new MessageEvent('message', { data }));
+  });
+
+  // Send status updates to parent when VNC state changes
+  // Patch toggleTakeover to also notify parent
+  const _origToggleTakeover = window.toggleTakeover;
+  window.toggleTakeover = function() {
+    _origToggleTakeover();
+    postStatusToParent({
+      type: 'vnc_takeover_changed',
+      takeover: takeover,
+    });
+  };
+
+  // Notify parent when VNC connects/disconnects (patch connectVnc listeners)
+  const _origConnectVnc = connectVnc;
+  connectVnc = function(wsUrl) {
+    _origConnectVnc(wsUrl);
+    // The RFB event listeners are added inside _origConnectVnc.
+    // We add additional listeners after a tick to ensure rfb exists.
+    setTimeout(() => {
+      if (rfb) {
+        rfb.addEventListener('connect', () => {
+          postStatusToParent({
+            type: 'vnc_connected',
+            sessionId: currentSessionId,
+            takeover: takeover,
+          });
+        });
+        rfb.addEventListener('disconnect', () => {
+          postStatusToParent({
+            type: 'vnc_disconnected',
+            sessionId: currentSessionId,
+          });
+        });
+      }
+    }, 0);
+  };
+
+  // ─── Keyboard input relay ─────────────────────────────────────────────────
+
+  kbInput.addEventListener('input', (e) => {
+    if (!rfb || !takeover) return;
+    const char = e.data;
+    if (char) {
+      const code = char.charCodeAt(0);
+      rfb.sendKey(code, null, true);
+      rfb.sendKey(code, null, false);
+    }
+    kbInput.value = '';
+  });
+
+  kbInput.addEventListener('keydown', (e) => {
+    if (!rfb || !takeover) return;
+    const specialKeys = {
+      'Backspace': 0xFF08, 'Enter': 0xFF0D, 'Escape': 0xFF1B,
+      'ArrowUp': 0xFF52, 'ArrowDown': 0xFF54,
+      'ArrowLeft': 0xFF51, 'ArrowRight': 0xFF53,
+    };
+    const keysym = specialKeys[e.key];
+    if (keysym) {
+      e.preventDefault();
+      rfb.sendKey(keysym, null, true);
+      rfb.sendKey(keysym, null, false);
+    }
+  });
+</script>
+</body>
+</html>

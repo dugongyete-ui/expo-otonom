@@ -1,0 +1,12 @@
+[Unit]
+Description=Forward Ports Service
+
+[Service]
+Type=simple
+Restart=no
+User=root
+Group=root
+ExecStart=/bin/bash -l -c "(echo 1 | tee /proc/sys/net/ipv4/ip_forward) && iptables-legacy -t nat -A POSTROUTING -s 127.0.0.1 -j SNAT --to-source 169.254.0.21 && iptables-legacy -t nat -A PREROUTING -d 169.254.0.21 -j DNAT --to-destination 127.0.0.1"
+
+[Install]
+WantedBy=multi-user.target
