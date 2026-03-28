@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
   View,
   TextInput,
@@ -7,11 +7,15 @@ import {
   Image,
   ScrollView,
   Platform,
+  Text,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import type { ChatAttachment } from "@/lib/chat";
+import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 
 interface ChatInputProps {
   onSend: (text: string, attachments: ChatAttachment[]) => void;
@@ -23,31 +27,45 @@ interface ChatInputProps {
   onToggleMode?: () => void;
   onShowHistory?: () => void;
   showModeToggle?: boolean;
+  activeSessionId?: string | null;
 }
 
-export function ChatInput({ onSend, disabled, onStop, isGenerating, placeholder, isAgentMode, onToggleMode, showModeToggle }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  onStop,
+  isGenerating,
+  placeholder,
+  isAgentMode,
+  onToggleMode,
+  showModeToggle,
+  activeSessionId,
+}: ChatInputProps) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [isUploadingToSandbox, setIsUploadingToSandbox] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
-
     onSend(trimmed, attachments);
     setText("");
     setAttachments([]);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [text, attachments, onSend]);
 
-  const handleAttach = async () => {
+  const handleAttachImage = useCallback(async () => {
+    setShowAttachMenu(false);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsMultipleSelection: false,
       });
-
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         setAttachments((prev) => [
@@ -58,12 +76,70 @@ export function ChatInput({ onSend, disabled, onStop, isGenerating, placeholder,
             name: asset.fileName || "image.jpg",
           },
         ]);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
       }
     } catch (error) {
       console.error("Image picker error:", error);
     }
-  };
+  }, []);
+
+  const handleUploadToSandbox = useCallback(async () => {
+    setShowAttachMenu(false);
+    if (!activeSessionId) {
+      console.warn("No active session to upload to");
+      return;
+    }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      setIsUploadingToSandbox(true);
+
+      const formData = new FormData();
+      const filePayload: Record<string, string> = {
+        uri: asset.uri,
+        name: asset.name || "file",
+        type: asset.mimeType || "application/octet-stream",
+      };
+      formData.append("file", filePayload as unknown as Blob);
+
+      const baseUrl = getApiBaseUrl();
+      const token = getStoredToken();
+      const uploadHeaders: Record<string, string> = {};
+      if (token) uploadHeaders["Authorization"] = `Bearer ${token}`;
+      const response = await fetch(`${baseUrl}/api/e2b/sessions/${activeSessionId}/upload`, {
+        method: "POST",
+        headers: uploadHeaders,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const data = await response.json();
+      const uploadedPath = data.path || asset.name;
+      setText((prev) => {
+        const note = `[File uploaded to sandbox: ${uploadedPath}] `;
+        return prev ? `${prev} ${note}` : note;
+      });
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error: any) {
+      console.error("File upload error:", error);
+      setText((prev) => (prev ? prev : `Upload failed: ${error.message}`));
+    } finally {
+      setIsUploadingToSandbox(false);
+    }
+  }, [activeSessionId]);
 
   const removeAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
@@ -73,6 +149,35 @@ export function ChatInput({ onSend, disabled, onStop, isGenerating, placeholder,
 
   return (
     <View style={styles.container}>
+      {/* Attachment menu */}
+      {showAttachMenu && (
+        <View style={styles.attachMenu}>
+          <TouchableOpacity
+            style={styles.attachMenuItem}
+            onPress={handleAttachImage}
+          >
+            <Ionicons name="image-outline" size={18} color="#8E8E93" />
+            <Text style={styles.attachMenuText}>Image</Text>
+          </TouchableOpacity>
+          {activeSessionId && (
+            <TouchableOpacity
+              style={styles.attachMenuItem}
+              onPress={handleUploadToSandbox}
+              disabled={isUploadingToSandbox}
+            >
+              {isUploadingToSandbox ? (
+                <ActivityIndicator size="small" color="#6C5CE7" />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={18} color="#6C5CE7" />
+              )}
+              <Text style={[styles.attachMenuText, { color: "#6C5CE7" }]}>
+                {isUploadingToSandbox ? "Uploading..." : "Upload to Sandbox"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* Attachment previews */}
       {attachments.length > 0 && (
         <ScrollView
@@ -100,7 +205,7 @@ export function ChatInput({ onSend, disabled, onStop, isGenerating, placeholder,
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder={placeholder || "Kirim pesan ke Dzeck AI..."}
+          placeholder={placeholder || "Ask Dzeck AI..."}
           placeholderTextColor="#636366"
           value={text}
           onChangeText={setText}
@@ -112,17 +217,17 @@ export function ChatInput({ onSend, disabled, onStop, isGenerating, placeholder,
         />
       </View>
 
-      {/* Bottom toolbar - Manus style */}
+      {/* Bottom toolbar */}
       <View style={styles.toolbar}>
         <View style={styles.toolbarLeft}>
           <TouchableOpacity
-            onPress={handleAttach}
+            onPress={() => setShowAttachMenu(v => !v)}
             style={styles.toolbarBtn}
             activeOpacity={0.6}
             disabled={disabled}
           >
             <Ionicons
-              name="add"
+              name={showAttachMenu ? "close" : "add"}
               size={22}
               color={disabled ? "#3A3A40" : "#8E8E93"}
             />
@@ -183,6 +288,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#0A0A0C",
     paddingBottom: Platform.OS === "ios" ? 20 : 8,
     paddingHorizontal: 12,
+  },
+  attachMenu: {
+    backgroundColor: "#1A1A20",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2C2C30",
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  attachMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2C2C30",
+  },
+  attachMenuText: {
+    fontSize: 14,
+    color: "#8E8E93",
+    fontWeight: "500",
   },
   attachmentBar: {
     maxHeight: 80,

@@ -56,6 +56,29 @@ export interface AgentCallbacks {
   onDone?: () => void;
 }
 
+export function getStoredToken(): string {
+  try {
+    const { getMemoryAccessToken } = require("./auth-service");
+    const memToken = getMemoryAccessToken();
+    if (memToken) return memToken;
+  } catch {}
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      return localStorage.getItem("dzeck_access_token") || "";
+    }
+  } catch {}
+  return "";
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...extra };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 class ApiService {
   private baseUrl: string;
 
@@ -75,9 +98,7 @@ class ApiService {
       const messages = Array.isArray(payload) ? payload : payload.messages;
       const response = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         body: JSON.stringify({ messages }),
       });
 
@@ -164,9 +185,7 @@ class ApiService {
     try {
       const response = await fetch(`${this.baseUrl}/api/agent`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         body: JSON.stringify({
           message: request.message,
           messages: request.messages || [],
@@ -259,7 +278,9 @@ class ApiService {
 
   async getSessions(): Promise<any[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/sessions`);
+      const response = await fetch(`${this.baseUrl}/api/sessions`, {
+        headers: authHeaders(),
+      });
       if (!response.ok) return [];
       const data = await response.json();
       return data.sessions || [];

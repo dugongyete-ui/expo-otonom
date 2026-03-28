@@ -25,6 +25,7 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
   const [isLoading, setIsLoading] = useState(false);
   const [isWaitingForUser, setIsWaitingForUser] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
@@ -39,8 +40,8 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string, useAgent: boolean = false) => {
-      if (!text.trim()) return;
+    async (text: string, useAgent: boolean = false, attachments: any[] = []) => {
+      if (!text.trim() && attachments.length === 0) return;
 
       setError(null);
 
@@ -56,7 +57,7 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
         setIsWaitingForUser(false);
         setIsLoading(true);
         try {
-          await handleAgentChat(text, sessionIdRef.current, true);
+          await handleAgentChat(text, sessionIdRef.current, true, attachments);
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : "Unknown error";
           setError(errorMsg);
@@ -71,7 +72,7 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
 
       try {
         if (useAgent) {
-          await handleAgentChat(text);
+          await handleAgentChat(text, undefined, false, attachments);
         } else {
           await handleSimpleChat(text);
         }
@@ -118,15 +119,17 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
   );
 
   const handleAgentChat = useCallback(
-    async (text: string, existingSessionId?: string, isContinuation?: boolean) => {
+    async (text: string, existingSessionId?: string, isContinuation?: boolean, attachments?: any[]) => {
       return new Promise<void>((resolve, reject) => {
         const onEvent = (event: AgentEvent) => {
           if (event.type === "session") {
             if (event.session_id) {
               sessionIdRef.current = event.session_id;
+              setSessionId(event.session_id);
             }
           } else if (event.type === "done" && event.session_id) {
             sessionIdRef.current = event.session_id;
+            setSessionId(event.session_id);
           } else if (event.type === "waiting_for_user" || event.type === "ask") {
             setIsWaitingForUser(true);
             setIsLoading(false);
@@ -278,6 +281,7 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
             {
               message: text,
               messages: [],
+              attachments: attachments || [],
               session_id: existingSessionId || undefined,
               is_continuation: isContinuation || false,
             },
@@ -316,5 +320,6 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
     clear,
     addMessage,
     updateMessage,
+    sessionId,
   };
 }

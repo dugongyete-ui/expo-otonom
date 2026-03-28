@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking } from "react-native";
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
@@ -7,6 +7,8 @@ import { AgentThinking } from "./AgentThinking";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage } from "../lib/api-service";
 import { randomUUID } from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
+import { useI18n, t as translate } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-context";
 
 interface AgentPlanStep {
   id: string;
@@ -73,6 +75,9 @@ export function ChatPage({
   const [tools, setTools] = useState<any[]>([]);
   const [stepHistory, setStepHistory] = useState<string[]>([]);
   const [title, setTitle] = useState(isAgentMode ? "Dzeck Agent" : "Dzeck Chat");
+  const [showSettings, setShowSettings] = useState(false);
+  const { locale, changeLocale } = useI18n();
+  const { logout } = useAuth();
   const [attachments, setAttachments] = useState<any[]>([]);
   const [e2bStatus, setE2bStatus] = useState<"checking" | "connected" | "error">("checking");
 
@@ -573,18 +578,77 @@ export function ChatPage({
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{title}</Text>
-        {isAgentMode && (
-          <View style={[
-            styles.e2bBadge,
-            e2bStatus === "connected" ? styles.e2bConnected :
-            e2bStatus === "error" ? styles.e2bError : styles.e2bChecking,
-          ]}>
-            <Text style={styles.e2bBadgeText}>
-              {e2bStatus === "connected" ? "● E2B" : e2bStatus === "error" ? "✕ E2B" : "… E2B"}
-            </Text>
-          </View>
-        )}
+        <View style={styles.headerRight}>
+          {isAgentMode && (
+            <View style={[
+              styles.e2bBadge,
+              e2bStatus === "connected" ? styles.e2bConnected :
+              e2bStatus === "error" ? styles.e2bError : styles.e2bChecking,
+            ]}>
+              <Text style={styles.e2bBadgeText}>
+                {e2bStatus === "connected" ? "● E2B" : e2bStatus === "error" ? "✕ E2B" : "… E2B"}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            onPress={() => setShowSettings(true)}
+            style={styles.settingsBtn}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          >
+            <Ionicons name="settings-outline" size={18} color="#8a8780" />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <Modal
+        visible={showSettings}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <TouchableOpacity
+          style={styles.settingsOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSettings(false)}
+        >
+          <View style={styles.settingsPanel}>
+            <Text style={styles.settingsPanelTitle}>{translate("Settings")}</Text>
+
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>{translate("Language")}</Text>
+              <View style={styles.langRow}>
+                <TouchableOpacity
+                  style={[styles.langBtn, locale === "en" && styles.langBtnActive]}
+                  onPress={() => changeLocale("en")}
+                >
+                  <Text style={[styles.langBtnText, locale === "en" && styles.langBtnTextActive]}>
+                    {translate("English")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.langBtn, locale === "id" && styles.langBtnActive]}
+                  onPress={() => changeLocale("id")}
+                >
+                  <Text style={[styles.langBtnText, locale === "id" && styles.langBtnTextActive]}>
+                    {translate("Indonesian")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={async () => {
+                setShowSettings(false);
+                await logout();
+              }}
+            >
+              <Ionicons name="log-out-outline" size={16} color="#dc2626" />
+              <Text style={styles.logoutBtnText}>{translate("Logout")}</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <FlatList
         ref={flatListRef}
@@ -659,20 +723,106 @@ const styles = StyleSheet.create({
     backgroundColor: "#edebe3",
     borderBottomWidth: 1,
     borderBottomColor: "#ddd9d0",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1a1916",
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  settingsBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f5f3ee",
+  },
+  settingsOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+  },
+  settingsPanel: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  settingsPanelTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1a1916",
+    marginBottom: 4,
+  },
+  settingsSection: {
+    gap: 10,
+  },
+  settingsSectionTitle: {
+    fontSize: 13,
+    color: "#8a8780",
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  langRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  langBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd9d0",
+    alignItems: "center",
+    backgroundColor: "#f5f3ee",
+  },
+  langBtnActive: {
+    backgroundColor: "#1a1916",
+    borderColor: "#1a1916",
+  },
+  langBtnText: {
+    color: "#6a6762",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  langBtnTextActive: {
+    color: "#ffffff",
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f5f3ee",
+  },
+  logoutBtnText: {
+    color: "#dc2626",
+    fontSize: 14,
+    fontWeight: "500",
   },
   messageList: {
     paddingVertical: 16,
     paddingHorizontal: 12,
   },
   e2bBadge: {
-    position: "absolute",
-    right: 12,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 10,

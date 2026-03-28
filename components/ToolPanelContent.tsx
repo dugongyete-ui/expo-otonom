@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { TOOL_COLOR_MAP, TOOL_ICON_MAP, getToolCategory } from "@/lib/tool-constants";
-import { getApiBaseUrl } from "@/lib/api-service";
+import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, McpIcon, TakeOverIcon } from "./icons/ToolIcons";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -121,7 +121,9 @@ function ShellToolView({
     if (!sessionId || !shellId) return;
     try {
       const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/sandbox/shell/${sessionId}?shell_id=${encodeURIComponent(shellId)}`);
+      const token = getStoredToken();
+      const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch(`${baseUrl}/api/sandbox/shell/${sessionId}?shell_id=${encodeURIComponent(shellId)}`, { headers });
       if (!res.ok) return;
       const data = await res.json();
       if (data.shells && data.shells.length > 0) {
@@ -367,7 +369,9 @@ function FileToolView({
     if (!sessionId || !filePath) return;
     try {
       const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/sandbox/file/${sessionId}?path=${encodeURIComponent(filePath)}`);
+      const token = getStoredToken();
+      const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch(`${baseUrl}/api/sandbox/file/${sessionId}?path=${encodeURIComponent(filePath)}`, { headers });
       if (!res.ok) return;
       const data = await res.json();
       if (data.files && data.files.length > 0) {

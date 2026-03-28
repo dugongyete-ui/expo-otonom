@@ -2,6 +2,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { registerE2BDesktopRoutes } from "./e2b-desktop";
+import { registerAuthRoutes } from "./auth-routes";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -293,6 +294,9 @@ function setupErrorHandler(app: express.Application) {
 
   // Register E2B Desktop Sandbox routes (VNC streaming, session management)
   registerE2BDesktopRoutes(app, server);
+
+  // Register JWT authentication routes
+  registerAuthRoutes(app);
 
   setupErrorHandler(app);
 

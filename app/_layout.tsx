@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
@@ -21,6 +21,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { KeyboardProviderWrapper } from "@/components/KeyboardProviderWrapper";
 import { queryClient } from "@/lib/query-client";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { AuthScreen } from "@/components/AuthScreen";
+import type { AuthUser } from "@/lib/auth-service";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -96,8 +99,38 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="share/[sessionId]" options={{ headerShown: false }} />
     </Stack>
   );
+}
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, refreshUser } = useAuth();
+  const pathname = usePathname();
+
+  const isPublicRoute = pathname?.startsWith("/share/") || pathname?.startsWith("/share");
+
+  if (isPublicRoute) {
+    return <>{children}</>;
+  }
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#edebe3" }} />
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <AuthScreen
+        onAuthenticated={(_user: AuthUser) => {
+          refreshUser();
+        }}
+      />
+    );
+  }
+
+  return <>{children}</>;
 }
 
 export default function RootLayout() {
@@ -130,10 +163,14 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView>
           <KeyboardProviderWrapper>
-            <View style={layoutStyles.root}>
-              <StatusBar style="dark" />
-              <RootLayoutNav />
-            </View>
+            <AuthProvider>
+              <View style={layoutStyles.root}>
+                <StatusBar style="dark" />
+                <AuthGate>
+                  <RootLayoutNav />
+                </AuthGate>
+              </View>
+            </AuthProvider>
           </KeyboardProviderWrapper>
         </GestureHandlerRootView>
       </QueryClientProvider>

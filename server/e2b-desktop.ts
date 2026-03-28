@@ -32,6 +32,10 @@ import * as http from "node:http";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket as WsWebSocket } from "ws";
 import { Sandbox } from "@e2b/desktop";
+import multer from "multer";
+import { requireAuth } from "./auth-routes";
+
+const e2bUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // \u2500\u2500\u2500 Types \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -478,7 +482,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   );
 
   // Create Session
-  app.post("/api/e2b/sessions", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions", requireAuth, async (req: any, res: any) => {
     try {
       const { resolution, timeout, startUrl } =
         (req.body as CreateSessionOptions) || {};
@@ -565,7 +569,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
 
   // Get the most recent running session (used by VNC viewer to auto-connect
   // to the agent's sandbox instead of creating a new one)
-  app.get("/api/e2b/sessions/active", (_req: any, res: any) => {
+  app.get("/api/e2b/sessions/active", requireAuth, (_req: any, res: any) => {
     let latest: E2BDesktopSession | null = null;
     for (const session of activeSessions.values()) {
       if (session.status === "running" && session.streamUrl) {
@@ -589,7 +593,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // List Sessions
-  app.get("/api/e2b/sessions", (_req: any, res: any) => {
+  app.get("/api/e2b/sessions", requireAuth, (_req: any, res: any) => {
     const sessions = Array.from(activeSessions.values()).map((s) => ({
       session_id: s.id,
       sandbox_id: s.sandboxId,
@@ -608,7 +612,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Get Session Info
-  app.get("/api/e2b/sessions/:id", (req: any, res: any) => {
+  app.get("/api/e2b/sessions/:id", requireAuth, (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -635,7 +639,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Health Check
-  app.get("/api/e2b/sessions/:id/health", async (req: any, res: any) => {
+  app.get("/api/e2b/sessions/:id/health", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found", ready: false });
@@ -676,7 +680,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   // instead of creating a separate one — unifying VNC display with tool execution.
   // Uses Sandbox.connect() from @e2b/desktop SDK to get a TS SDK instance so that
   // click/scroll/type/screenshot endpoints work on the agent's sandbox.
-  app.post("/api/e2b/sessions/connect", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/connect", requireAuth, async (req: any, res: any) => {
     try {
       const { sandbox_id, vnc_url, resolution } = req.body || {};
       if (!sandbox_id) {
@@ -800,7 +804,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Destroy Session
-  app.delete("/api/e2b/sessions/:id", async (req: any, res: any) => {
+  app.delete("/api/e2b/sessions/:id", requireAuth, async (req: any, res: any) => {
     const destroyed = await destroySession(req.params.id);
     if (!destroyed) {
       return res.status(404).json({ error: "Session not found" });
@@ -811,6 +815,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   // Screenshot
   app.get(
     "/api/e2b/sessions/:id/screenshot",
+    requireAuth,
     async (req: any, res: any) => {
       const session = activeSessions.get(req.params.id);
       if (!session) {
@@ -842,6 +847,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   // Execute Command
   app.post(
     "/api/e2b/sessions/:id/execute",
+    requireAuth,
     async (req: any, res: any) => {
       const session = activeSessions.get(req.params.id);
       if (!session) {
@@ -877,7 +883,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   );
 
   // Get VNC URL
-  app.get("/api/e2b/sessions/:id/vnc-url", async (req: any, res: any) => {
+  app.get("/api/e2b/sessions/:id/vnc-url", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -931,7 +937,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Click
-  app.post("/api/e2b/sessions/:id/click", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/:id/click", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -974,7 +980,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Scroll
-  app.post("/api/e2b/sessions/:id/scroll", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/:id/scroll", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -999,7 +1005,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Type Text
-  app.post("/api/e2b/sessions/:id/type", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/:id/type", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -1027,7 +1033,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Press Key
-  app.post("/api/e2b/sessions/:id/press", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/:id/press", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -1057,7 +1063,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   });
 
   // Launch Application
-  app.post("/api/e2b/sessions/:id/launch", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/:id/launch", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -1083,6 +1089,51 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
       res.status(500).json({ error: `Launch failed: ${err.message}` });
     }
   });
+
+  // File Upload to sandbox
+  app.post(
+    "/api/e2b/sessions/:id/upload",
+    requireAuth,
+    e2bUpload.single("file"),
+    async (req: any, res: any) => {
+      const session = activeSessions.get(req.params.id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      if (session.status !== "running") {
+        return res.status(400).json({ error: "Session not running" });
+      }
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+      try {
+        touchSession(session);
+        const sandbox = sandboxInstances.get(session.sandboxId);
+        if (!sandbox) {
+          return res.status(500).json({ error: "Sandbox instance not found" });
+        }
+
+        const filename = req.file.originalname || "uploaded_file";
+        const fileBuffer: Buffer = req.file.buffer;
+        const destPath = `/home/user/${filename}`;
+
+        const { Readable } = await import("node:stream");
+        const fileStream = Readable.from([fileBuffer]);
+        const sbx = sandbox as Sandbox & { files?: { write: (p: string, s: unknown) => Promise<void> }; filesystem?: { write: (p: string, b: Buffer) => Promise<void> } };
+        if (typeof sbx.files?.write === "function") {
+          await sbx.files.write(destPath, fileStream);
+        } else if (typeof sbx.filesystem?.write === "function") {
+          await sbx.filesystem.write(destPath, fileBuffer);
+        } else {
+          throw new Error("Sandbox does not support file upload");
+        }
+
+        res.json({ success: true, path: destPath, filename, size: fileBuffer.length });
+      } catch (err: any) {
+        res.status(500).json({ error: `Upload failed: ${err.message}` });
+      }
+    }
+  );
 
   // Mouse Move
   app.post(
@@ -1120,7 +1171,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   );
 
   // Drag
-  app.post("/api/e2b/sessions/:id/drag", async (req: any, res: any) => {
+  app.post("/api/e2b/sessions/:id/drag", requireAuth, async (req: any, res: any) => {
     const session = activeSessions.get(req.params.id);
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
@@ -1162,6 +1213,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   // Get Cursor Position
   app.get(
     "/api/e2b/sessions/:id/cursor",
+    requireAuth,
     async (req: any, res: any) => {
       const session = activeSessions.get(req.params.id);
       if (!session) {
@@ -1191,6 +1243,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
   // Get Screen Size
   app.get(
     "/api/e2b/sessions/:id/screen-size",
+    requireAuth,
     async (req: any, res: any) => {
       const session = activeSessions.get(req.params.id);
       if (!session) {

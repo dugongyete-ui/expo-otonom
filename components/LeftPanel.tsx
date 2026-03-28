@@ -9,13 +9,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { apiService } from "@/lib/api-service";
+import { apiService, getApiBaseUrl, getStoredToken } from "@/lib/api-service";
+import { t } from "@/lib/i18n";
 
 interface Session {
   session_id: string;
   title: string;
   timestamp: number;
   preview?: string;
+  is_running?: boolean;
 }
 
 interface LeftPanelProps {
@@ -30,13 +32,24 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Fetch sessions
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
     try {
-      // This would call your backend API to get sessions
-      // For now, we'll use mock data
-      setSessions([]);
+      const baseUrl = getApiBaseUrl();
+      const token = getStoredToken();
+      const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+      const res = await fetch(`${baseUrl}/api/sessions`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const mapped: Session[] = (data.sessions || []).map((s: any) => ({
+          session_id: s.session_id,
+          title: `Session ${s.session_id.slice(-6)}`,
+          timestamp: s.startedAt || Date.now(),
+          preview: s.eventCount ? `${s.eventCount} events` : undefined,
+          is_running: s.is_running || false,
+        }));
+        setSessions(mapped);
+      }
     } catch (error) {
       console.error("Failed to fetch sessions:", error);
     } finally {
@@ -46,6 +59,8 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
 
   useEffect(() => {
     fetchSessions();
+    const interval = setInterval(fetchSessions, 5000);
+    return () => clearInterval(interval);
   }, [fetchSessions]);
 
   const handleNewTask = useCallback(() => {
@@ -56,7 +71,14 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
   const handleClearAllHistory = useCallback(async () => {
     setIsClearing(true);
     try {
-      // Call API to clear all sessions
+      const baseUrl = getApiBaseUrl();
+      const token = getStoredToken();
+      const deleteHeaders: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+      await Promise.all(
+        sessions.map(s =>
+          fetch(`${baseUrl}/api/sessions/${s.session_id}`, { method: "DELETE", headers: deleteHeaders }).catch(() => {})
+        )
+      );
       setSessions([]);
       setShowClearConfirm(false);
       onNewSession(`session_${Date.now()}`);
@@ -66,7 +88,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
     } finally {
       setIsClearing(false);
     }
-  }, [onNewSession]);
+  }, [sessions, onNewSession]);
 
   const handleSessionSelect = useCallback(
     (sessionId: string) => {
@@ -75,15 +97,30 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
     [onNewSession]
   );
 
-  const handleDeleteSession = useCallback((sessionId: string) => {
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      const token = getStoredToken();
+      const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+      await fetch(`${baseUrl}/api/sessions/${sessionId}`, { method: "DELETE", headers });
+    } catch {}
     setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
   }, []);
+
+  const runningCount = sessions.filter(s => s.is_running).length;
 
   if (!isOpen) {
     return (
       <View style={styles.collapsedContainer}>
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle}>
-          <Ionicons name="menu" size={20} color="#8a8780" />
+          <View>
+            <Ionicons name="menu" size={20} color="#8a8780" />
+            {runningCount > 0 && (
+              <View style={styles.badgeSmall}>
+                <Text style={styles.badgeSmallText}>{runningCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
     );
@@ -96,6 +133,15 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle}>
           <Ionicons name="chevron-back" size={20} color="#8a8780" />
         </TouchableOpacity>
+
+        {runningCount > 0 && (
+          <View style={styles.runningBadge}>
+            <View style={styles.runningDot} />
+            <Text style={styles.runningBadgeText}>
+              {runningCount} {t("Background agent running")}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* New Task Button */}
@@ -105,14 +151,18 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         activeOpacity={0.7}
       >
         <Ionicons name="add" size={18} color="#6a6762" />
-        <Text style={styles.newTaskButtonText}>New Task</Text>
+        <Text style={styles.newTaskButtonText}>{t("New Task")}</Text>
         <View style={styles.shortcutKeys}>
           <Text style={styles.shortcutKey}>⌘K</Text>
         </View>
       </TouchableOpacity>
 
       {/* Sessions List */}
-      {sessions.length > 0 ? (
+      {isLoading && sessions.length === 0 ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="small" color="#8a8780" />
+        </View>
+      ) : sessions.length > 0 ? (
         <ScrollView style={styles.sessionsList} showsVerticalScrollIndicator={false}>
           {sessions.map((session) => (
             <SessionItem
@@ -130,7 +180,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
             size={40}
             color="#8a8780"
           />
-          <Text style={styles.emptyStateText}>Create a task to get started</Text>
+          <Text style={styles.emptyStateText}>{t("Create a task to get started")}</Text>
         </View>
       )}
 
@@ -142,7 +192,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
           activeOpacity={0.7}
         >
           <Ionicons name="trash-outline" size={16} color="#8a8780" />
-          <Text style={styles.clearButtonText}>Clear All History</Text>
+          <Text style={styles.clearButtonText}>{t("Clear All History")}</Text>
         </TouchableOpacity>
       )}
 
@@ -153,7 +203,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
             <View style={styles.confirmDialogIcon}>
               <Ionicons name="trash" size={24} color="#dc2626" />
             </View>
-            <Text style={styles.confirmDialogTitle}>Clear All History</Text>
+            <Text style={styles.confirmDialogTitle}>{t("Clear All History")}</Text>
             <Text style={styles.confirmDialogMessage}>
               This will permanently delete all chat sessions. This action cannot be undone.
             </Text>
@@ -162,7 +212,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
                 style={styles.confirmDialogCancel}
                 onPress={() => setShowClearConfirm(false)}
               >
-                <Text style={styles.confirmDialogCancelText}>Cancel</Text>
+                <Text style={styles.confirmDialogCancelText}>{t("Cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -203,9 +253,9 @@ function SessionItem({ session, onSelect, onDelete }: SessionItemProps) {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(hours / 24);
 
-    if (hours < 1) return "Just now";
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
+    if (hours < 1) return t("Just now");
+    if (hours < 24) return `${hours}h ${t("hours ago")}`;
+    if (days < 7) return `${days}d ${t("days ago")}`;
     return date.toLocaleDateString();
   };
 
@@ -216,9 +266,14 @@ function SessionItem({ session, onSelect, onDelete }: SessionItemProps) {
       activeOpacity={0.7}
     >
       <View style={styles.sessionItemContent}>
-        <Text style={styles.sessionItemTitle} numberOfLines={1}>
-          {session.title}
-        </Text>
+        <View style={styles.sessionItemTitleRow}>
+          {session.is_running && (
+            <View style={styles.runningDotSmall} />
+          )}
+          <Text style={styles.sessionItemTitle} numberOfLines={1}>
+            {session.title}
+          </Text>
+        </View>
         {session.preview && (
           <Text style={styles.sessionItemPreview} numberOfLines={1}>
             {session.preview}
@@ -251,11 +306,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
   },
+  badgeSmall: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    backgroundColor: "#6C5CE7",
+    borderRadius: 7,
+    width: 14,
+    height: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeSmallText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "700",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
     height: 40,
+    gap: 8,
   },
   toggleButton: {
     width: 36,
@@ -264,6 +336,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f5f3ee",
+  },
+  runningBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(48,209,88,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    flex: 1,
+  },
+  runningDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#30D158",
+  },
+  runningDotSmall: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#30D158",
+    marginRight: 4,
+  },
+  runningBadgeText: {
+    color: "#30D158",
+    fontSize: 10,
+    fontWeight: "600",
+    flex: 1,
   },
   newTaskButton: {
     flexDirection: "row",
@@ -316,10 +417,15 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  sessionItemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   sessionItemTitle: {
     color: "#4a4740",
     fontSize: 13,
     fontWeight: "400",
+    flex: 1,
   },
   sessionItemPreview: {
     color: "#8a8780",

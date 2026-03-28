@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import multer from "multer";
 import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox } from "./e2b-desktop";
+import { requireAuth } from "./auth-routes";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,7 +76,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Chat endpoint (Streaming) ───────────────────────────────────────────
-  app.post("/api/chat", async (req: any, res: any) => {
+  app.post("/api/chat", requireAuth, async (req: any, res: any) => {
     const { messages } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "messages array is required" });
@@ -186,18 +187,73 @@ export async function registerRoutes(app: any): Promise<Server> {
   }
 
   // ─── Session list endpoint ────────────────────────────────────────────────
-  app.get("/api/sessions", (_req: any, res: any) => {
+  app.get("/api/sessions", requireAuth, (_req: any, res: any) => {
     const sessions = Array.from(activeAgentSessions.entries()).map(([sid, session]) => ({
       session_id: sid,
       done: session.done,
       startedAt: session.startedAt,
       eventCount: session.eventQueue.length,
+      is_running: !session.done,
     }));
     res.json({ sessions });
   });
 
+  // ─── Session sharing ───────────────────────────────────────────────────────
+  const SHARE_STATE_FILE = "/tmp/dzeck_share_state.json";
+  const sharedSessions = new Map<string, boolean>();
+
+  // Load persisted share state on startup
+  try {
+    const raw = fs.readFileSync(SHARE_STATE_FILE, "utf8");
+    const obj: Record<string, boolean> = JSON.parse(raw);
+    for (const [sid, val] of Object.entries(obj)) {
+      sharedSessions.set(sid, val);
+    }
+  } catch {
+    // File doesn't exist yet — ignore
+  }
+
+  function persistShareState() {
+    try {
+      const obj: Record<string, boolean> = {};
+      for (const [sid, val] of sharedSessions) obj[sid] = val;
+      fs.writeFileSync(SHARE_STATE_FILE, JSON.stringify(obj), "utf8");
+    } catch {
+      // ignore write errors
+    }
+  }
+
+  app.post("/api/sessions/:sessionId/share", requireAuth, (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const { is_shared } = req.body || {};
+    sharedSessions.set(sessionId, !!is_shared);
+    persistShareState();
+    const shareUrl = `${req.protocol}://${req.get("host")}/share/${sessionId}`;
+    res.json({ session_id: sessionId, is_shared: !!is_shared, share_url: !!is_shared ? shareUrl : null });
+  });
+
+  app.get("/api/sessions/:sessionId/share", requireAuth, (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const session = activeAgentSessions.get(sessionId);
+    const isShared = sharedSessions.get(sessionId) || false;
+    if (!session && !isShared) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const shareUrl = `${req.protocol}://${req.get("host")}/share/${sessionId}`;
+    res.json({ session_id: sessionId, is_shared: isShared, share_url: isShared ? shareUrl : null });
+  });
+
+  app.get("/api/sessions/:sessionId/events", (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const session = activeAgentSessions.get(sessionId);
+    const isShared = sharedSessions.get(sessionId) || false;
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (!isShared) return res.status(403).json({ error: "Session is not shared" });
+    res.json({ events: session.eventQueue, done: session.done });
+  });
+
   // ─── Delete a session ─────────────────────────────────────────────────────
-  app.delete("/api/sessions/:sessionId", (req: any, res: any) => {
+  app.delete("/api/sessions/:sessionId", requireAuth, (req: any, res: any) => {
     const { sessionId } = req.params;
     const session = activeAgentSessions.get(sessionId);
     if (!session) {
@@ -215,7 +271,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Agent endpoint with SSE ───────────────────────────────────────────────
-  app.post("/api/agent", async (req: any, res: any) => {
+  app.post("/api/agent", requireAuth, async (req: any, res: any) => {
     const { message, messages, attachments, session_id, resume_from_session, is_continuation } = req.body;
     if (!message && (!messages || !Array.isArray(messages))) {
       return res.status(400).json({ error: "message or messages array is required" });
@@ -415,7 +471,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Reconnect to existing agent session ──────────────────────────────────
-  app.get("/api/agent/stream/:sid", (req: any, res: any) => {
+  app.get("/api/agent/stream/:sid", requireAuth, (req: any, res: any) => {
     const { sid } = req.params;
     const replay = req.query.replay === "true";
     const session = activeAgentSessions.get(sid);
@@ -452,7 +508,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Stop an active agent session ─────────────────────────────────────────
-  app.post("/api/agent/stop/:sid", (req: any, res: any) => {
+  app.post("/api/agent/stop/:sid", requireAuth, (req: any, res: any) => {
     const { sid } = req.params;
     const session = activeAgentSessions.get(sid);
     if (!session) {
@@ -650,7 +706,7 @@ except Exception as ex:
   });
 
   // ─── File Upload endpoint ────────────────────────────────────────────────────
-  app.post("/api/upload", (req: any, res: any, next: any) => {
+  app.post("/api/upload", requireAuth, (req: any, res: any, next: any) => {
     upload.array("files", 10)(req, res, (multerErr: any) => {
       if (multerErr) {
         const msg = multerErr.code === "LIMIT_FILE_SIZE"
@@ -924,7 +980,7 @@ print(json.dumps(results))
   });
 
   // ─── Shell view endpoint (live shell output from E2B sandbox) ─────────────
-  app.get("/api/sandbox/shell/:sessionId", async (req: any, res: any) => {
+  app.get("/api/sandbox/shell/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const shellId = req.query.shell_id as string;
     if (!sessionId) {
@@ -964,7 +1020,7 @@ print(json.dumps(results))
   });
 
   // ─── File view endpoint (file content from E2B sandbox) ────────────────────
-  app.get("/api/sandbox/file/:sessionId", async (req: any, res: any) => {
+  app.get("/api/sandbox/file/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const filePath = req.query.path as string;
     if (!sessionId) {
@@ -1003,7 +1059,7 @@ print(json.dumps(results))
   });
 
   // ─── VNC URL endpoint (E2B desktop stream URL) ────────────────────────────
-  app.get("/api/sandbox/vnc-url/:sessionId", async (req: any, res: any) => {
+  app.get("/api/sandbox/vnc-url/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     if (!sessionId) {
       return res.status(400).json({ error: "sessionId is required" });
@@ -1038,7 +1094,7 @@ print(json.dumps(results))
   });
 
   // ─── Sandbox tools summary endpoint ────────────────────────────────────────
-  app.get("/api/sandbox/tools/:sessionId", async (req: any, res: any) => {
+  app.get("/api/sandbox/tools/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const session = activeAgentSessions.get(sessionId);
     if (!session) {

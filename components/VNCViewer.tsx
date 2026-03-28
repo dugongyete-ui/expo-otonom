@@ -3,6 +3,8 @@
  * Matches ai-manus VNCViewer.vue pattern.
  * Uses @novnc/novnc RFB library for WebSocket-based VNC streaming.
  * Falls back to screenshot polling on non-web platforms.
+ * Auto-reconnects with exponential backoff (up to 5 retries).
+ * Mobile: touch layer translates taps to mouse clicks and shows keyboard for typing.
  */
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import {
@@ -12,8 +14,14 @@ import {
   ActivityIndicator,
   Platform,
   Image,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  Dimensions,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { e2bService } from "@/lib/e2b-service";
+import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 
 interface VNCViewerProps {
   sessionId: string;
@@ -25,6 +33,9 @@ interface VNCViewerProps {
 }
 
 const SCREENSHOT_POLL_INTERVAL_MS = 2000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const SANDBOX_DESKTOP_WIDTH = 1280;
+const SANDBOX_DESKTOP_HEIGHT = 800;
 
 export function VNCViewer({
   sessionId,
@@ -38,21 +49,59 @@ export function VNCViewer({
   const rfbRef = useRef<any>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [errorMsg, setErrorMsg] = useState("");
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
-  // Screenshot polling state (mobile fallback)
+  const screenshotRef = useRef<string | null>(null);
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [showKeyboardModal, setShowKeyboardModal] = useState(false);
+  const [keyboardText, setKeyboardText] = useState("");
+  const [isSendingInput, setIsSendingInput] = useState(false);
+  const [containerLayout, setContainerLayout] = useState({ width: SANDBOX_DESKTOP_WIDTH, height: SANDBOX_DESKTOP_HEIGHT });
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearReconnectTimer();
+    };
+  }, []);
+
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  };
+
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      if (mountedRef.current) {
+        setStatus("error");
+        setErrorMsg(`Connection lost after ${MAX_RECONNECT_ATTEMPTS} attempts`);
+      }
+      return;
+    }
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+    reconnectAttemptsRef.current += 1;
+    if (mountedRef.current) {
+      setStatus("connecting");
+    }
+    reconnectTimerRef.current = setTimeout(() => {
+      if (mountedRef.current && enabled) {
+        initVNCConnection();
+      }
+    }, delay);
+  }, [enabled]);
 
   const initVNCConnection = useCallback(async () => {
     if (!containerRef.current || !enabled || Platform.OS !== "web") return;
 
-    // Disconnect existing connection
     if (rfbRef.current) {
-      try {
-        rfbRef.current.disconnect();
-      } catch {
-        // ignore
-      }
+      try { rfbRef.current.disconnect(); } catch {}
       rfbRef.current = null;
     }
 
@@ -60,17 +109,9 @@ export function VNCViewer({
     setErrorMsg("");
 
     try {
-      // Use the local WebSocket proxy endpoint which properly bridges to the
-      // E2B sandbox VNC. The E2B stream URL is an HTML page, not a raw VNC
-      // WebSocket, so we must go through the server's WS proxy at
-      // /api/e2b/sessions/:id/ws  which strips the HTML path and connects to
-      // the underlying websockify endpoint.
       const wsUrl = e2bService.getLocalWsProxyUrl(sessionId);
-
-      // Dynamically import noVNC RFB
       const { default: RFB } = await import("@novnc/novnc/core/rfb.js");
 
-      // Create noVNC connection
       const rfb = new RFB(containerRef.current, wsUrl, {
         credentials: { password: "" },
         shared: true,
@@ -82,13 +123,20 @@ export function VNCViewer({
       rfb.resizeSession = false;
 
       rfb.addEventListener("connect", () => {
+        if (!mountedRef.current) return;
+        reconnectAttemptsRef.current = 0;
         setStatus("connected");
         onConnected?.();
       });
 
       rfb.addEventListener("disconnect", (e: any) => {
+        if (!mountedRef.current) return;
+        const reason = e?.detail?.reason;
         setStatus("disconnected");
-        onDisconnected?.(e?.detail?.reason);
+        onDisconnected?.(reason);
+        if (enabled && mountedRef.current) {
+          scheduleReconnect();
+        }
       });
 
       rfb.addEventListener("credentialsrequired", () => {
@@ -97,38 +145,79 @@ export function VNCViewer({
 
       rfbRef.current = rfb;
     } catch (err) {
+      if (!mountedRef.current) return;
       console.error("[VNCViewer] Connection error:", err);
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "VNC connection failed");
+      scheduleReconnect();
     }
-  }, [sessionId, enabled, viewOnly, onConnected, onDisconnected, onCredentialsRequired]);
+  }, [sessionId, enabled, viewOnly, onConnected, onDisconnected, onCredentialsRequired, scheduleReconnect]);
 
-  // Initialize VNC connection when enabled (web only)
   useEffect(() => {
     if (enabled && sessionId && Platform.OS === "web") {
+      reconnectAttemptsRef.current = 0;
       initVNCConnection();
     }
 
     return () => {
+      clearReconnectTimer();
       if (rfbRef.current) {
-        try {
-          rfbRef.current.disconnect();
-        } catch {
-          // ignore
-        }
+        try { rfbRef.current.disconnect(); } catch {}
         rfbRef.current = null;
       }
     };
   }, [enabled, sessionId, initVNCConnection]);
 
-  // Update viewOnly when prop changes
   useEffect(() => {
     if (rfbRef.current) {
       rfbRef.current.viewOnly = viewOnly;
     }
   }, [viewOnly]);
 
-  // Screenshot polling for non-web platforms (Expo Go / mobile)
+  const handleMobileTap = useCallback(async (evt: any) => {
+    if (viewOnly || !enabled || !sessionId) return;
+    const { locationX, locationY } = evt.nativeEvent;
+    const scaleX = SANDBOX_DESKTOP_WIDTH / (containerLayout.width || SANDBOX_DESKTOP_WIDTH);
+    const scaleY = SANDBOX_DESKTOP_HEIGHT / (containerLayout.height || SANDBOX_DESKTOP_HEIGHT);
+    const sandboxX = Math.round(locationX * scaleX);
+    const sandboxY = Math.round(locationY * scaleY);
+    const baseUrl = getApiBaseUrl();
+    try {
+      const token = getStoredToken();
+      const clickHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) clickHeaders["Authorization"] = `Bearer ${token}`;
+      await fetch(`${baseUrl}/api/e2b/sessions/${sessionId}/click`, {
+        method: "POST",
+        headers: clickHeaders,
+        body: JSON.stringify({ x: sandboxX, y: sandboxY }),
+      });
+    } catch {
+      // ignore click errors
+    }
+  }, [viewOnly, enabled, sessionId, containerLayout]);
+
+  const handleSendKeyboard = useCallback(async () => {
+    if (!keyboardText || !sessionId) return;
+    setIsSendingInput(true);
+    const baseUrl = getApiBaseUrl();
+    try {
+      const token = getStoredToken();
+      const typeHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) typeHeaders["Authorization"] = `Bearer ${token}`;
+      await fetch(`${baseUrl}/api/e2b/sessions/${sessionId}/type`, {
+        method: "POST",
+        headers: typeHeaders,
+        body: JSON.stringify({ text: keyboardText }),
+      });
+      setKeyboardText("");
+      setShowKeyboardModal(false);
+    } catch {
+      // ignore
+    } finally {
+      setIsSendingInput(false);
+    }
+  }, [keyboardText, sessionId]);
+
   useEffect(() => {
     if (Platform.OS === "web") return;
     if (!enabled || !sessionId) {
@@ -147,18 +236,26 @@ export function VNCViewer({
         const dataUri = await e2bService.captureScreenshot(sessionId);
         if (active) {
           setScreenshotUri(dataUri);
+          screenshotRef.current = dataUri;
           setStatus("connected");
-          onConnected?.();
+          if (reconnectAttemptsRef.current === 0) {
+            onConnected?.();
+          }
+          reconnectAttemptsRef.current = 0;
         }
-      } catch (err) {
-        // Silently retry — screenshot endpoint may not be ready yet
+      } catch {
         if (active) {
-          setStatus("connecting");
+          reconnectAttemptsRef.current += 1;
+          if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+            setStatus("error");
+            setErrorMsg("Failed to connect to desktop");
+          } else {
+            setStatus("connecting");
+          }
         }
       }
     };
 
-    // First poll immediately
     poll();
     pollTimerRef.current = setInterval(poll, SCREENSHOT_POLL_INTERVAL_MS);
 
@@ -171,7 +268,6 @@ export function VNCViewer({
     };
   }, [enabled, sessionId, onConnected]);
 
-  // Non-web platforms: show screenshot polling view
   if (Platform.OS !== "web") {
     return (
       <View style={styles.container}>
@@ -179,20 +275,91 @@ export function VNCViewer({
           <View style={styles.overlay}>
             <ActivityIndicator size="large" color="#6C5CE7" />
             <Text style={styles.statusText}>Loading desktop snapshot...</Text>
+            {reconnectAttemptsRef.current > 0 && (
+              <Text style={styles.reconnectText}>
+                Reconnecting... ({reconnectAttemptsRef.current}/{MAX_RECONNECT_ATTEMPTS})
+              </Text>
+            )}
           </View>
         )}
+
         {screenshotUri ? (
-          <Image
-            source={{ uri: screenshotUri }}
-            style={styles.screenshot}
-            resizeMode="contain"
-          />
+          <TouchableOpacity
+            style={styles.screenshotTouchable}
+            onPress={viewOnly ? undefined : handleMobileTap}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              if (width > 0 && height > 0) setContainerLayout({ width, height });
+            }}
+            activeOpacity={viewOnly ? 1 : 0.9}
+          >
+            <Image
+              source={{ uri: screenshotUri }}
+              style={styles.screenshot}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         ) : null}
+
         {status === "error" && (
           <View style={styles.overlay}>
+            <Ionicons name="alert-circle" size={32} color="#FF453A" />
             <Text style={styles.errorText}>{errorMsg || "Connection failed"}</Text>
           </View>
         )}
+
+        {!viewOnly && screenshotUri && (
+          <View style={styles.mobileControls}>
+            <TouchableOpacity
+              style={styles.keyboardBtn}
+              onPress={() => setShowKeyboardModal(true)}
+            >
+              <Ionicons name="keypad-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.keyboardBtnText}>Type</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Modal
+          visible={showKeyboardModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowKeyboardModal(false)}
+        >
+          <View style={styles.keyboardModal}>
+            <View style={styles.keyboardModalContent}>
+              <Text style={styles.keyboardModalTitle}>Send to Desktop</Text>
+              <TextInput
+                style={styles.keyboardModalInput}
+                placeholder="Type here..."
+                placeholderTextColor="#636366"
+                value={keyboardText}
+                onChangeText={setKeyboardText}
+                multiline
+                autoFocus
+              />
+              <View style={styles.keyboardModalActions}>
+                <TouchableOpacity
+                  style={styles.keyboardModalCancel}
+                  onPress={() => setShowKeyboardModal(false)}
+                >
+                  <Text style={styles.keyboardModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.keyboardModalSend, isSendingInput && styles.keyboardModalSendDisabled]}
+                  onPress={handleSendKeyboard}
+                  disabled={isSendingInput || !keyboardText}
+                >
+                  {isSendingInput ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.keyboardModalSendText}>Send to Desktop</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -202,17 +369,32 @@ export function VNCViewer({
       {status === "connecting" && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color="#6C5CE7" />
-          <Text style={styles.statusText}>Connecting to desktop...</Text>
+          <Text style={styles.statusText}>
+            {reconnectAttemptsRef.current > 0
+              ? `Reconnecting... (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
+              : "Connecting to desktop..."}
+          </Text>
         </View>
       )}
       {status === "error" && (
         <View style={styles.overlay}>
+          <Ionicons name="alert-circle" size={32} color="#FF453A" />
           <Text style={styles.errorText}>{errorMsg || "Connection failed"}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => {
+              reconnectAttemptsRef.current = 0;
+              initVNCConnection();
+            }}
+          >
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       )}
       {status === "disconnected" && (
         <View style={styles.overlay}>
-          <Text style={styles.statusText}>Disconnected</Text>
+          <Ionicons name="wifi-outline" size={32} color="#636366" />
+          <Text style={styles.statusText}>Reconnecting...</Text>
         </View>
       )}
       <div
@@ -243,11 +425,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.7)",
     zIndex: 10,
+    gap: 12,
   },
   statusText: {
     color: "#ffffff",
     fontSize: 13,
-    marginTop: 12,
+    marginTop: 8,
+    fontFamily: "Inter_400Regular",
+  },
+  reconnectText: {
+    color: "#8E8E93",
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
   },
   errorText: {
@@ -257,22 +445,108 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 20,
   },
+  retryBtn: {
+    backgroundColor: "#6C5CE7",
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  retryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   screenshot: {
     flex: 1,
     width: "100%",
     height: "100%",
   },
-  fallback: {
+  screenshotTouchable: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f5f3ee",
-    padding: 20,
+    width: "100%",
   },
-  fallbackText: {
-    color: "#8a8780",
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
+  mobileControls: {
+    position: "absolute",
+    bottom: 16,
+    right: 16,
+    zIndex: 20,
+  },
+  keyboardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(26,25,22,0.9)",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  keyboardBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  keyboardModal: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  keyboardModalContent: {
+    backgroundColor: "#1A1A20",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+    gap: 12,
+  },
+  keyboardModalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
     textAlign: "center",
+  },
+  keyboardModalInput: {
+    backgroundColor: "#0A0A0C",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2C2C30",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#FFFFFF",
+    minHeight: 80,
+  },
+  keyboardModalActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  keyboardModalCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2C2C30",
+    alignItems: "center",
+  },
+  keyboardModalCancelText: {
+    color: "#8E8E93",
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  keyboardModalSend: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#6C5CE7",
+    alignItems: "center",
+  },
+  keyboardModalSendDisabled: {
+    opacity: 0.5,
+  },
+  keyboardModalSendText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
