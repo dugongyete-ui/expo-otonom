@@ -65,6 +65,7 @@ export function ChatPage({
   const [stepHistory, setStepHistory] = useState<string[]>([]);
   const [title, setTitle] = useState(isAgentMode ? "Dzeck Agent" : "Dzeck Chat");
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [e2bStatus, setE2bStatus] = useState<"checking" | "connected" | "error">("checking");
 
   const flatListRef = useRef<FlatList>(null);
   const activeSessionIdRef = useRef<string>(externalSessionId || randomUUID());
@@ -82,6 +83,26 @@ export function ChatPage({
       }, 100);
     }
   }, [messages, streamingContent, isLoading]);
+
+  useEffect(() => {
+    if (!isAgentMode) return;
+    let cancelled = false;
+    const checkHealth = async () => {
+      try {
+        const base = typeof window !== "undefined" ? window.location.origin : "";
+        const res = await fetch(`${base}/api/health/tools`);
+        if (cancelled) return;
+        if (!res.ok) { setE2bStatus("error"); return; }
+        const data = await res.json();
+        if (cancelled) return;
+        setE2bStatus(data?.e2b_enabled === true ? "connected" : "error");
+      } catch {
+        if (!cancelled) setE2bStatus("error");
+      }
+    };
+    checkHealth();
+    return () => { cancelled = true; };
+  }, [isAgentMode]);
 
   // Sync session when externalSessionId changes (e.g. sidebar session switch)
   useEffect(() => {
@@ -528,6 +549,17 @@ export function ChatPage({
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{title}</Text>
+        {isAgentMode && (
+          <View style={[
+            styles.e2bBadge,
+            e2bStatus === "connected" ? styles.e2bConnected :
+            e2bStatus === "error" ? styles.e2bError : styles.e2bChecking,
+          ]}>
+            <Text style={styles.e2bBadgeText}>
+              {e2bStatus === "connected" ? "● E2B" : e2bStatus === "error" ? "✕ E2B" : "… E2B"}
+            </Text>
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -585,5 +617,27 @@ const styles = StyleSheet.create({
   messageList: {
     paddingVertical: 16,
     paddingHorizontal: 12,
+  },
+  e2bBadge: {
+    position: "absolute",
+    right: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  e2bConnected: {
+    backgroundColor: "#d1f5d3",
+  },
+  e2bError: {
+    backgroundColor: "#fde8e8",
+  },
+  e2bChecking: {
+    backgroundColor: "#f0efea",
+  },
+  e2bBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#1a1916",
+    letterSpacing: 0.3,
   },
 });

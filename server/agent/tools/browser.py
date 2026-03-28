@@ -218,17 +218,44 @@ class E2BDesktopBrowserSession:
     # CDP remote debugging port used by Chrome in sandbox
     _CDP_PORT = 9222
 
+    def _detect_display(self) -> str:
+        """Detect the active X display inside the E2B Desktop sandbox.
+        E2B Desktop uses XFCE4 which typically runs on :0. Verifies via xdpyinfo.
+        Returns the DISPLAY value (e.g. ':0') to use for all GUI commands."""
+        # Try DISPLAY=:0 first (E2B Desktop XFCE4 standard)
+        for display in [":0", ":1", ":99"]:
+            check = self._run(
+                "DISPLAY={d} xdpyinfo 2>/dev/null | head -1 || "
+                "DISPLAY={d} xdotool getdisplaygeometry 2>/dev/null".format(d=display),
+                timeout=5
+            )
+            if check["stdout"].strip():
+                logger.info("[Browser] Active display detected: %s", display)
+                return display
+        # Fallback: read DISPLAY env var from sandbox
+        env_check = self._run("echo $DISPLAY", timeout=3)
+        env_display = env_check.get("stdout", "").strip()
+        if env_display:
+            logger.info("[Browser] Using DISPLAY from sandbox env: %s", env_display)
+            return env_display
+        logger.warning("[Browser] Could not detect display, defaulting to :0")
+        return ":0"
+
     def _ensure_chrome_open(self) -> bool:
-        """Ensure Chrome/Chromium is running in the sandbox desktop with remote debugging.
-        Uses pgrep for detection (reliable), then SDK launch(), then shell fallback."""
+        """Ensure Chrome/Chromium is running in the E2B Desktop sandbox with remote debugging,
+        visible on the VNC desktop. Detects active DISPLAY, then launches browser on it."""
+        # Detect the correct DISPLAY for the VNC desktop (E2B Desktop XFCE4 uses :0)
+        display = self._detect_display()
+
         # Use pgrep for reliable Chrome detection (avoids xdotool classname regex issues)
         check = self._run(
             "pgrep -x -E 'chrome|chromium|chromium-browser|google-chrome' 2>/dev/null || "
-            "DISPLAY=:0 xdotool search --classname 'google-chrome' 2>/dev/null | head -1 || "
-            "DISPLAY=:0 xdotool search --classname 'chromium' 2>/dev/null | head -1",
+            "DISPLAY={d} xdotool search --classname 'google-chrome' 2>/dev/null | head -1 || "
+            "DISPLAY={d} xdotool search --classname 'chromium' 2>/dev/null | head -1".format(d=display),
             timeout=5
         )
         if check["stdout"].strip():
+            logger.info("[Browser] Chrome already running on display %s", display)
             return True
 
         # Try using E2B Desktop SDK launch() method directly (most reliable)
@@ -238,31 +265,34 @@ class E2BDesktopBrowserSession:
         if sb is not None:
             for browser_app in ["google-chrome", "chromium", "chromium-browser"]:
                 try:
-                    sb.launch(browser_app, f"about:blank")
+                    sb.launch(browser_app, "about:blank")
                     time.sleep(2)
-                    # Restart with CDP flag via shell since launch() doesn't support flags
+                    # Restart with CDP flag + explicit DISPLAY so browser is visible on VNC desktop
                     self._run(
                         "pkill -f 'remote-debugging-port' 2>/dev/null; sleep 0.5; "
-                        "DISPLAY=:0 nohup {} --no-sandbox --disable-dev-shm-usage "
-                        "{} about:blank >/dev/null 2>&1 &".format(browser_app, cdp_flag),
+                        "DISPLAY={d} nohup {b} --no-sandbox --disable-dev-shm-usage "
+                        "{f} about:blank >/dev/null 2>&1 &".format(d=display, b=browser_app, f=cdp_flag),
                         timeout=10
                     )
                     time.sleep(2)
+                    logger.info("[Browser] Launched %s on display %s via SDK", browser_app, display)
                     return True
                 except Exception:
                     continue
 
-        # Shell fallback
+        # Shell fallback — explicitly set DISPLAY so browser is visible on VNC desktop (not headless)
         cdp_flag = "--remote-debugging-port={}".format(self._CDP_PORT)
         for browser in ["google-chrome", "chromium", "chromium-browser"]:
             res = self._run(
-                "DISPLAY=:0 nohup {} --no-sandbox --disable-dev-shm-usage "
-                "{} about:blank >/dev/null 2>&1 &".format(browser, cdp_flag),
+                "DISPLAY={d} nohup {b} --no-sandbox --disable-dev-shm-usage "
+                "{f} about:blank >/dev/null 2>&1 &".format(d=display, b=browser, f=cdp_flag),
                 timeout=5
             )
             if res["exit_code"] == 0:
                 time.sleep(3)
+                logger.info("[Browser] Launched %s on display %s via shell", browser, display)
                 return True
+        logger.error("[Browser] All Chrome launch attempts failed for display %s", display)
         return False
 
     def _cdp_get_element_rect(self, index: int) -> Optional[dict]:

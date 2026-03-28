@@ -306,6 +306,27 @@ function setupErrorHandler(app: express.Application) {
     () => {
       log(`express server serving on port ${port}`);
       log(`[Dzeck AI] Server ready — E2B cloud sandbox mode`);
+
+      // Run tool health check at startup and log results
+      setTimeout(async () => {
+        try {
+          const toolsRes = await fetch(`http://127.0.0.1:${port}/api/health/tools`);
+          if (toolsRes.ok) {
+            const health = await toolsRes.json() as Record<string, any>;
+            const e2b = health.e2b_enabled ? "✓ connected" : "✗ not configured";
+            const cerebras = health.cerebras_configured ? "✓ configured" : "✗ missing key";
+            log(`[Health] E2B sandbox: ${e2b} | Cerebras AI: ${cerebras}`);
+            if (health.tools) {
+              const toolStatuses = Object.entries(health.tools as Record<string, any>)
+                .map(([name, info]: [string, any]) => `${name}=${info.status}`)
+                .join(", ");
+              log(`[Health] Tools: ${toolStatuses}`);
+            }
+          }
+        } catch {
+          // Health check at startup is best-effort
+        }
+      }, 3000);
     },
   );
 

@@ -25,9 +25,6 @@ def _get_files_dir() -> str:
     os.makedirs(d, exist_ok=True)
     return d
 
-DZECK_FILES_DIR = _get_files_dir()
-
-
 _MIME_MAP = {
     # Text / code
     ".txt": "text/plain", ".md": "text/markdown", ".markdown": "text/markdown",
@@ -91,20 +88,21 @@ def _make_download_url(file_path: str) -> str:
 
 def _register_file_for_download(file_path: str) -> str:
     """
-    Copy the file to DZECK_FILES_DIR so it's accessible for download,
-    and return the download URL pointing to the copy in DZECK_FILES_DIR.
+    Copy the file to the session files dir so it's accessible for download,
+    and return the download URL pointing to the copy in the session files dir.
     """
+    files_dir = _get_files_dir()
     dest = file_path
     try:
         if os.path.isfile(file_path):
             filename = os.path.basename(file_path)
-            dest = os.path.join(DZECK_FILES_DIR, filename)
+            dest = os.path.join(files_dir, filename)
             if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(file_path):
                 base, ext = os.path.splitext(filename)
                 import hashlib, time
                 tag = hashlib.md5(str(time.time()).encode()).hexdigest()[:6]
                 filename = f"{base}_{tag}{ext}"
-                dest = os.path.join(DZECK_FILES_DIR, filename)
+                dest = os.path.join(files_dir, filename)
             if os.path.abspath(file_path) != os.path.abspath(dest):
                 shutil.copy2(file_path, dest)
     except Exception:
@@ -285,7 +283,7 @@ def file_write(
         # In E2B-only mode, we still register the file for download by reading it back
         # This is required because users need to download the generated files (ZIP, PDF, etc.)
         download_url = ""
-        local_path = os.path.join(DZECK_FILES_DIR, os.path.basename(file))
+        local_path = os.path.join(_get_files_dir(), os.path.basename(file))
         try:
             from server.agent.tools.e2b_sandbox import read_file_bytes, _resolve_sandbox_path
             data = read_file_bytes(_resolve_sandbox_path(file))
@@ -390,7 +388,7 @@ def file_str_replace(
 
         # Register for download
         download_url = ""
-        local_path = os.path.join(DZECK_FILES_DIR, os.path.basename(file))
+        local_path = os.path.join(_get_files_dir(), os.path.basename(file))
         try:
             parent_dir = os.path.dirname(local_path)
             if parent_dir and not os.path.exists(parent_dir):
@@ -549,7 +547,7 @@ def image_view(image: str, **kwargs) -> ToolResult:
                 raw_data = f.read(102400)
 
         if raw_data is None:
-            local_fallback = os.path.join(DZECK_FILES_DIR, os.path.basename(image))
+            local_fallback = os.path.join(_get_files_dir(), os.path.basename(image))
             if os.path.isfile(local_fallback):
                 with open(local_fallback, "rb") as f:
                     raw_data = f.read(102400)

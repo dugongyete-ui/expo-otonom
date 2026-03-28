@@ -259,11 +259,17 @@ def _connect_existing_sandbox(sandbox_id: str, max_retries: int = 3) -> Optional
 
 
 def get_sandbox() -> Optional[Any]:
-    """Get or create the E2B sandbox singleton, with auto-recovery.
+    """Get or create the E2B sandbox singleton, with auto-recovery and deduplication.
 
-    If DZECK_E2B_SANDBOX_ID is set, connects to that existing sandbox instead of
-    creating a new one. This ensures Python agent operates in the SAME sandbox
-    that the TypeScript server created and the user sees via VNC."""
+    Deduplication strategy (prevents running two separate E2B sandboxes):
+      1. If _sandbox is already set and alive → reuse it (fast path).
+      2. If DZECK_E2B_SANDBOX_ID env var is set → connect to the sandbox the
+         TypeScript server created (Sandbox.connect(id)), so both TS and Python
+         share the SAME sandbox and the user sees actions on the VNC desktop.
+      3. If connect fails → create a new sandbox and emit its ID to TS via stdout
+         so the frontend's VNC view stays in sync.
+      4. If no env var → create a fresh sandbox (dev/local mode).
+    """
     global _sandbox
     if _sandbox is not None:
         if _is_sandbox_alive(_sandbox):
@@ -280,15 +286,22 @@ def get_sandbox() -> Optional[Any]:
 
     with _sandbox_lock:
         if _sandbox is None:
-            # Check if TS has already created a sandbox for us to use
+            # Check if TypeScript server has already created a sandbox for us to reuse
             existing_sandbox_id = os.environ.get("DZECK_E2B_SANDBOX_ID", "").strip()
             if existing_sandbox_id:
-                logger.info("[E2B] DZECK_E2B_SANDBOX_ID=%s — connecting to existing TS sandbox", existing_sandbox_id)
+                logger.info(
+                    "[E2B] DZECK_E2B_SANDBOX_ID=%s found — reusing TS sandbox (no duplication)",
+                    existing_sandbox_id,
+                )
                 _sandbox = _connect_existing_sandbox(existing_sandbox_id)
                 if _sandbox is None:
-                    logger.warning("[E2B] Failed to connect to existing sandbox after retries, creating new one...")
+                    logger.warning(
+                        "[E2B] Could not connect to existing sandbox %s after retries — creating new sandbox. "
+                        "This may cause a VNC/sandbox mismatch; new ID will be emitted to frontend.",
+                        existing_sandbox_id,
+                    )
                     _sandbox = _create_sandbox()
-                    # Emit new sandbox ID to TypeScript via stdout so frontend stays in sync
+                    # Emit new sandbox ID to TypeScript via stdout so frontend VNC stays in sync
                     if _sandbox is not None:
                         try:
                             new_id = _sandbox.sandbox_id
@@ -304,7 +317,13 @@ def get_sandbox() -> Optional[Any]:
                             logger.info("[E2B] Emitted new sandbox ID %s to frontend after reconnect failure.", new_id)
                         except Exception as _emit_err:
                             logger.warning("[E2B] Failed to emit new sandbox ID: %s", _emit_err)
+                else:
+                    logger.info(
+                        "[E2B] Successfully connected to existing TS sandbox %s — sharing same desktop.",
+                        existing_sandbox_id,
+                    )
             else:
+                logger.info("[E2B] No DZECK_E2B_SANDBOX_ID set — creating new sandbox (dev/local mode).")
                 _sandbox = _create_sandbox()
     return _sandbox
 

@@ -1,4 +1,3 @@
-import * as nodeHttp from "node:http";
 import { type Server, createServer } from "node:http";
 import { spawn } from "node:child_process";
 import * as https from "node:https";
@@ -8,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import multer from "multer";
-import { getActiveE2BSandboxId, createAndRegisterE2BSandbox } from "./e2b-desktop";
+import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox } from "./e2b-desktop";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -347,40 +346,20 @@ export async function registerRoutes(app: any): Promise<Server> {
             // system, enabling click/scroll/type interactions on the SAME sandbox.
             if (parsed.type === "vnc_stream_url" && parsed.vnc_url) {
               console.log(`[Agent] VNC stream URL received from Python sandbox: ${parsed.vnc_url}`);
-              // Auto-register the agent's sandbox in the e2b-desktop session system
-              // so that interaction endpoints (click, scroll, type) work on this sandbox
+              // Auto-register the agent's sandbox directly (no internal HTTP self-request)
+              // This bridges the Python agent's sandbox with the TS e2b-desktop session
+              // system, enabling click/scroll/type interactions on the SAME sandbox.
               if (parsed.sandbox_id) {
-                const connectBody = JSON.stringify({
-                  sandbox_id: parsed.sandbox_id,
-                  vnc_url: parsed.vnc_url,
-                });
-                const connectReq = nodeHttp.request({
-                  hostname: "127.0.0.1",
-                  port: parseInt(process.env.PORT || "5000"),
-                  path: "/api/e2b/sessions/connect",
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(connectBody) },
-                }, (connectRes: nodeHttp.IncomingMessage) => {
-                  let body = "";
-                  connectRes.on("data", (chunk: Buffer) => { body += chunk.toString(); });
-                  connectRes.on("end", () => {
-                    try {
-                      const result = JSON.parse(body);
-                      console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.session_id}`);
-                      // Emit the session_id back to the frontend so it can use it for VNC
-                      const enriched = { ...parsed, e2b_session_id: result.session_id };
-                      _broadcastToSession(session, `data: ${JSON.stringify(enriched)}\n\n`);
-                    } catch {
-                      _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
-                    }
+                registerExternalE2BSandbox(parsed.sandbox_id, parsed.vnc_url)
+                  .then((result) => {
+                    console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.sessionId}`);
+                    const enriched = { ...parsed, e2b_session_id: result.sessionId };
+                    _broadcastToSession(session, `data: ${JSON.stringify(enriched)}\n\n`);
+                  })
+                  .catch((err: any) => {
+                    console.warn(`[Agent] registerExternalE2BSandbox failed: ${err.message}. Forwarding original event.`);
+                    _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
                   });
-                });
-                connectReq.on("error", () => {
-                  // If connect fails, still forward the original VNC URL event
-                  _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
-                });
-                connectReq.write(connectBody);
-                connectReq.end();
               } else {
                 _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
               }

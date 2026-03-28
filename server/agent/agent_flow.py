@@ -1278,14 +1278,15 @@ class DzeckAgent:
         result_status = ToolStatus.CALLED if tool_result.success else ToolStatus.ERROR
         fn_result = str(tool_result.message)[:3000] if tool_result.message else ""
 
-        # ── Track DELIVERABLE files created by file_write / file_str_replace ──
+        # ── Track ALL files created by file_write / file_str_replace ──
+        # Files are collected here and only shown via the `files` event at task end,
+        # preventing premature download links from appearing in chat mid-task.
         if tool_result.success and resolved in ("file_write", "file_str_replace"):
             data = tool_result.data or {}
             durl = data.get("download_url", "")
-            is_deliverable = data.get("is_deliverable", False)
             fpath = data.get("file", data.get("path", fn_args.get("file", fn_args.get("path", ""))))
             fname = os.path.basename(fpath) if fpath else ""
-            if durl and fname and is_deliverable:
+            if durl and fname:
                 already = any(f["download_url"] == durl for f in self._created_files)
                 if not already:
                     self._created_files.append({
@@ -1294,6 +1295,9 @@ class DzeckAgent:
                         "download_url": durl,
                         "mime": data.get("mime", ""),
                     })
+            # Also strip download_url from tool_content to prevent premature display
+            if tool_content and tool_content.get("type") == "file":
+                tool_content = {k: v for k, v in tool_content.items() if k != "download_url"}
 
         # ── Sync E2B OUTPUT files back after shell commands ──
         if tool_result.success and resolved == "shell_exec" and bool(os.environ.get("E2B_API_KEY", "")):

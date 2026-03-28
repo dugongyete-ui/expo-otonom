@@ -387,6 +387,82 @@ export async function createAndRegisterE2BSandbox(startUrl?: string): Promise<{
   }
 }
 
+/**
+ * Directly register an external E2B sandbox (created by Python agent) as an active session.
+ * This is called directly from routes.ts instead of making an HTTP self-request,
+ * which avoids timing/failure issues with internal HTTP calls.
+ * Returns the new session_id, or an existing session_id if this sandbox is already registered.
+ */
+export async function registerExternalE2BSandbox(
+  sandboxId: string,
+  vncUrl: string,
+): Promise<{ sessionId: string; vncUrl: string }> {
+  // Check if already registered for this sandbox
+  for (const [id, existing] of activeSessions.entries()) {
+    if (existing.sandboxId === sandboxId) {
+      const effectiveUrl = existing.streamUrl || existing.vncUrl || vncUrl;
+      console.log(`[E2B-Desktop] Sandbox ${sandboxId} already registered as session ${id}`);
+      return { sessionId: id, vncUrl: effectiveUrl };
+    }
+  }
+
+  const apiKey = getE2BApiKey();
+  let connectedSandbox: Sandbox | null = null;
+  let effectiveVncUrl = vncUrl || "";
+
+  if (apiKey) {
+    try {
+      connectedSandbox = await Sandbox.connect(sandboxId, { apiKey });
+      sandboxInstances.set(sandboxId, connectedSandbox);
+      console.log(`[E2B-Desktop] SDK connected to agent sandbox ${sandboxId}`);
+    } catch (connectErr: any) {
+      console.warn(
+        `[E2B-Desktop] Could not SDK-connect to sandbox ${sandboxId}: ${connectErr.message}. ` +
+        `VNC display will work but interaction endpoints may not.`,
+      );
+    }
+  }
+
+  // Try to start/retrieve VNC stream if we have SDK access and no URL yet
+  if (connectedSandbox && !effectiveVncUrl) {
+    try {
+      await connectedSandbox.stream.start({ requireAuth: false });
+      effectiveVncUrl = connectedSandbox.stream.getUrl({
+        autoConnect: true,
+        viewOnly: false,
+        resize: "scale",
+      });
+      console.log(`[E2B-Desktop] VNC stream started for agent sandbox: ${effectiveVncUrl}`);
+    } catch (streamErr: any) {
+      console.warn(`[E2B-Desktop] Could not start VNC stream: ${streamErr.message}`);
+    }
+  }
+
+  const sessionId = randomUUID().slice(0, 12);
+  const session: E2BDesktopSession = {
+    id: sessionId,
+    sandboxId,
+    status: "running",
+    createdAt: Date.now(),
+    lastActivity: Date.now(),
+    vncUrl: effectiveVncUrl || null,
+    wsProxyUrl: effectiveVncUrl || null,
+    streamUrl: effectiveVncUrl || null,
+    resolution: DEFAULT_RESOLUTION,
+    timeout: DEFAULT_TIMEOUT,
+    _idleTimer: null,
+    _wsClients: new Set(),
+    _sandbox: connectedSandbox,
+  };
+  activeSessions.set(sessionId, session);
+  touchSession(session);
+
+  console.log(
+    `[E2B-Desktop] Registered external sandbox ${sandboxId} as session ${sessionId} (sdk: ${!!connectedSandbox})`,
+  );
+  return { sessionId, vncUrl: effectiveVncUrl };
+}
+
 // Route Registration
 
 export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
