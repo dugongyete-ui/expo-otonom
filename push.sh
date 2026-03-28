@@ -1,7 +1,6 @@
 #!/bin/bash
 
 REPO="dugongyete-ui/expo-otonom"
-REPO_URL="https://github.com/${REPO}.git"
 
 if [ -z "$GITHUB_TOKEN" ]; then
   echo "ERROR: GITHUB_TOKEN belum diset di Replit Secrets."
@@ -9,16 +8,10 @@ if [ -z "$GITHUB_TOKEN" ]; then
   exit 1
 fi
 
-printf 'https://dugongyete-ui:%s@github.com\n' "$GITHUB_TOKEN" > ~/.git-credentials
-chmod 600 ~/.git-credentials
-
-git config --global credential.helper store
-unset GIT_ASKPASS
-
-git remote set-url origin "$REPO_URL"
+PUSH_URL="https://dugongyete-ui:${GITHUB_TOKEN}@github.com/${REPO}.git"
 
 echo "Pushing ke GitHub..."
-git push origin main 2>&1
+git push "$PUSH_URL" main 2>&1
 
 if [ $? -eq 0 ]; then
   echo "Push berhasil!"
