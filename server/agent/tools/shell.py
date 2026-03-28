@@ -165,39 +165,28 @@ def _is_gui_command(command: str) -> Optional[str]:
 
 def _sync_e2b_output_file(file_path: str) -> str:
     """
-    Transfer a file from E2B sandbox to local server and register it for download.
-    Returns download_url string, or '' if failed.
+    Generate a proxy download URL for a file inside the E2B sandbox.
+    No local disk copy — file is served directly from the sandbox via the download endpoint.
+    Returns download_url string, or '' if sandbox is not available.
     """
     try:
-        import urllib.parse, shutil, hashlib, time as _time
-        from server.agent.tools.e2b_sandbox import read_file_bytes
+        import urllib.parse
+        from server.agent.tools.e2b_sandbox import get_sandbox
 
-        data = read_file_bytes(file_path)
-        if not data:
+        sb = get_sandbox()
+        if sb is None:
             return ""
 
-        session_id = os.environ.get("DZECK_SESSION_ID", "")
-        if session_id:
-            local_dir = f"/tmp/dzeck_files/{session_id}"
-        else:
-            local_dir = "/tmp/dzeck_files"
-        os.makedirs(local_dir, exist_ok=True)
+        sandbox_id = getattr(sb, "sandbox_id", "") or os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+        if not sandbox_id:
+            return ""
 
         filename = os.path.basename(file_path)
-        dest = os.path.join(local_dir, filename)
-        if os.path.exists(dest):
-            base, ext = os.path.splitext(filename)
-            tag = hashlib.md5(str(_time.time()).encode()).hexdigest()[:6]
-            filename = f"{base}_{tag}{ext}"
-            dest = os.path.join(local_dir, filename)
-
-        with open(dest, "wb") as f:
-            f.write(data)
-
-        encoded_path = urllib.parse.quote(dest, safe="")
+        encoded_sandbox_id = urllib.parse.quote(sandbox_id, safe="")
+        encoded_path = urllib.parse.quote(file_path, safe="")
         encoded_name = urllib.parse.quote(filename, safe="")
-        return f"/api/files/download?path={encoded_path}&name={encoded_name}"
-    except Exception as e:
+        return f"/api/files/download?sandbox_id={encoded_sandbox_id}&path={encoded_path}&name={encoded_name}"
+    except Exception:
         return ""
 
 

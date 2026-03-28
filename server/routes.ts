@@ -9,30 +9,15 @@ import { createRequire } from "node:module";
 import multer from "multer";
 import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox } from "./e2b-desktop";
 import { requireAuth } from "./auth-routes";
+import { getCollection } from "./db/mongo";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const _require = createRequire(import.meta.url);
 
-// ─── File Download Store ─────────────────────────────────────────────────────
-const DZECK_FILES_DIR = "/tmp/dzeck_files";
-const DZECK_UPLOADS_DIR = "/tmp/dzeck_files/uploads";
-if (!fs.existsSync(DZECK_FILES_DIR)) {
-  fs.mkdirSync(DZECK_FILES_DIR, { recursive: true });
-}
-if (!fs.existsSync(DZECK_UPLOADS_DIR)) {
-  fs.mkdirSync(DZECK_UPLOADS_DIR, { recursive: true });
-}
-
-// ─── Multer Upload Config ─────────────────────────────────────────────────────
+// ─── Multer Upload Config (memory storage — files pushed directly to E2B) ────
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, DZECK_UPLOADS_DIR),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `${Date.now()}-${randomUUID().slice(0,8)}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
@@ -184,50 +169,112 @@ export async function registerRoutes(app: any): Promise<Server> {
         if (typeof client.flush === "function") client.flush();
       } catch {}
     }
+    // Throttle sync to MongoDB: update every 10 events to avoid write storm
+    if ((session as any)._mongoSyncing) return;
+    const eventCount = session.eventQueue.length;
+    const lastSyncedCount: number = (session as any)._lastSyncedEventCount ?? -1;
+    if (eventCount - lastSyncedCount >= 10) {
+      (session as any)._mongoSyncing = true;
+      (session as any)._lastSyncedEventCount = eventCount;
+      const sid: string = (session as any)._sessionId;
+      if (sid) {
+        getCollection("agent_sessions").then((col) => {
+          if (!col) return;
+          return (col as any).updateOne(
+            { session_id: sid },
+            { $set: { eventCount, updated_at: new Date() } },
+            { upsert: false },
+          );
+        }).catch(() => {}).finally(() => { (session as any)._mongoSyncing = false; });
+      } else {
+        (session as any)._mongoSyncing = false;
+      }
+    }
   }
 
   // ─── Session list endpoint ────────────────────────────────────────────────
-  app.get("/api/sessions", requireAuth, (_req: any, res: any) => {
-    const sessions = Array.from(activeAgentSessions.entries()).map(([sid, session]) => ({
+  // Merges in-memory active sessions with MongoDB history
+  app.get("/api/sessions", requireAuth, async (_req: any, res: any) => {
+    const activeSessions = Array.from(activeAgentSessions.entries()).map(([sid, session]) => ({
       session_id: sid,
       done: session.done,
       startedAt: session.startedAt,
       eventCount: session.eventQueue.length,
       is_running: !session.done,
+      source: "active",
     }));
-    res.json({ sessions });
+
+    const activeIds = new Set(activeAgentSessions.keys());
+    let historySessions: any[] = [];
+
+    try {
+      const col = await getCollection("agent_sessions");
+      if (col) {
+        const cursor = col.find(
+          {},
+          { projection: { _id: 0 }, sort: { startedAt: -1 }, limit: 50 } as any,
+        );
+        const docs = await (cursor as any).toArray();
+        historySessions = docs
+          .filter((d: any) => !activeIds.has(d.session_id))
+          .map((d: any) => ({
+            session_id: d.session_id,
+            done: d.done ?? true,
+            startedAt: d.startedAt,
+            eventCount: d.eventCount ?? 0,
+            is_running: false,
+            source: "history",
+            user_message: d.user_message,
+          }));
+      }
+    } catch (err: any) {
+      console.warn("[sessions] MongoDB history fetch failed:", err.message);
+    }
+
+    res.json({ sessions: [...activeSessions, ...historySessions] });
   });
 
-  // ─── Session sharing ───────────────────────────────────────────────────────
-  const SHARE_STATE_FILE = "/tmp/dzeck_share_state.json";
+  // ─── Session sharing (persisted in MongoDB) ────────────────────────────────
   const sharedSessions = new Map<string, boolean>();
 
-  // Load persisted share state on startup
-  try {
-    const raw = fs.readFileSync(SHARE_STATE_FILE, "utf8");
-    const obj: Record<string, boolean> = JSON.parse(raw);
-    for (const [sid, val] of Object.entries(obj)) {
-      sharedSessions.set(sid, val);
-    }
-  } catch {
-    // File doesn't exist yet — ignore
-  }
-
-  function persistShareState() {
+  // Load persisted share state from MongoDB on startup
+  (async () => {
     try {
-      const obj: Record<string, boolean> = {};
-      for (const [sid, val] of sharedSessions) obj[sid] = val;
-      fs.writeFileSync(SHARE_STATE_FILE, JSON.stringify(obj), "utf8");
-    } catch {
-      // ignore write errors
+      const col = await getCollection("shared_sessions");
+      if (col) {
+        const docs = await (col as any).find({}, { projection: { _id: 0 } }).toArray();
+        for (const doc of docs) {
+          if (doc.session_id && typeof doc.is_shared === "boolean") {
+            sharedSessions.set(doc.session_id, doc.is_shared);
+          }
+        }
+        console.log(`[share] Loaded ${docs.length} shared sessions from MongoDB.`);
+      }
+    } catch (err: any) {
+      console.warn("[share] Failed to load share state from MongoDB:", err.message);
+    }
+  })();
+
+  async function persistShareState(sessionId: string, isShared: boolean): Promise<void> {
+    try {
+      const col = await getCollection("shared_sessions");
+      if (col) {
+        await (col as any).updateOne(
+          { session_id: sessionId },
+          { $set: { session_id: sessionId, is_shared: isShared, updated_at: new Date() } },
+          { upsert: true },
+        );
+      }
+    } catch (err: any) {
+      console.warn("[share] Failed to persist share state to MongoDB:", err.message);
     }
   }
 
-  app.post("/api/sessions/:sessionId/share", requireAuth, (req: any, res: any) => {
+  app.post("/api/sessions/:sessionId/share", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const { is_shared } = req.body || {};
     sharedSessions.set(sessionId, !!is_shared);
-    persistShareState();
+    await persistShareState(sessionId, !!is_shared);
     const shareUrl = `${req.protocol}://${req.get("host")}/share/${sessionId}`;
     res.json({ session_id: sessionId, is_shared: !!is_shared, share_url: !!is_shared ? shareUrl : null });
   });
@@ -355,15 +402,44 @@ export async function registerRoutes(app: any): Promise<Server> {
     }));
     proc.stdin.end();
 
+    const sessionStartedAt = Date.now();
     const session: AgentSession = {
       proc,
       eventQueue: [],
       clients: new Set([res]),
       done: false,
-      startedAt: Date.now(),
+      startedAt: sessionStartedAt,
       stderrBuffer: "",
     };
+    (session as any)._sessionId = sid;
     activeAgentSessions.set(sid, session);
+
+    // Sync new session to MongoDB for persistent history
+    (async () => {
+      try {
+        const col = await getCollection("agent_sessions");
+        if (col) {
+          await (col as any).updateOne(
+            { session_id: sid },
+            {
+              $set: {
+                session_id: sid,
+                done: false,
+                startedAt: sessionStartedAt,
+                eventCount: 0,
+                is_running: true,
+                user_message: message || (messages && messages.length > 0 ? messages[messages.length - 1]?.content : ""),
+                created_at: new Date(),
+                updated_at: new Date(),
+              },
+            },
+            { upsert: true },
+          );
+        }
+      } catch (err: any) {
+        console.warn("[sessions] Failed to sync new session to MongoDB:", err.message);
+      }
+    })();
 
     const sessionLine = `data: ${JSON.stringify({ type: "session", session_id: sid, e2b_enabled: isE2BEnabled() })}\n\n`;
     _broadcastToSession(session, sessionLine);
@@ -465,6 +541,29 @@ export async function registerRoutes(app: any): Promise<Server> {
         for (const client of session.clients) { try { client.end(); } catch {} }
       }
       if (code !== 0) console.error(`Agent process exited with code ${code}. Stderr: ${session.stderrBuffer.slice(-500)}`);
+
+      // Sync completed session to MongoDB
+      (async () => {
+        try {
+          const col = await getCollection("agent_sessions");
+          if (col) {
+            await (col as any).updateOne(
+              { session_id: sid },
+              {
+                $set: {
+                  done: true,
+                  is_running: false,
+                  eventCount: session.eventQueue.length,
+                  updated_at: new Date(),
+                },
+              },
+              { upsert: false },
+            );
+          }
+        } catch (err: any) {
+          console.warn("[sessions] Failed to sync session completion to MongoDB:", err.message);
+        }
+      })();
     });
 
     res.on("close", () => { session.clients.delete(res); });
@@ -534,10 +633,9 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── File Download endpoint ─────────────────────────────────────────────────
-  // Supports two modes:
-  //   1. E2B proxy:  ?sandbox_id=xxx&path=/home/user/output/file.py&name=file.py
-  //   2. Local file: ?path=/tmp/dzeck_files/uploads/file.zip&name=file.zip  (uploads only)
-  app.get("/api/files/download", async (req: any, res: any) => {
+  // Proxies file directly from E2B sandbox — no local disk copy.
+  // Required: ?sandbox_id=xxx OR an active sandbox; ?path=/home/user/...&name=file.ext
+  app.get("/api/files/download", requireAuth, async (req: any, res: any) => {
     const rawPath = req.query.path as string;
     const rawName = req.query.name as string;
     const rawSandboxId = req.query.sandbox_id as string | undefined;
@@ -668,46 +766,30 @@ except Exception as ex:
         });
 
         if (streamed) return;
-        // fall through to local
+        // E2B proxy failed — do not fall back to local disk
+        if (!res.headersSent) {
+          return res.status(502).json({ error: "Failed to retrieve file from E2B sandbox. Please try again." });
+        }
+        return;
       } catch (e2bErr: any) {
-        console.warn(`[FileDownload] E2B proxy failed (${e2bErr.message}), falling back to local`);
-        // fall through to local file serve
+        console.warn(`[FileDownload] E2B proxy failed: ${e2bErr.message}`);
+        if (!res.headersSent) {
+          return res.status(502).json({ error: "E2B sandbox error: " + e2bErr.message });
+        }
+        return;
       }
     }
 
-    // ── Mode 2: Local file (uploads stored on server disk) ───────────────────
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: `File not found: ${filePath}` });
-    }
-
-    const realFilePath = fs.realpathSync(filePath);
-    if (!realFilePath.startsWith("/tmp/dzeck_files/")) {
-      return res.status(403).json({ error: "access denied: path not allowed" });
-    }
-
-    const stat = fs.lstatSync(realFilePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) {
-      return res.status(400).json({ error: "path is not a regular file" });
-    }
-
-    const fileSize = stat.size;
-
-    res.setHeader("Content-Type", mimeType);
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.setHeader("Content-Length", fileSize);
-    res.setHeader("Cache-Control", "no-cache");
-
-    const stream = fs.createReadStream(filePath);
-    stream.on("error", (err) => {
-      console.error("[FileDownload] Stream error:", err);
-      if (!res.headersSent) res.status(500).json({ error: "Failed to stream file" });
+    // No sandbox available — cannot serve file without E2B
+    return res.status(503).json({
+      error: "File download requires an active E2B sandbox. E2B_API_KEY is not set or no active sandbox.",
     });
-    stream.pipe(res);
   });
 
   // ─── File Upload endpoint ────────────────────────────────────────────────────
+  // Uses memory storage — buffers pushed directly to E2B sandbox (no local disk write)
   app.post("/api/upload", requireAuth, (req: any, res: any, next: any) => {
-    upload.array("files", 10)(req, res, (multerErr: any) => {
+    upload.array("files", 10)(req, res, async (multerErr: any) => {
       if (multerErr) {
         const msg = multerErr.code === "LIMIT_FILE_SIZE"
           ? "File terlalu besar (max 50MB)"
@@ -719,31 +801,94 @@ except Exception as ex:
         if (files.length === 0) {
           return res.status(400).json({ error: "Tidak ada file yang diunggah" });
         }
-        if (!fs.existsSync(DZECK_UPLOADS_DIR)) {
-          fs.mkdirSync(DZECK_UPLOADS_DIR, { recursive: true });
+
+        const sandboxId = getActiveE2BSandboxId();
+        const e2bKey = process.env.E2B_API_KEY || "";
+
+        if (!sandboxId || !e2bKey) {
+          return res.status(503).json({
+            error: "File upload requires an active E2B sandbox. No sandbox is currently connected.",
+          });
         }
-        const result = files.map((f: any) => {
-          const filePath = f.path;
+
+        const result = await Promise.all(files.map(async (f: any) => {
           const fileName = f.originalname;
           const mime = f.mimetype || "application/octet-stream";
           const size = f.size;
+          const buffer: Buffer = f.buffer;
           const isImage = mime.startsWith("image/");
           const isText = mime.startsWith("text/") || /\.(txt|md|py|js|ts|json|csv|xml|html|css|sh|yaml|yml|toml|ini|log)$/i.test(fileName);
+
           let preview: string | null = null;
           if (isText && size < 500 * 1024) {
-            try { preview = fs.readFileSync(filePath, "utf-8"); } catch {}
+            try { preview = buffer.toString("utf-8"); } catch {}
           }
+
+          // Push buffer directly to E2B sandbox
+          let sandboxPath = `/home/user/upload/${fileName}`;
+          let downloadUrl = "";
+
+          try {
+            const pushResult = await new Promise<{ ok: boolean; path: string }>((resolve) => {
+              const py = spawn("python3", ["-c", `
+import sys, base64, os
+e2b_key = os.environ.get("E2B_API_KEY", "")
+sandbox_id = sys.argv[1]
+dest_path = sys.argv[2]
+try:
+    from e2b_desktop import Sandbox
+    sb = Sandbox.connect(sandbox_id, api_key=e2b_key)
+    data = sys.stdin.buffer.read()
+    parent = os.path.dirname(dest_path)
+    if parent:
+        sb.commands.run(f"mkdir -p {parent}", timeout=10)
+    sb.files.write(dest_path, data)
+    print("ok:" + dest_path)
+except Exception as ex:
+    sys.stderr.write(str(ex))
+    sys.exit(1)
+`, sandboxId, sandboxPath], { env: { ...process.env }, timeout: 30000 });
+              let out = "";
+              let errOut = "";
+              py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+              py.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+              py.stdin.write(buffer);
+              py.stdin.end();
+              py.on("close", (code: number | null) => {
+                if (code === 0 && out.startsWith("ok:")) {
+                  resolve({ ok: true, path: out.slice(3).trim() });
+                } else {
+                  console.warn(`[Upload] E2B push failed for ${fileName}: ${errOut.trim()}`);
+                  resolve({ ok: false, path: sandboxPath });
+                }
+              });
+              py.on("error", () => resolve({ ok: false, path: sandboxPath }));
+            });
+
+            if (pushResult.ok) {
+              sandboxPath = pushResult.path;
+              downloadUrl = `/api/files/download?sandbox_id=${encodeURIComponent(sandboxId)}&path=${encodeURIComponent(sandboxPath)}&name=${encodeURIComponent(fileName)}`;
+            } else {
+              throw new Error(`E2B push failed for ${fileName}`);
+            }
+          } catch (e2bErr: any) {
+            console.warn(`[Upload] E2B push exception for ${fileName}:`, e2bErr.message);
+            throw e2bErr;
+          }
+
           return {
             filename: fileName,
-            path: filePath,
+            path: sandboxPath,
             mime,
             size,
             is_image: isImage,
             is_text: isText,
             preview,
-            download_url: `/api/files/download?path=${encodeURIComponent(filePath)}&name=${encodeURIComponent(fileName)}`,
+            download_url: downloadUrl,
+            sandbox_path: sandboxPath,
           };
-        });
+        }));
+
         res.json({ files: result });
       } catch (err: any) {
         res.status(500).json({ error: "Upload gagal: " + err.message });
@@ -751,24 +896,44 @@ except Exception as ex:
     });
   });
 
-  // ─── File list endpoint (files created by AI) ───────────────────────────────
-  app.get("/api/files/list", (_req: any, res: any) => {
+  // ─── File list endpoint (files in E2B sandbox output directory) ─────────────
+  app.get("/api/files/list", async (_req: any, res: any) => {
+    const sandboxId = getActiveE2BSandboxId();
+    const e2bKey = process.env.E2B_API_KEY || "";
+
+    if (!sandboxId || !e2bKey) {
+      return res.json({ files: [] });
+    }
+
     try {
-      if (!fs.existsSync(DZECK_FILES_DIR)) {
-        return res.json({ files: [] });
-      }
-      const files = fs.readdirSync(DZECK_FILES_DIR).map(name => {
-        const full = path.join(DZECK_FILES_DIR, name);
-        const stat = fs.statSync(full);
-        return {
-          name,
-          size: stat.size,
-          created: stat.birthtime,
-          download_url: `/api/files/download?path=${encodeURIComponent(full)}&name=${encodeURIComponent(name)}`,
-        };
+      const listResult = await new Promise<string>((resolve) => {
+        const py = spawn("python3", ["-c", `
+import sys, json, os
+e2b_key = os.environ.get("E2B_API_KEY", "")
+sandbox_id = sys.argv[1]
+try:
+    from e2b_desktop import Sandbox
+    sb = Sandbox.connect(sandbox_id, api_key=e2b_key)
+    r = sb.commands.run("find /home/user/output -maxdepth 2 -type f 2>/dev/null | head -50", timeout=10)
+    files = [l.strip() for l in (r.stdout or "").split("\\n") if l.strip()]
+    print(json.dumps(files))
+except Exception as ex:
+    print(json.dumps([]))
+`, sandboxId], { env: { ...process.env }, timeout: 20000 });
+        let out = "";
+        py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+        py.on("close", () => resolve(out.trim()));
+        py.on("error", () => resolve("[]"));
       });
+
+      const filePaths: string[] = JSON.parse(listResult || "[]");
+      const files = filePaths.map((fp: string) => ({
+        name: path.basename(fp),
+        path: fp,
+        download_url: `/api/files/download?sandbox_id=${encodeURIComponent(sandboxId)}&path=${encodeURIComponent(fp)}&name=${encodeURIComponent(path.basename(fp))}`,
+      }));
       res.json({ files });
-    } catch (e) {
+    } catch {
       res.json({ files: [] });
     }
   });

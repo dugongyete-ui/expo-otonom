@@ -15,16 +15,6 @@ from typing import Optional, Any
 from server.agent.models.tool_result import ToolResult
 from server.agent.tools.base import BaseTool, tool
 
-# Directory where files are copied for serving via the download API
-def _get_files_dir() -> str:
-    session_id = os.environ.get("DZECK_SESSION_ID", "")
-    if session_id:
-        d = f"/tmp/dzeck_files/{session_id}"
-    else:
-        d = "/tmp/dzeck_files"
-    os.makedirs(d, exist_ok=True)
-    return d
-
 _MIME_MAP = {
     # Text / code
     ".txt": "text/plain", ".md": "text/markdown", ".markdown": "text/markdown",
@@ -469,16 +459,6 @@ def image_view(image: str, **kwargs) -> ToolResult:
                 raw_data = e2b_read_bytes(sandbox_path)
             except Exception:
                 pass
-
-        if raw_data is None and os.path.isfile(image):
-            with open(image, "rb") as f:
-                raw_data = f.read(102400)
-
-        if raw_data is None:
-            local_fallback = os.path.join(_get_files_dir(), os.path.basename(image))
-            if os.path.isfile(local_fallback):
-                with open(local_fallback, "rb") as f:
-                    raw_data = f.read(102400)
 
         if raw_data is None:
             return ToolResult(success=False, message=f"Image not found: {image}", data={"error": "not_found", "image": image})
