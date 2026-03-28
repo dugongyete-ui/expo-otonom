@@ -1,35 +1,25 @@
 """
 Task/Subagent tools for Dzeck AI Agent.
 Provides sub-task spawning and management for complex multi-step workflows.
+All task metadata is stored in MongoDB collection `agent_tasks`, not the local filesystem.
 """
 import os
-import json
 import uuid
-from typing import Optional, Dict, Any, List
+from typing import Optional
 from datetime import datetime
 
 from server.agent.models.tool_result import ToolResult
 from server.agent.tools.base import BaseTool, tool
-
-def _get_task_dir() -> str:
-    """Return the task directory. Always uses /tmp (guaranteed writable on host).
-    Session-isolated to avoid cross-session collision."""
-    session_id = os.environ.get("DZECK_SESSION_ID", "default")
-    return f"/tmp/dzeck_tasks/{session_id}"
+from server.agent.db.mongo import get_collection as _mongo_get_collection
 
 
-TASK_DIR = "/tmp/dzeck_tasks"
+def _get_session_id() -> str:
+    return os.environ.get("DZECK_SESSION_ID", "default")
 
 
-def _ensure_task_dir() -> str:
-    task_dir = _get_task_dir()
-    try:
-        os.makedirs(task_dir, exist_ok=True)
-    except OSError:
-        # Fall back to flat /tmp/dzeck_tasks if session-scoped path fails
-        task_dir = "/tmp/dzeck_tasks"
-        os.makedirs(task_dir, exist_ok=True)
-    return task_dir
+def _get_mongo_collection():
+    """Return a pymongo collection for agent_tasks, or None if unavailable."""
+    return _mongo_get_collection("agent_tasks")
 
 
 def task_create(
@@ -38,10 +28,11 @@ def task_create(
     context: Optional[str] = None,
 ) -> ToolResult:
     """Create a sub-task for structured parallel/sequential work."""
-    task_dir = _ensure_task_dir()
+    session_id = _get_session_id()
     task_id = f"task_{uuid.uuid4().hex[:8]}"
     task_data = {
         "id": task_id,
+        "session_id": session_id,
         "description": description,
         "type": task_type,
         "context": context or "",
@@ -50,17 +41,19 @@ def task_create(
         "created_at": datetime.now().isoformat(),
         "completed_at": None,
     }
-    task_file = os.path.join(task_dir, f"{task_id}.json")
-    try:
-        with open(task_file, "w", encoding="utf-8") as f:
-            json.dump(task_data, f, indent=2, ensure_ascii=False)
-        return ToolResult(
-            success=True,
-            message=f"Sub-task created: [{task_id}] {description}",
-            data={"type": "task_create", "task_id": task_id, "task": task_data},
-        )
-    except Exception as e:
-        return ToolResult(success=False, message=f"Failed to create task: {e}")
+    col = _get_mongo_collection()
+    if col is not None:
+        try:
+            col.insert_one({**task_data})
+            return ToolResult(
+                success=True,
+                message=f"Sub-task created: [{task_id}] {description}",
+                data={"type": "task_create", "task_id": task_id, "task": task_data},
+            )
+        except Exception as e:
+            return ToolResult(success=False, message=f"Failed to create task in MongoDB: {e}")
+    else:
+        return ToolResult(success=False, message="MongoDB unavailable — cannot create task")
 
 
 def task_complete(
@@ -69,20 +62,22 @@ def task_complete(
     success: bool = True,
 ) -> ToolResult:
     """Mark a sub-task as completed with its result."""
-    task_file = os.path.join(_get_task_dir(), f"{task_id}.json")
-    if not os.path.exists(task_file):
-        return ToolResult(
-            success=False,
-            message=f"Task not found: {task_id}",
-        )
+    session_id = _get_session_id()
+    col = _get_mongo_collection()
+    if col is None:
+        return ToolResult(success=False, message="MongoDB unavailable — cannot complete task")
     try:
-        with open(task_file, "r", encoding="utf-8") as f:
-            task_data = json.load(f)
-        task_data["status"] = "completed" if success else "failed"
-        task_data["result"] = result
-        task_data["completed_at"] = datetime.now().isoformat()
-        with open(task_file, "w", encoding="utf-8") as f:
-            json.dump(task_data, f, indent=2, ensure_ascii=False)
+        doc = col.find_one({"id": task_id, "session_id": session_id})
+        if doc is None:
+            return ToolResult(success=False, message=f"Task not found: {task_id}")
+        updates = {
+            "status": "completed" if success else "failed",
+            "result": result,
+            "completed_at": datetime.now().isoformat(),
+        }
+        col.update_one({"id": task_id, "session_id": session_id}, {"$set": updates})
+        task_data = {**doc, **updates}
+        task_data.pop("_id", None)
         return ToolResult(
             success=True,
             message=f"Task [{task_id}] marked as {'completed' if success else 'failed'}: {result}",
@@ -94,14 +89,12 @@ def task_complete(
 
 def task_list() -> ToolResult:
     """List all sub-tasks and their current status."""
-    task_dir = _ensure_task_dir()
-    tasks = []
+    session_id = _get_session_id()
+    col = _get_mongo_collection()
+    if col is None:
+        return ToolResult(success=False, message="MongoDB unavailable — cannot list tasks")
     try:
-        for fname in sorted(os.listdir(task_dir)):
-            if fname.endswith(".json"):
-                fpath = os.path.join(task_dir, fname)
-                with open(fpath, "r", encoding="utf-8") as f:
-                    tasks.append(json.load(f))
+        tasks = list(col.find({"session_id": session_id}, {"_id": 0}).sort("created_at", 1))
 
         if not tasks:
             return ToolResult(

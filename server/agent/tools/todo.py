@@ -1,32 +1,54 @@
 """
 TodoList tools for Dzeck AI Agent.
-Provides progress tracking via todo.md file management.
+Provides progress tracking via MongoDB collection `agent_todos`.
+All state is stored in MongoDB — no local filesystem writes.
 """
 import os
 from typing import Optional, List
 
 from server.agent.models.tool_result import ToolResult
 from server.agent.tools.base import BaseTool, tool
+from server.agent.db.mongo import get_collection as _mongo_get_collection
 
-TODO_DIR = "/tmp/dzeck-ai"
-TODO_FILE = os.path.join(TODO_DIR, "todo.md")
+
+def _get_session_id() -> str:
+    return os.environ.get("DZECK_SESSION_ID", "default")
+
+
+def _get_mongo_collection():
+    """Return a pymongo collection for agent_todos, or None if unavailable."""
+    return _mongo_get_collection("agent_todos")
+
+
+def _get_doc(col, session_id: str) -> Optional[dict]:
+    """Fetch the todo document for this session."""
+    doc = col.find_one({"session_id": session_id}, {"_id": 0})
+    return doc
 
 
 def todo_write(items: List[str], title: Optional[str] = None) -> ToolResult:
-    """Create or overwrite a todo.md checklist for tracking task progress."""
-    os.makedirs(TODO_DIR, exist_ok=True)
+    """Create or overwrite a todo checklist for tracking task progress."""
+    session_id = _get_session_id()
+    col = _get_mongo_collection()
+    if col is None:
+        return ToolResult(success=False, message="MongoDB unavailable — cannot write todo list")
     header = title or "Todo List"
-    lines = [f"# {header}\n"]
-    for item in items:
-        lines.append(f"- [ ] {item}")
-    content = "\n".join(lines) + "\n"
+    todo_items = [{"text": item, "completed": False} for item in items]
     try:
-        with open(TODO_FILE, "w", encoding="utf-8") as f:
-            f.write(content)
+        col.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "session_id": session_id,
+                "title": header,
+                "items": todo_items,
+                "updated_at": __import__("datetime").datetime.now().isoformat(),
+            }},
+            upsert=True,
+        )
         return ToolResult(
             success=True,
-            message=f"TodoList created with {len(items)} items at {TODO_FILE}",
-            data={"type": "todo_write", "file": TODO_FILE, "item_count": len(items)},
+            message=f"TodoList created with {len(items)} items",
+            data={"type": "todo_write", "item_count": len(items), "title": header},
         )
     except Exception as e:
         return ToolResult(success=False, message=f"Failed to write todo: {e}")
@@ -42,41 +64,41 @@ def _word_overlap_score(a: str, b: str) -> float:
     return len(shared) / max(len(words_a), len(words_b))
 
 
-def _find_best_match(lines: List[str], item_text: str, marker: str) -> Optional[int]:
+def _find_best_match_idx(todo_items: List[dict], item_text: str, want_completed: bool) -> Optional[int]:
     """
-    Find the best matching line index for item_text with given marker.
-    Tries (in order): exact → case-insensitive → substring → word-overlap (>=50%).
-    Returns line index or None if not found.
+    Find best matching item index that currently has completion status == (not want_completed).
+    Tries: exact → case-insensitive → substring → word-overlap (>=50%).
+    Returns index into todo_items list or None.
     """
     item_stripped = item_text.strip()
     item_lower = item_stripped.lower()
 
-    candidates = []
-    for i, line in enumerate(lines):
-        if not line.startswith(marker):
-            continue
-        line_content = line[len(marker):].strip()
-        candidates.append((i, line_content))
+    candidates = [
+        (i, item)
+        for i, item in enumerate(todo_items)
+        if item.get("completed") != want_completed
+    ]
 
     if not candidates:
         return None
 
-    for i, content in candidates:
-        if content == item_stripped:
+    for i, item in candidates:
+        if item["text"].strip() == item_stripped:
             return i
 
-    for i, content in candidates:
-        if content.lower() == item_lower:
+    for i, item in candidates:
+        if item["text"].strip().lower() == item_lower:
             return i
 
-    for i, content in candidates:
-        if item_lower in content.lower() or content.lower() in item_lower:
+    for i, item in candidates:
+        content = item["text"].strip().lower()
+        if item_lower in content or content in item_lower:
             return i
 
     best_idx = None
     best_score = 0.0
-    for i, content in candidates:
-        score = _word_overlap_score(item_stripped, content)
+    for i, item in candidates:
+        score = _word_overlap_score(item_stripped, item["text"].strip())
         if score > best_score:
             best_score = score
             best_idx = i
@@ -88,44 +110,51 @@ def _find_best_match(lines: List[str], item_text: str, marker: str) -> Optional[
 
 
 def todo_update(item_text: str, completed: bool = True) -> ToolResult:
-    """Update a single item in todo.md by marking it completed or uncompleted."""
-    if not os.path.exists(TODO_FILE):
-        return ToolResult(success=False, message="No todo.md found. Create one first with todo_write.")
+    """Update a single item in the todo list by marking it completed or uncompleted."""
+    session_id = _get_session_id()
+    col = _get_mongo_collection()
+    if col is None:
+        return ToolResult(success=False, message="MongoDB unavailable — cannot update todo")
     try:
-        with open(TODO_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
+        doc = _get_doc(col, session_id)
+        if not doc:
+            return ToolResult(success=False, message="No todo list found. Create one first with todo_write.")
 
-        old_marker = "- [ ]" if completed else "- [x]"
-        new_marker = "- [x]" if completed else "- [ ]"
+        todo_items = doc.get("items", [])
 
-        lines = content.splitlines(keepends=True)
-
-        idx = _find_best_match(lines, item_text, old_marker + " ")
+        idx = _find_best_match_idx(todo_items, item_text, completed)
         if idx is None:
-            already_idx = _find_best_match(lines, item_text, new_marker + " ")
-            if already_idx is not None:
-                status = "completed" if completed else "uncompleted"
-                matched_text = lines[already_idx][len(new_marker) + 1:].strip()
-                return ToolResult(
-                    success=True,
-                    message=f"Item already marked as {status}: {matched_text}",
-                    data={"type": "todo_update", "item": matched_text, "already_done": True},
-                )
+            # Check if item is already in the desired state
+            already_candidates = [
+                item for item in todo_items
+                if item.get("completed") == completed
+            ]
+            for item in already_candidates:
+                text = item["text"].strip()
+                item_lower = item_text.strip().lower()
+                if text.lower() == item_lower or item_lower in text.lower() or text.lower() in item_lower:
+                    status = "completed" if completed else "uncompleted"
+                    return ToolResult(
+                        success=True,
+                        message=f"Item already marked as {status}: {text}",
+                        data={"type": "todo_update", "item": text, "already_done": True},
+                    )
+            available = [item["text"] for item in todo_items]
             return ToolResult(
                 success=False,
-                message=(
-                    f"Item not found in todo.md: '{item_text}'. "
-                    f"Available items: {_list_todo_items(content)}"
-                ),
+                message=f"Item not found in todo list: '{item_text}'. Available items: {available}",
             )
 
-        matched_line = lines[idx]
-        matched_text = matched_line[len(old_marker) + 1:].strip()
-        lines[idx] = f"{new_marker} {matched_text}\n"
+        matched_text = todo_items[idx]["text"]
+        todo_items[idx]["completed"] = completed
 
-        new_content = "".join(lines)
-        with open(TODO_FILE, "w", encoding="utf-8") as f:
-            f.write(new_content)
+        col.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "items": todo_items,
+                "updated_at": __import__("datetime").datetime.now().isoformat(),
+            }},
+        )
 
         status = "completed" if completed else "uncompleted"
         return ToolResult(
@@ -137,30 +166,36 @@ def todo_update(item_text: str, completed: bool = True) -> ToolResult:
         return ToolResult(success=False, message=f"Failed to update todo: {e}")
 
 
-def _list_todo_items(content: str) -> str:
-    """Return a readable list of all todo items for debugging."""
-    items = []
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("- [ ]") or line.startswith("- [x]"):
-            items.append(line[6:].strip())
-    return str(items) if items else "(none)"
-
-
 def todo_read() -> ToolResult:
-    """Read the current todo.md to check progress."""
-    if not os.path.exists(TODO_FILE):
+    """Read the current todo list to check progress."""
+    session_id = _get_session_id()
+    col = _get_mongo_collection()
+    if col is None:
         return ToolResult(
             success=True,
-            message="No todo.md exists yet.",
+            message="No todo list exists yet (MongoDB unavailable).",
             data={"type": "todo_read", "exists": False, "content": ""},
         )
     try:
-        with open(TODO_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
+        doc = _get_doc(col, session_id)
+        if not doc:
+            return ToolResult(
+                success=True,
+                message="No todo list exists yet.",
+                data={"type": "todo_read", "exists": False, "content": ""},
+            )
 
-        total = content.count("- [ ]") + content.count("- [x]")
-        done = content.count("- [x]")
+        items = doc.get("items", [])
+        title = doc.get("title", "Todo List")
+        total = len(items)
+        done = sum(1 for item in items if item.get("completed"))
+
+        lines = [f"# {title}\n"]
+        for item in items:
+            marker = "- [x]" if item.get("completed") else "- [ ]"
+            lines.append(f"{marker} {item['text']}")
+        content = "\n".join(lines) + "\n"
+
         return ToolResult(
             success=True,
             message=f"Todo progress: {done}/{total} items completed.\n\n{content}",
@@ -170,6 +205,7 @@ def todo_read() -> ToolResult:
                 "content": content,
                 "total": total,
                 "done": done,
+                "items": items,
             },
         )
     except Exception as e:
@@ -187,7 +223,7 @@ class TodoTool(BaseTool):
     @tool(
         name="todo_write",
         description=(
-            "Create or overwrite a TodoList (todo.md) for tracking task progress. "
+            "Create or overwrite a TodoList for tracking task progress. "
             "Use this at the START of any multi-step task to create a visible checklist. "
             "Each item should be a clear, actionable step. "
             "The TodoList is rendered as a widget visible to the user."
@@ -235,7 +271,7 @@ class TodoTool(BaseTool):
         name="todo_read",
         description=(
             "Read the current TodoList to check progress. "
-            "Returns the full todo.md content with completion counts."
+            "Returns the full todo list with completion counts."
         ),
         parameters={},
         required=[],

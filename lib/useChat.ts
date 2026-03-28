@@ -262,6 +262,12 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
                 e2bSessionId: event.e2b_session_id || "",
               });
             }
+          } else if (event.type === "todo_update") {
+            // todo_update events are informational — no UI message needed,
+            // frontend can poll /api/sessions/:id/todos for the latest state
+          } else if (event.type === "task_update") {
+            // task_update events are informational — no UI message needed,
+            // frontend can poll /api/sessions/:id/tasks for the latest state
           } else if (event.type === "error") {
             setError(event.error || "An error occurred");
           }

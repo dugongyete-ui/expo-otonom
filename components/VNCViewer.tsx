@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { e2bService } from "@/lib/e2b-service";
+import { SANDBOX_DESKTOP_WIDTH, SANDBOX_DESKTOP_HEIGHT } from "@/lib/sandbox-constants";
 
 interface VNCViewerProps {
   sessionId: string;
@@ -33,8 +34,6 @@ interface VNCViewerProps {
 
 const SCREENSHOT_POLL_INTERVAL_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const SANDBOX_DESKTOP_WIDTH = 1280;
-const SANDBOX_DESKTOP_HEIGHT = 800;
 
 export function VNCViewer({
   sessionId,

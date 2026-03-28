@@ -167,6 +167,7 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
               lastBrowserEvent={lastBrowserEvent}
               onTakeOver={handleTakeOver}
               agentVncSession={vncSession}
+              vncViewerActive={Platform.OS !== "web" && !!vncSession}
             />
           ) : (
             <FilePanel

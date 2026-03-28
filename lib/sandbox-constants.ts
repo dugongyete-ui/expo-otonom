@@ -1,0 +1,2 @@
+export const SANDBOX_DESKTOP_WIDTH = 1280;
+export const SANDBOX_DESKTOP_HEIGHT = 800;

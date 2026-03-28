@@ -1,23 +1,52 @@
 import { EventEmitter } from "events";
 
 export interface AgentMessage {
-  type: "message" | "tool" | "step" | "title" | "plan" | "error" | "session";
+  type:
+    | "message"
+    | "message_start"
+    | "message_chunk"
+    | "message_end"
+    | "tool"
+    | "tool_stream"
+    | "step"
+    | "thinking"
+    | "title"
+    | "plan"
+    | "error"
+    | "session"
+    | "done"
+    | "notify"
+    | "vnc_stream_url"
+    | "todo_update"
+    | "task_update"
+    | "waiting_for_user"
+    | "ask";
   content?: string;
+  chunk?: string;
   title?: string;
+  thinking?: string;
   steps?: Array<{
     id: string;
     description: string;
     status: "pending" | "running" | "completed" | "failed";
   }>;
   tool_name?: string;
+  function_name?: string;
+  function_args?: any;
   tool_call_id?: string;
   tool_args?: any;
   tool_result?: any;
-  status?: "pending" | "running" | "completed" | "failed";
+  status?: "pending" | "running" | "completed" | "failed" | "calling" | "called";
   step_id?: string;
   error?: string;
   session_id?: string;
   timestamp?: string;
+  message?: string;
+  vnc_url?: string;
+  sandbox_id?: string;
+  e2b_session_id?: string;
+  todo_items?: Array<{ text: string; completed: boolean }>;
+  tasks?: Array<{ id: string; description: string; status: string; result?: string }>;
 }
 
 export interface AgentRequest {
@@ -74,34 +103,45 @@ export class AgentService extends EventEmitter {
       const decoder = new TextDecoder();
       let buffer = "";
 
+      const processSSEMessage = (line: string): boolean => {
+        if (!line.startsWith("data: ")) return false;
+        const data = line.slice(6);
+        if (data === "[DONE]") {
+          options.onDone?.();
+          return true;
+        }
+        try {
+          const message = JSON.parse(data) as AgentMessage;
+          options.onMessage?.(message);
+          this.emit("message", message);
+        } catch (error) {
+          console.error("Failed to parse message:", error);
+        }
+        return false;
+      };
+
       const processStream = async () => {
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              // Process any remaining fragment in buffer
+              if (buffer.trim()) {
+                processSSEMessage(buffer.trim());
+                buffer = "";
+              }
+              break;
+            }
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
             buffer = lines.pop() || "";
 
+            let stopped = false;
             for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-
-                if (data === "[DONE]") {
-                  options.onDone?.();
-                  break;
-                }
-
-                try {
-                  const message = JSON.parse(data) as AgentMessage;
-                  options.onMessage?.(message);
-                  this.emit("message", message);
-                } catch (error) {
-                  console.error("Failed to parse message:", error);
-                }
-              }
+              if (processSSEMessage(line)) { stopped = true; break; }
             }
+            if (stopped) break;
           }
         } catch (error) {
           if (error instanceof Error && error.name !== "AbortError") {

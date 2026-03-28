@@ -14,6 +14,7 @@ import type { E2BSession } from "../lib/e2b-service";
 import { VNCViewer } from "./VNCViewer";
 import { TakeOverIcon } from "./icons/ToolIcons";
 import type { VncSessionInfo } from "./ChatPage";
+import { SANDBOX_DESKTOP_WIDTH, SANDBOX_DESKTOP_HEIGHT } from "@/lib/sandbox-constants";
 
 interface BrowserPanelProps {
   isVisible?: boolean;
@@ -23,6 +24,8 @@ interface BrowserPanelProps {
   onTakeOver?: (sessionId: string) => void;
   isLive?: boolean;
   agentVncSession?: VncSessionInfo | null;
+  /** If true, a VNCViewer is already actively polling screenshots — suppress BrowserPanel's own polling to avoid double requests. */
+  vncViewerActive?: boolean;
 }
 
 type SessionState = "idle" | "creating" | "waiting" | "ready" | "error" | "connecting";
@@ -35,6 +38,7 @@ export function BrowserPanel({
   onTakeOver,
   isLive = false,
   agentVncSession,
+  vncViewerActive = false,
 }: BrowserPanelProps) {
   const [isTakeOverActive, setIsTakeOverActive] = useState(false);
   const [useVNC, setUseVNC] = useState(false);
@@ -44,7 +48,7 @@ export function BrowserPanel({
   const [statusMsg, setStatusMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
-  const [resolution, setResolution] = useState({ width: 1280, height: 720 });
+  const [resolution, setResolution] = useState({ width: SANDBOX_DESKTOP_WIDTH, height: SANDBOX_DESKTOP_HEIGHT });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -57,9 +61,13 @@ export function BrowserPanel({
     };
   }, []);
 
-  // Auto-refresh screenshots when session is ready
+  // Auto-refresh screenshots when session is ready.
+  // Skip if VNCViewer is active (either via useVNC toggle or vncViewerActive prop)
+  // to avoid double polling.
   useEffect(() => {
-    if (sessionState === "ready" && sessionId) {
+    const shouldSkipPolling = useVNC || vncViewerActive;
+    if (sessionState === "ready" && sessionId && !shouldSkipPolling) {
+      console.log("[BrowserPanel] Starting screenshot polling (5s interval) for session:", sessionId);
       autoRefreshRef.current = setInterval(() => {
         refreshScreenshot();
       }, 5000);
@@ -70,7 +78,14 @@ export function BrowserPanel({
         }
       };
     }
-  }, [sessionState, sessionId, refreshScreenshot]);
+    if (autoRefreshRef.current) {
+      clearInterval(autoRefreshRef.current);
+      autoRefreshRef.current = null;
+    }
+    if (shouldSkipPolling && sessionState === "ready" && sessionId) {
+      console.log("[BrowserPanel] Screenshot polling suppressed — VNCViewer is active (useVNC:", useVNC, "vncViewerActive:", vncViewerActive, ")");
+    }
+  }, [sessionState, sessionId, useVNC, vncViewerActive, refreshScreenshot]);
 
   // Auto-connect to agent's sandbox when vnc_stream_url event is received
   useEffect(() => {
@@ -124,10 +139,7 @@ export function BrowserPanel({
     setScreenshotUri(null);
 
     try {
-      const isMobile = Platform.OS !== "web";
-      const res = isMobile
-        ? { width: 800, height: 600 }
-        : { width: 1280, height: 720 };
+      const res = { width: SANDBOX_DESKTOP_WIDTH, height: SANDBOX_DESKTOP_HEIGHT };
 
       const session = await e2bService.createSession({
         resolution: res,

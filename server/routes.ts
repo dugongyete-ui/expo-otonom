@@ -459,49 +459,54 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     let buf = "";
 
+    function _processAgentLine(line: string) {
+      if (!line.trim()) return;
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.type === "done") {
+          session.done = true;
+          _broadcastToSession(session, "data: [DONE]\n\n");
+          for (const client of session.clients) { try { client.end(); } catch {} }
+        } else {
+          if (parsed.type === "vnc_stream_url" && parsed.vnc_url) {
+            console.log(`[Agent] VNC stream URL received from Python sandbox: ${parsed.vnc_url}`);
+            if (parsed.sandbox_id) {
+              registerExternalE2BSandbox(parsed.sandbox_id, parsed.vnc_url)
+                .then((result) => {
+                  console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.sessionId}`);
+                  const enriched = { ...parsed, e2b_session_id: result.sessionId };
+                  _broadcastToSession(session, `data: ${JSON.stringify(enriched)}\n\n`);
+                })
+                .catch((err: any) => {
+                  console.warn(`[Agent] registerExternalE2BSandbox failed: ${err.message}. Forwarding original event.`);
+                  _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+                });
+            } else {
+              _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+            }
+          } else {
+            _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
+          }
+        }
+      } catch (parseErr) {
+        console.error("[SSE parse error] Failed to parse line:", line.substring(0, 200), parseErr);
+      }
+    }
+
     proc.stdout.on("data", (data: Buffer) => {
       buf += data.toString();
       const lines = buf.split("\n");
       buf = lines.pop() || "";
       for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.type === "done") {
-            session.done = true;
-            _broadcastToSession(session, "data: [DONE]\n\n");
-            for (const client of session.clients) { try { client.end(); } catch {} }
-          } else {
-            // When the Python agent emits a vnc_stream_url event, forward it AND
-            // auto-connect to the sandbox so the frontend gets a unified session.
-            // This bridges the Python agent's sandbox with the TS e2b-desktop session
-            // system, enabling click/scroll/type interactions on the SAME sandbox.
-            if (parsed.type === "vnc_stream_url" && parsed.vnc_url) {
-              console.log(`[Agent] VNC stream URL received from Python sandbox: ${parsed.vnc_url}`);
-              // Auto-register the agent's sandbox directly (no internal HTTP self-request)
-              // This bridges the Python agent's sandbox with the TS e2b-desktop session
-              // system, enabling click/scroll/type interactions on the SAME sandbox.
-              if (parsed.sandbox_id) {
-                registerExternalE2BSandbox(parsed.sandbox_id, parsed.vnc_url)
-                  .then((result) => {
-                    console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.sessionId}`);
-                    const enriched = { ...parsed, e2b_session_id: result.sessionId };
-                    _broadcastToSession(session, `data: ${JSON.stringify(enriched)}\n\n`);
-                  })
-                  .catch((err: any) => {
-                    console.warn(`[Agent] registerExternalE2BSandbox failed: ${err.message}. Forwarding original event.`);
-                    _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
-                  });
-              } else {
-                _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
-              }
-            } else {
-              _broadcastToSession(session, `data: ${JSON.stringify(parsed)}\n\n`);
-            }
-          }
-        } catch (parseErr) {
-          console.error("[SSE parse error] Failed to parse line:", line.substring(0, 200), parseErr);
-        }
+        _processAgentLine(line);
+      }
+    });
+
+    proc.stdout.on("end", () => {
+      // Process any remaining fragment that didn't end with newline
+      if (buf.trim()) {
+        _processAgentLine(buf);
+        buf = "";
       }
     });
 
@@ -621,6 +626,49 @@ export async function registerRoutes(app: any): Promise<Server> {
       for (const client of session.clients) { try { client.end(); } catch {} }
     }
     res.json({ stopped: true });
+  });
+
+  // ─── Todo list endpoint (read todo for a session) ─────────────────────────
+  app.get("/api/sessions/:sessionId/todos", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    try {
+      const col = await getCollection("agent_todos");
+      if (!col) {
+        return res.json({ exists: false, items: [], title: "Todo List" });
+      }
+      const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { _id: 0 } });
+      if (!doc) {
+        return res.json({ exists: false, items: [], title: "Todo List" });
+      }
+      res.json({
+        exists: true,
+        title: doc.title || "Todo List",
+        items: doc.items || [],
+        updated_at: doc.updated_at,
+      });
+    } catch (err: any) {
+      console.warn("[todos] Failed to fetch todos:", err.message);
+      res.status(500).json({ error: "Failed to fetch todos" });
+    }
+  });
+
+  // ─── Task list endpoint (read tasks for a session) ─────────────────────────
+  app.get("/api/sessions/:sessionId/tasks", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    try {
+      const col = await getCollection("agent_tasks");
+      if (!col) {
+        return res.json({ tasks: [] });
+      }
+      const tasks = await (col as any).find(
+        { session_id: sessionId },
+        { projection: { _id: 0 }, sort: { created_at: 1 } }
+      ).toArray();
+      res.json({ tasks });
+    } catch (err: any) {
+      console.warn("[tasks] Failed to fetch tasks:", err.message);
+      res.status(500).json({ error: "Failed to fetch tasks" });
+    }
   });
 
   app.get("/api/test", (_req: any, res: any) => {

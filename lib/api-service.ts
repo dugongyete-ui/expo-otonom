@@ -114,14 +114,46 @@ class ApiService {
       const decoder = new TextDecoder();
       let buffer = "";
 
+      const processSSELine = (line: string): boolean => {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) return false;
+
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") {
+          isClosed = true;
+          onDone?.();
+          return true;
+        }
+
+        try {
+          const event: AgentEvent = JSON.parse(data);
+          if (event.type === "message_end") {
+            isClosed = true;
+            onDone?.();
+            return true;
+          }
+          onMessage?.(event);
+        } catch (e) {
+          console.error("Failed to parse SSE event:", e);
+        }
+        return false;
+      };
+
       const processStream = async () => {
         try {
           while (!isClosed) {
             const { done, value } = await reader!.read();
 
             if (done) {
-              isClosed = true;
-              onDone?.();
+              // Process any remaining fragment in buffer (stream ended without trailing newline)
+              if (buffer.trim()) {
+                processSSELine(buffer);
+                buffer = "";
+              }
+              if (!isClosed) {
+                isClosed = true;
+                onDone?.();
+              }
               break;
             }
 
@@ -130,27 +162,7 @@ class ApiService {
             buffer = lines.pop() || "";
 
             for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith("data: ")) continue;
-
-              const data = trimmed.slice(6);
-              if (data === "[DONE]") {
-                isClosed = true;
-                onDone?.();
-                return;
-              }
-
-              try {
-                const event: AgentEvent = JSON.parse(data);
-                if (event.type === "message_end") {
-                  isClosed = true;
-                  onDone?.();
-                  return;
-                }
-                onMessage?.(event);
-              } catch (e) {
-                console.error("Failed to parse SSE event:", e);
-              }
+              if (processSSELine(line)) break;
             }
           }
         } catch (error) {
@@ -208,14 +220,41 @@ class ApiService {
       const decoder = new TextDecoder();
       let buffer = "";
 
+      const processAgentLine = (line: string): boolean => {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) return false;
+
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") {
+          isClosed = true;
+          onDone?.();
+          return true;
+        }
+
+        try {
+          const event: AgentEvent = JSON.parse(data);
+          onMessage?.(event);
+        } catch (e) {
+          console.error("Failed to parse SSE event:", e);
+        }
+        return false;
+      };
+
       const processStream = async () => {
         try {
           while (!isClosed) {
             const { done, value } = await reader!.read();
 
             if (done) {
-              isClosed = true;
-              onDone?.();
+              // Process any remaining fragment (stream ended without trailing newline)
+              if (buffer.trim()) {
+                processAgentLine(buffer);
+                buffer = "";
+              }
+              if (!isClosed) {
+                isClosed = true;
+                onDone?.();
+              }
               break;
             }
 
@@ -224,22 +263,7 @@ class ApiService {
             buffer = lines.pop() || "";
 
             for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith("data: ")) continue;
-
-              const data = trimmed.slice(6);
-              if (data === "[DONE]") {
-                isClosed = true;
-                onDone?.();
-                return;
-              }
-
-              try {
-                const event: AgentEvent = JSON.parse(data);
-                onMessage?.(event);
-              } catch (e) {
-                console.error("Failed to parse SSE event:", e);
-              }
+              if (processAgentLine(line)) break;
             }
           }
         } catch (error) {

@@ -34,6 +34,7 @@ import { WebSocketServer, WebSocket as WsWebSocket } from "ws";
 import { Sandbox } from "@e2b/desktop";
 import multer from "multer";
 import { requireAuth } from "./auth-routes";
+import { redisSet, redisGet, redisDel, redisKeys } from "./db/redis";
 
 const e2bUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -62,13 +63,110 @@ interface CreateSessionOptions {
   startUrl?: string;
 }
 
-// Session Store
+// Session Store (in-memory, backed by Redis for persistence across restarts)
 const activeSessions = new Map<string, E2BDesktopSession>();
 
-// Default config
-const DEFAULT_RESOLUTION = { width: 1280, height: 720 };
+// Default config — shared canonical sandbox resolution
+export const SANDBOX_DESKTOP_WIDTH = 1280;
+export const SANDBOX_DESKTOP_HEIGHT = 800;
+const DEFAULT_RESOLUTION = { width: SANDBOX_DESKTOP_WIDTH, height: SANDBOX_DESKTOP_HEIGHT };
 const DEFAULT_TIMEOUT = 3600;
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const REDIS_SESSION_PREFIX = "e2b:session:";
+const REDIS_SESSION_TTL = DEFAULT_TIMEOUT + 600; // session timeout + 10 min buffer
+
+/** Persist serializable session metadata to Redis. */
+async function persistSessionToRedis(session: E2BDesktopSession): Promise<void> {
+  try {
+    const data = JSON.stringify({
+      id: session.id,
+      sandboxId: session.sandboxId,
+      status: session.status,
+      createdAt: session.createdAt,
+      lastActivity: session.lastActivity,
+      vncUrl: session.vncUrl,
+      wsProxyUrl: session.wsProxyUrl,
+      streamUrl: session.streamUrl,
+      resolution: session.resolution,
+      timeout: session.timeout,
+      error: session.error,
+    });
+    await redisSet(`${REDIS_SESSION_PREFIX}${session.id}`, data, REDIS_SESSION_TTL);
+  } catch (err: any) {
+    console.warn("[E2B-Desktop] Failed to persist session to Redis:", err.message);
+  }
+}
+
+/** Remove a session from Redis. */
+async function removeSessionFromRedis(sessionId: string): Promise<void> {
+  await redisDel(`${REDIS_SESSION_PREFIX}${sessionId}`);
+}
+
+/**
+ * Load previously persisted sessions from Redis on startup.
+ * Attempts to reconnect to still-alive E2B sandboxes via Sandbox.connect().
+ */
+async function loadSessionsFromRedis(): Promise<void> {
+  const apiKey = process.env.E2B_API_KEY || "";
+  if (!apiKey) return;
+  try {
+    const keys = await redisKeys(`${REDIS_SESSION_PREFIX}*`);
+    if (keys.length === 0) return;
+    console.log(`[E2B-Desktop] Found ${keys.length} persisted session(s) in Redis — attempting reconnect...`);
+    for (const key of keys) {
+      try {
+        const raw = await redisGet(key);
+        if (!raw) continue;
+        const meta = JSON.parse(raw);
+        if (!meta.sandboxId || meta.status === "stopped" || meta.status === "stopping") continue;
+
+        // Check if the session is not too old
+        const age = (Date.now() - meta.createdAt) / 1000;
+        if (age > meta.timeout) {
+          console.log(`[E2B-Desktop] Persisted session ${meta.id} expired (age: ${Math.round(age)}s) — skipping`);
+          await redisDel(key);
+          continue;
+        }
+
+        // Try to reconnect to the sandbox
+        let sandbox: Sandbox | null = null;
+        try {
+          sandbox = await Sandbox.connect(meta.sandboxId, { apiKey });
+          sandboxInstances.set(meta.sandboxId, sandbox);
+          console.log(`[E2B-Desktop] Reconnected to sandbox ${meta.sandboxId} for session ${meta.id}`);
+        } catch (connectErr: any) {
+          console.warn(`[E2B-Desktop] Could not reconnect to sandbox ${meta.sandboxId}: ${connectErr.message} — session removed`);
+          await redisDel(key);
+          continue;
+        }
+
+        const session: E2BDesktopSession = {
+          id: meta.id,
+          sandboxId: meta.sandboxId,
+          status: "running",
+          createdAt: meta.createdAt,
+          lastActivity: Date.now(),
+          vncUrl: meta.vncUrl,
+          wsProxyUrl: meta.wsProxyUrl,
+          streamUrl: meta.streamUrl,
+          resolution: meta.resolution || DEFAULT_RESOLUTION,
+          timeout: meta.timeout || DEFAULT_TIMEOUT,
+          error: meta.error,
+          _idleTimer: null,
+          _wsClients: new Set(),
+          _sandbox: sandbox,
+        };
+        activeSessions.set(session.id, session);
+        touchSession(session);
+        console.log(`[E2B-Desktop] Session ${session.id} restored from Redis`);
+      } catch (err: any) {
+        console.warn(`[E2B-Desktop] Error restoring session from key ${key}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.warn("[E2B-Desktop] Failed to load sessions from Redis:", err.message);
+  }
+}
 
 function getE2BApiKey(): string {
   return process.env.E2B_API_KEY || "";
@@ -276,6 +374,8 @@ function touchSession(session: E2BDesktopSession) {
       destroySession(session.id).catch(() => {});
     }
   }, IDLE_TIMEOUT_MS);
+
+  persistSessionToRedis(session).catch(() => {});
 }
 
 async function destroySession(sessionId: string): Promise<boolean> {
@@ -308,6 +408,7 @@ async function destroySession(sessionId: string): Promise<boolean> {
 
   session.status = "stopped";
   activeSessions.delete(sessionId);
+  removeSessionFromRedis(sessionId).catch(() => {});
   return true;
 }
 
@@ -381,12 +482,14 @@ export async function createAndRegisterE2BSandbox(startUrl?: string): Promise<{
     session.wsProxyUrl = streamUrl;
     session.status = "running";
     touchSession(session);
+    await persistSessionToRedis(session);
     console.log(`[E2B-Desktop] Auto-created session ${sessionId}, sandbox ${result.sandboxId}, stream: ${streamUrl}`);
     return { sessionId, sandboxId: result.sandboxId, streamUrl };
   } catch (err: any) {
     console.error(`[E2B-Desktop] Bootstrap failed for auto-created session ${sessionId}:`, err.message);
     session.status = "error";
     session.error = err.message;
+    await persistSessionToRedis(session);
     return { sessionId, sandboxId: result.sandboxId, streamUrl: null };
   }
 }
@@ -460,6 +563,7 @@ export async function registerExternalE2BSandbox(
   };
   activeSessions.set(sessionId, session);
   touchSession(session);
+  await persistSessionToRedis(session);
 
   console.log(
     `[E2B-Desktop] Registered external sandbox ${sandboxId} as session ${sessionId} (sdk: ${!!connectedSandbox})`,
@@ -476,6 +580,11 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
     );
     return;
   }
+
+  // Restore sessions from Redis on startup (non-blocking)
+  loadSessionsFromRedis().catch((err: any) => {
+    console.warn("[E2B-Desktop] loadSessionsFromRedis error:", err.message);
+  });
 
   console.log(
     "[E2B-Desktop] Registering E2B desktop sandbox routes (@e2b/desktop SDK)",
