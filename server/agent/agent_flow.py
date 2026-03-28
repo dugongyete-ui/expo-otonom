@@ -43,7 +43,8 @@ from server.agent.tools.search import web_search, web_browse, info_search_web
 from server.agent.tools.shell import shell_exec, shell_view, shell_wait, shell_write_to_process, shell_kill_process
 from server.agent.tools.file import file_read, file_write, file_str_replace, file_find_by_name, file_find_in_content, image_view
 from server.agent.tools.message import message_notify_user, message_ask_user
-from server.agent.tools.browser import browser_navigate, browser_view, browser_click, browser_input, browser_move_mouse, browser_press_key, browser_select_option, browser_scroll_up, browser_scroll_down, browser_console_exec, browser_console_view, browser_save_image, browser_restart, browser_screenshot
+from server.agent.tools.browser import browser_navigate, browser_view, browser_click, browser_input, browser_move_mouse, browser_press_key, browser_select_option, browser_scroll_up, browser_scroll_down, browser_console_exec, browser_console_view, browser_save_image, browser_restart, browser_screenshot, browser_tab_list, browser_tab_new, browser_tab_close, browser_tab_switch, browser_drag, browser_file_upload
+from server.agent.tools.desktop import desktop_open_app, desktop_app_type, desktop_app_screenshot
 from server.agent.tools.mcp import mcp_call_tool, mcp_list_tools
 
 from server.agent.models.plan import Plan, Step, ExecutionStatus
@@ -499,6 +500,8 @@ def build_tool_content(tool_name: str, tool_result: ToolResult) -> Optional[Dict
         "browser_scroll_up", "browser_scroll_down",
         "browser_console_exec", "browser_console_view",
         "browser_save_image", "browser_restart", "browser_screenshot",
+        "browser_tab_list", "browser_tab_new", "browser_tab_close", "browser_tab_switch",
+        "browser_drag", "browser_file_upload",
     ):
         return {
             "type": "browser",
@@ -506,6 +509,15 @@ def build_tool_content(tool_name: str, tool_result: ToolResult) -> Optional[Dict
             "title": data.get("title", ""),
             "content": str(data.get("content", data.get("content_snippet", "")))[:2000],
             "save_path": data.get("save_path", ""),
+            "screenshot_b64": data.get("screenshot_b64", ""),
+        }
+    elif tool_name in ("desktop_open_app", "desktop_app_type", "desktop_app_screenshot"):
+        return {
+            "type": "browser",
+            "url": "",
+            "title": data.get("app", data.get("window", "")),
+            "content": "",
+            "save_path": "",
             "screenshot_b64": data.get("screenshot_b64", ""),
         }
     elif tool_name == "image_view":

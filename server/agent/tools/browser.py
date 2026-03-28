@@ -1156,6 +1156,429 @@ sys.exit(1)
     def close(self) -> None:
         self.current_url = None
 
+    # ── Multi-tab management ────────────────────────────────────────────────
+
+    def _cdp_list_tabs(self) -> List[dict]:
+        """Return list of CDP page tabs from Chrome remote debugging endpoint."""
+        result = self._run(
+            "curl -s --max-time 4 http://localhost:{}/json 2>/dev/null".format(self._CDP_PORT),
+            timeout=8,
+        )
+        if not result["stdout"].strip():
+            return []
+        try:
+            tabs = json.loads(result["stdout"])
+            return [t for t in tabs if isinstance(t, dict) and t.get("type") == "page"]
+        except Exception:
+            return []
+
+    def tab_list(self) -> ToolResult:
+        """List all open browser tabs via CDP."""
+        dep_err = self._preflight_deps()
+        if dep_err:
+            return ToolResult(success=False, message=dep_err)
+        tabs = self._cdp_list_tabs()
+        if not tabs:
+            # Fallback: report the current URL as single tab
+            return ToolResult(
+                success=True,
+                message="CDP not available; current tab: {}".format(self.current_url or "about:blank"),
+                data={"tabs": [{"index": 0, "url": self.current_url or "about:blank", "title": ""}], "count": 1},
+            )
+        tab_info = []
+        for i, t in enumerate(tabs):
+            tab_info.append({"index": i, "id": t.get("id", ""), "url": t.get("url", ""), "title": t.get("title", "")})
+        summary = "\n".join("[{}] {} — {}".format(ti["index"], ti["title"], ti["url"]) for ti in tab_info)
+        return ToolResult(
+            success=True,
+            message="Open tabs ({}):\n{}".format(len(tab_info), summary),
+            data={"tabs": tab_info, "count": len(tab_info)},
+        )
+
+    def tab_new(self, url: str = "") -> ToolResult:
+        """Open a new browser tab. Uses Ctrl+T, then navigates to url if given."""
+        dep_err = self._preflight_deps()
+        if dep_err:
+            return ToolResult(success=False, message=dep_err)
+        display = self._detect_display()
+        # Focus Chrome first
+        self._run(
+            "DISPLAY={d} wmctrl -a 'Google Chrome' 2>/dev/null || "
+            "DISPLAY={d} wmctrl -a 'Chromium' 2>/dev/null || true".format(d=display),
+            timeout=5,
+        )
+        time.sleep(0.2)
+        res = self._run("DISPLAY={d} xdotool key --clearmodifiers ctrl+t".format(d=display), timeout=5)
+        time.sleep(0.8)
+        if url:
+            safe_url = url.replace("'", "")
+            self._run(
+                "DISPLAY={d} xdotool type --clearmodifiers '{u}' && sleep 0.1 && "
+                "DISPLAY={d} xdotool key Return".format(d=display, u=safe_url),
+                timeout=10,
+            )
+            self.current_url = url
+            time.sleep(1)
+        screenshot_data = self._take_screenshot()
+        result_data: dict = {"url": url or "about:blank"}
+        if screenshot_data:
+            result_data["screenshot_b64"] = screenshot_data
+        return ToolResult(
+            success=res["exit_code"] == 0,
+            message="New tab opened{}.".format(" and navigated to: {}".format(url) if url else ""),
+            data=result_data,
+        )
+
+    def tab_close(self) -> ToolResult:
+        """Close the current browser tab using Ctrl+W."""
+        dep_err = self._preflight_deps()
+        if dep_err:
+            return ToolResult(success=False, message=dep_err)
+        display = self._detect_display()
+        self._run(
+            "DISPLAY={d} wmctrl -a 'Google Chrome' 2>/dev/null || "
+            "DISPLAY={d} wmctrl -a 'Chromium' 2>/dev/null || true".format(d=display),
+            timeout=5,
+        )
+        time.sleep(0.2)
+        res = self._run("DISPLAY={d} xdotool key --clearmodifiers ctrl+w".format(d=display), timeout=5)
+        time.sleep(0.8)
+        # Update current_url from the now-active tab (CDP reflects the tab Chrome activated after close)
+        remaining = self._cdp_list_tabs()
+        if remaining:
+            # Chrome activates the adjacent tab automatically; read it via CDP activate endpoint
+            # to find which tab is now in the foreground.  We use the first page tab as a safe proxy.
+            self.current_url = remaining[0].get("url", "")
+        screenshot_data = self._take_screenshot()
+        result_data2: dict = {"url": self.current_url}
+        if screenshot_data:
+            result_data2["screenshot_b64"] = screenshot_data
+        return ToolResult(
+            success=res["exit_code"] == 0,
+            message="Current tab closed.",
+            data=result_data2,
+        )
+
+    def tab_switch(self, index: int) -> ToolResult:
+        """Switch to a tab by its index. Uses CDP Target.activateTarget when possible,
+        falls back to Ctrl+Tab cycling."""
+        dep_err = self._preflight_deps()
+        if dep_err:
+            return ToolResult(success=False, message=dep_err)
+        tabs = self._cdp_list_tabs()
+        display = self._detect_display()
+        if tabs and 0 <= index < len(tabs):
+            tab_id = tabs[index].get("id", "")
+            if tab_id:
+                # Activate via CDP REST endpoint
+                activate_res = self._run(
+                    "curl -s --max-time 4 -X POST "
+                    "http://localhost:{port}/json/activate/{tid} 2>/dev/null".format(
+                        port=self._CDP_PORT, tid=tab_id
+                    ),
+                    timeout=8,
+                )
+                if activate_res["exit_code"] == 0:
+                    time.sleep(0.5)
+                    self.current_url = tabs[index].get("url", self.current_url or "")
+                    screenshot_data = self._take_screenshot()
+                    result_data: dict = {
+                        "index": index,
+                        "url": self.current_url,
+                        "title": tabs[index].get("title", ""),
+                    }
+                    if screenshot_data:
+                        result_data["screenshot_b64"] = screenshot_data
+                    return ToolResult(
+                        success=True,
+                        message="Switched to tab {} — {}".format(index, self.current_url),
+                        data=result_data,
+                    )
+        # Fallback: Ctrl+Tab cycling from tab 0
+        if index < 0:
+            return ToolResult(
+                success=False,
+                message="Tab index must be >= 0, got {}.".format(index),
+            )
+        self._run(
+            "DISPLAY={d} wmctrl -a 'Google Chrome' 2>/dev/null || "
+            "DISPLAY={d} wmctrl -a 'Chromium' 2>/dev/null || true".format(d=display),
+            timeout=5,
+        )
+        time.sleep(0.2)
+        # Go to first tab with Ctrl+1, then Ctrl+Tab to reach index
+        self._run("DISPLAY={d} xdotool key --clearmodifiers ctrl+1".format(d=display), timeout=5)
+        time.sleep(0.2)
+        for _ in range(max(0, index)):
+            self._run("DISPLAY={d} xdotool key --clearmodifiers ctrl+Tab".format(d=display), timeout=5)
+            time.sleep(0.2)
+        # Update current_url from CDP after keyboard navigation
+        new_tabs = self._cdp_list_tabs()
+        if new_tabs:
+            self.current_url = new_tabs[0].get("url", self.current_url or "")
+        screenshot_data2 = self._take_screenshot()
+        result_data2: dict = {"index": index, "url": self.current_url}
+        if screenshot_data2:
+            result_data2["screenshot_b64"] = screenshot_data2
+        return ToolResult(
+            success=True,
+            message="Switched to tab {} via keyboard{}.".format(
+                index, " — {}".format(self.current_url) if self.current_url else ""
+            ),
+            data=result_data2,
+        )
+
+    # ── Drag and drop ───────────────────────────────────────────────────────
+
+    def drag(
+        self,
+        source_x: float,
+        source_y: float,
+        target_x: float,
+        target_y: float,
+        source_index: Optional[int] = None,
+        target_index: Optional[int] = None,
+    ) -> ToolResult:
+        """Drag from (source_x, source_y) to (target_x, target_y).
+        Uses E2B SDK drag_and_drop when available; falls back to xdotool mousedown/mousemove/mouseup.
+        If source_index/target_index provided, uses CDP bounding box to resolve coordinates.
+        """
+        dep_err = self._preflight_deps()
+        if dep_err:
+            return ToolResult(success=False, message=dep_err)
+
+        sx, sy = float(source_x), float(source_y)
+        tx, ty = float(target_x), float(target_y)
+
+        if source_index is not None:
+            rect = self._cdp_get_element_rect(source_index)
+            if rect:
+                sx, sy = rect["x"], rect["y"]
+        if target_index is not None:
+            rect2 = self._cdp_get_element_rect(target_index)
+            if rect2:
+                tx, ty = rect2["x"], rect2["y"]
+
+        from server.agent.tools.e2b_sandbox import get_sandbox
+        sb = get_sandbox()
+        if sb is not None:
+            try:
+                sb.drag_and_drop(int(sx), int(sy), int(tx), int(ty))
+                time.sleep(0.5)
+                screenshot_data = self._take_screenshot()
+                result_data: dict = {"source_x": sx, "source_y": sy, "target_x": tx, "target_y": ty}
+                if screenshot_data:
+                    result_data["screenshot_b64"] = screenshot_data
+                return ToolResult(
+                    success=True,
+                    message="Dragged from ({}, {}) to ({}, {}).".format(int(sx), int(sy), int(tx), int(ty)),
+                    data=result_data,
+                )
+            except Exception as e:
+                logger.debug("[Browser] SDK drag_and_drop failed: %s — falling back to xdotool", e)
+
+        # xdotool fallback
+        display = self._detect_display()
+        drag_cmd = (
+            "DISPLAY={d} xdotool mousemove {sx} {sy} && "
+            "DISPLAY={d} xdotool mousedown 1 && "
+            "sleep 0.1 && "
+            "DISPLAY={d} xdotool mousemove --step=10 {tx} {ty} && "
+            "sleep 0.1 && "
+            "DISPLAY={d} xdotool mouseup 1"
+        ).format(d=display, sx=int(sx), sy=int(sy), tx=int(tx), ty=int(ty))
+        res = self._run(drag_cmd, timeout=15)
+        time.sleep(0.3)
+        screenshot_data2 = self._take_screenshot()
+        result_data2: dict = {"source_x": sx, "source_y": sy, "target_x": tx, "target_y": ty}
+        if screenshot_data2:
+            result_data2["screenshot_b64"] = screenshot_data2
+        return ToolResult(
+            success=res["exit_code"] == 0,
+            message="Dragged from ({}, {}) to ({}, {}) via xdotool.".format(int(sx), int(sy), int(tx), int(ty))
+            if res["exit_code"] == 0
+            else "Drag failed: {}".format(res["stderr"]),
+            data=result_data2,
+        )
+
+    # ── File upload ─────────────────────────────────────────────────────────
+
+    def file_upload(self, file_path: str, index: Optional[int] = None,
+                    coordinate_x: Optional[float] = None,
+                    coordinate_y: Optional[float] = None) -> ToolResult:
+        """Upload a file from the sandbox filesystem to a browser <input type="file"> element.
+        Uses CDP DOM.setFileInputFiles via a WebSocket script run inside the sandbox.
+        file_path must be an absolute path that already exists inside the E2B sandbox.
+        Falls back to clicking the element at the given coordinates if CDP fails.
+        """
+        dep_err = self._preflight_deps()
+        if dep_err:
+            return ToolResult(success=False, message=dep_err)
+
+        # Verify file exists in sandbox
+        check = self._run("test -f '{}' && echo exists".format(file_path.replace("'", "")), timeout=5)
+        if "exists" not in check.get("stdout", ""):
+            return ToolResult(
+                success=False,
+                message="File not found in sandbox: {}".format(file_path),
+            )
+
+        # el_index: 0-based index among all <input type="file"> elements on the page.
+        # If caller passes an interactive-element index, it is used as the file-input index.
+        el_index = int(index) if index is not None else 0
+
+        cdp_upload_script = r"""
+import sys, json, socket, base64, struct, urllib.request
+
+port = {port}
+file_path = {file_path_repr}
+el_index = {el_index}
+
+def _get_tabs():
+    try:
+        r = urllib.request.urlopen(f'http://localhost:{{port}}/json', timeout=3)
+        tabs = json.loads(r.read())
+        return [t for t in tabs if isinstance(t, dict) and t.get('type') == 'page']
+    except Exception:
+        return []
+
+def ws_handshake(host, port, path):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(8)
+    s.connect((host, port))
+    key = base64.b64encode(b"dzeckuploadkey1x").decode()
+    req = (
+        "GET {{}} HTTP/1.1\r\nHost: {{}}:{{}}\r\nUpgrade: websocket\r\n"
+        "Connection: Upgrade\r\nSec-WebSocket-Key: {{}}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    ).format(path, host, port, key)
+    s.sendall(req.encode())
+    resp = b""
+    while b"\r\n\r\n" not in resp:
+        resp += s.recv(1024)
+    return s
+
+def ws_send(s, msg):
+    data = msg.encode()
+    ln = len(data)
+    h = bytearray([0x81])
+    if ln < 126:
+        h.append(0x80 | ln)
+    else:
+        h.append(0x80 | 126)
+        h += struct.pack("!H", ln)
+    h += b"\x00\x00\x00\x00"
+    s.sendall(bytes(h) + data)
+
+def ws_recv(s, timeout=6):
+    raw = b""
+    s.settimeout(timeout)
+    try:
+        while True:
+            chunk = s.recv(4096)
+            if not chunk: break
+            raw += chunk
+            if len(raw) > 2:
+                pl = raw[1] & 0x7F
+                hl = 2
+                if pl == 126:
+                    hl = 4; pl = struct.unpack("!H", raw[2:4])[0]
+                elif pl == 127:
+                    hl = 10; pl = struct.unpack("!Q", raw[2:10])[0]
+                if len(raw) >= hl + pl:
+                    return raw[hl:hl+pl].decode("utf-8", errors="replace")
+    except socket.timeout:
+        pass
+    return raw.decode("utf-8", errors="replace") if raw else ""
+
+tabs = _get_tabs()
+if not tabs:
+    print(json.dumps({{"ok": False, "error": "No Chrome tabs found"}}))
+    sys.exit(0)
+
+ws_url = tabs[0].get("webSocketDebuggerUrl", "")
+if not ws_url:
+    print(json.dumps({{"ok": False, "error": "No WebSocket URL"}}))
+    sys.exit(0)
+
+import urllib.parse as up
+parsed = up.urlparse(ws_url)
+host = parsed.hostname or "localhost"
+p = parsed.port or port
+path = parsed.path
+
+try:
+    s = ws_handshake(host, p, path)
+    # Get document node
+    ws_send(s, json.dumps({{"id":1,"method":"DOM.getDocument","params":{{"depth":0}}}}))
+    r = ws_recv(s)
+    doc = json.loads(r)
+    root_id = doc.get("result",{{}}).get("root",{{}}).get("nodeId", 0)
+
+    # Query all file inputs
+    ws_send(s, json.dumps({{"id":2,"method":"DOM.querySelectorAll",
+                             "params":{{"nodeId":root_id,"selector":"input[type='file']"}}}}))
+    r2 = ws_recv(s)
+    qr = json.loads(r2)
+    node_ids = qr.get("result",{{}}).get("nodeIds",[])
+    if not node_ids:
+        print(json.dumps({{"ok": False, "error": "No file input elements found on page"}}))
+        s.close()
+        sys.exit(0)
+    target_node = node_ids[min(el_index, len(node_ids)-1)]
+
+    # Set files on the input
+    ws_send(s, json.dumps({{"id":3,"method":"DOM.setFileInputFiles",
+                             "params":{{"nodeId":target_node,"files":[file_path]}}}}))
+    r3 = ws_recv(s)
+    res3 = json.loads(r3)
+    if "error" in res3:
+        print(json.dumps({{"ok": False, "error": str(res3["error"])}}))
+    else:
+        print(json.dumps({{"ok": True, "node_id": target_node, "file": file_path}}))
+    s.close()
+except Exception as e:
+    print(json.dumps({{"ok": False, "error": str(e)}}))
+""".format(
+            port=self._CDP_PORT,
+            file_path_repr=repr(file_path),
+            el_index=el_index,
+        )
+
+        from server.agent.tools.e2b_sandbox import get_sandbox
+        sb = get_sandbox()
+        if sb is None:
+            return ToolResult(success=False, message="Sandbox not available.")
+        try:
+            sb.files.write("/tmp/_dzeck_cdp_upload.py", cdp_upload_script)
+            res = self._run("python3 /tmp/_dzeck_cdp_upload.py", timeout=20)
+            if res["exit_code"] == 0 and res["stdout"].strip():
+                out = json.loads(res["stdout"].strip())
+                if out.get("ok"):
+                    screenshot_data = self._take_screenshot()
+                    result_data: dict = {"file_path": file_path, "node_id": out.get("node_id")}
+                    if screenshot_data:
+                        result_data["screenshot_b64"] = screenshot_data
+                    return ToolResult(
+                        success=True,
+                        message="File uploaded: {}".format(file_path),
+                        data=result_data,
+                    )
+                return ToolResult(success=False, message="CDP file upload failed: {}".format(out.get("error", "unknown")))
+        except Exception as e:
+            logger.warning("[Browser] CDP file upload failed: %s", e)
+
+        # Fallback: click the file input element (opens system file dialog — limited in sandbox)
+        if coordinate_x is not None and coordinate_y is not None:
+            self._sdk_click(int(coordinate_x), int(coordinate_y))
+            time.sleep(0.5)
+        return ToolResult(
+            success=False,
+            message=(
+                "CDP file upload failed. Ensure Chrome remote debugging is running on port {}. "
+                "File path: {}".format(self._CDP_PORT, file_path)
+            ),
+        )
+
 
 # --- Stub for when E2B is not available ---
 
@@ -1200,6 +1623,26 @@ class _E2BRequiredBrowserStub:
         return ToolResult(success=False, message=self._E2B_ERR)
 
     def restart(self, url="") -> ToolResult:
+        return ToolResult(success=False, message=self._E2B_ERR)
+
+    def tab_list(self) -> ToolResult:
+        return ToolResult(success=False, message=self._E2B_ERR)
+
+    def tab_new(self, url="") -> ToolResult:
+        return ToolResult(success=False, message=self._E2B_ERR)
+
+    def tab_close(self) -> ToolResult:
+        return ToolResult(success=False, message=self._E2B_ERR)
+
+    def tab_switch(self, index=0) -> ToolResult:
+        return ToolResult(success=False, message=self._E2B_ERR)
+
+    def drag(self, source_x=0, source_y=0, target_x=0, target_y=0,
+             source_index=None, target_index=None) -> ToolResult:
+        return ToolResult(success=False, message=self._E2B_ERR)
+
+    def file_upload(self, file_path="", index=None,
+                    coordinate_x=None, coordinate_y=None) -> ToolResult:
         return ToolResult(success=False, message=self._E2B_ERR)
 
     def _take_screenshot(self) -> Optional[str]:
@@ -1332,6 +1775,60 @@ def browser_screenshot() -> ToolResult:
     return ToolResult(success=False, message="Screenshot failed or sandbox not available.")
 
 
+def browser_tab_list() -> ToolResult:
+    """List all open browser tabs."""
+    return _get_browser().tab_list()
+
+
+def browser_tab_new(url: str = "") -> ToolResult:
+    """Open a new browser tab, optionally navigating to a URL."""
+    return _get_browser().tab_new(url=url)
+
+
+def browser_tab_close() -> ToolResult:
+    """Close the current browser tab."""
+    return _get_browser().tab_close()
+
+
+def browser_tab_switch(index: int) -> ToolResult:
+    """Switch to a browser tab by its index (0-based)."""
+    return _get_browser().tab_switch(int(index))
+
+
+def browser_drag(
+    source_x: float,
+    source_y: float,
+    target_x: float,
+    target_y: float,
+    source_index: Optional[int] = None,
+    target_index: Optional[int] = None,
+) -> ToolResult:
+    """Drag from one coordinate/element to another on the current browser page."""
+    return _get_browser().drag(
+        source_x=float(source_x),
+        source_y=float(source_y),
+        target_x=float(target_x),
+        target_y=float(target_y),
+        source_index=int(source_index) if source_index is not None else None,
+        target_index=int(target_index) if target_index is not None else None,
+    )
+
+
+def browser_file_upload(
+    file_path: str,
+    index: Optional[int] = None,
+    coordinate_x: Optional[float] = None,
+    coordinate_y: Optional[float] = None,
+) -> ToolResult:
+    """Upload a file from the sandbox filesystem to a browser file input element."""
+    return _get_browser().file_upload(
+        file_path=file_path,
+        index=int(index) if index is not None else None,
+        coordinate_x=float(coordinate_x) if coordinate_x is not None else None,
+        coordinate_y=float(coordinate_y) if coordinate_y is not None else None,
+    )
+
+
 def image_view(path: str) -> ToolResult:
     """View an image file."""
     try:
@@ -1461,5 +1958,51 @@ class BrowserTool:
                 "name": "browser_screenshot",
                 "description": "Take a screenshot of the current browser desktop and return the image. Use this to visually verify what is on screen after actions like navigate, click, scroll, or input.",
                 "parameters": {"type": "object", "properties": {}, "required": []},
+            }},
+            {"type": "function", "function": {
+                "name": "browser_tab_list",
+                "description": "List all open browser tabs with their index, title, and URL. Use before switching tabs to know the correct index.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }},
+            {"type": "function", "function": {
+                "name": "browser_tab_new",
+                "description": "Open a new browser tab. Optionally navigate to a URL in the new tab.",
+                "parameters": {"type": "object", "properties": {
+                    "url": {"type": "string", "description": "(Optional) URL to open in the new tab. Omit to open a blank tab."},
+                }, "required": []},
+            }},
+            {"type": "function", "function": {
+                "name": "browser_tab_close",
+                "description": "Close the currently active browser tab.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }},
+            {"type": "function", "function": {
+                "name": "browser_tab_switch",
+                "description": "Switch to a browser tab by its index (0-based). Use browser_tab_list first to get the correct index.",
+                "parameters": {"type": "object", "properties": {
+                    "index": {"type": "integer", "description": "Zero-based index of the tab to switch to (from browser_tab_list)."},
+                }, "required": ["index"]},
+            }},
+            {"type": "function", "function": {
+                "name": "browser_drag",
+                "description": "Drag an element or coordinate to another position on the page. Useful for drag-and-drop interactions, sorting lists, moving sliders, etc.",
+                "parameters": {"type": "object", "properties": {
+                    "source_x": {"type": "number", "description": "X coordinate of the drag start position."},
+                    "source_y": {"type": "number", "description": "Y coordinate of the drag start position."},
+                    "target_x": {"type": "number", "description": "X coordinate of the drag end (drop) position."},
+                    "target_y": {"type": "number", "description": "Y coordinate of the drag end (drop) position."},
+                    "source_index": {"type": "integer", "description": "(Optional) Interactive element index to use as drag source (overrides source_x/y)."},
+                    "target_index": {"type": "integer", "description": "(Optional) Interactive element index to use as drop target (overrides target_x/y)."},
+                }, "required": ["source_x", "source_y", "target_x", "target_y"]},
+            }},
+            {"type": "function", "function": {
+                "name": "browser_file_upload",
+                "description": "Upload a file from the sandbox filesystem to a browser <input type='file'> element. The file must already exist inside the E2B sandbox.",
+                "parameters": {"type": "object", "properties": {
+                    "file_path": {"type": "string", "description": "Absolute path to the file inside the sandbox (e.g. /home/user/document.pdf)."},
+                    "index": {"type": "integer", "description": "(Optional) Index of the file input element (from browser_view interactive elements)."},
+                    "coordinate_x": {"type": "number", "description": "(Optional) X coordinate of the file input element."},
+                    "coordinate_y": {"type": "number", "description": "(Optional) Y coordinate of the file input element."},
+                }, "required": ["file_path"]},
             }},
         ]

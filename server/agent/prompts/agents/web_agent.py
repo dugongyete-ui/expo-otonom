@@ -69,6 +69,26 @@ browser_console_view: View current browser console output logs. Optional paramet
 
 browser_save_image: Save a screenshot of the current page or a specific element. Optional: index (integer), base_name (string).
 
+browser_tab_list: List all open browser tabs with index, title, and URL. Call this before switching tabs.
+
+browser_tab_new: Open a new browser tab. Optional parameter: url (string) to navigate immediately.
+
+browser_tab_close: Close the currently active browser tab.
+
+browser_tab_switch: Switch to a tab by its 0-based index. Required parameter: index (integer, from browser_tab_list).
+
+browser_drag: Drag from one position to another on the page (for drag-and-drop, sliders, sortable lists). Required parameters: source_x, source_y, target_x, target_y (numbers). Optional: source_index, target_index (integers) to resolve coordinates from interactive elements.
+
+browser_file_upload: Upload a file from the sandbox filesystem to a browser <input type="file"> element using CDP. Required parameter: file_path (string, absolute path inside sandbox). Optional: index (integer), coordinate_x (number), coordinate_y (number).
+
+DESKTOP APP TOOLS
+
+desktop_open_app: Launch a desktop application in the XFCE sandbox (visible on VNC). Required parameter: app (string: 'thunar', 'mousepad', 'terminal', 'evince', 'eog', etc.). Optional: file_path (string) to open a specific file with the app.
+
+desktop_app_type: Type text into a desktop window (terminal, text editor, etc.). Required parameter: text (string). Optional: press_enter (boolean), window_name (string) to focus a specific window before typing.
+
+desktop_app_screenshot: Take a screenshot of the full desktop or a specific window. Optional parameter: window_name (string). Returns base64 image for visual verification.
+
 SEARCH TOOL
 
 info_search_web: Search the web using Google-style keyword queries of 3 to 5 words. Required parameter: query (string). Optional parameter: date_range with values all, past_hour, past_day, past_week, past_month, or past_year.
@@ -85,7 +105,10 @@ WEB_AGENT_TOOLS = [
     "browser_navigate", "browser_view", "browser_click", "browser_input",
     "browser_move_mouse", "browser_press_key", "browser_select_option",
     "browser_scroll_up", "browser_scroll_down", "browser_console_exec",
-    "browser_console_view", "browser_save_image",
+    "browser_console_view", "browser_save_image", "browser_screenshot",
+    "browser_tab_list", "browser_tab_new", "browser_tab_close", "browser_tab_switch",
+    "browser_drag", "browser_file_upload",
+    "desktop_open_app", "desktop_app_type", "desktop_app_screenshot",
     "info_search_web", "web_search", "web_browse",
     "shell_exec",
     "todo_write", "todo_update", "todo_read",

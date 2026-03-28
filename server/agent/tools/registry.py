@@ -21,7 +21,13 @@ from server.agent.tools.browser import (
     browser_scroll_up, browser_scroll_down, browser_console_exec,
     browser_console_view, browser_save_image, browser_restart,
     browser_screenshot,
+    browser_tab_list, browser_tab_new, browser_tab_close, browser_tab_switch,
+    browser_drag, browser_file_upload,
     image_view as browser_image_view,
+)
+from server.agent.tools.desktop import (
+    DesktopTool,
+    desktop_open_app, desktop_app_type, desktop_app_screenshot,
 )
 
 
@@ -33,6 +39,7 @@ _search_tool = SearchTool()
 _message_tool = MessageTool()
 _mcp_tool = MCPTool()
 _browser_tool = BrowserTool()
+_desktop_tool = DesktopTool()
 _todo_tool = TodoTool()
 _task_tool = TaskTool()
 _idle_tool = IdleTool()
@@ -44,6 +51,7 @@ ALL_TOOL_INSTANCES = [
     _message_tool,
     _mcp_tool,
     _browser_tool,
+    _desktop_tool,
     _todo_tool,
     _task_tool,
     _idle_tool,
@@ -91,6 +99,15 @@ TOOLS: Dict[str, Callable] = {
     "browser_save_image": browser_save_image,
     "browser_restart": browser_restart,
     "browser_screenshot": browser_screenshot,
+    "browser_tab_list": browser_tab_list,
+    "browser_tab_new": browser_tab_new,
+    "browser_tab_close": browser_tab_close,
+    "browser_tab_switch": browser_tab_switch,
+    "browser_drag": browser_drag,
+    "browser_file_upload": browser_file_upload,
+    "desktop_open_app": desktop_open_app,
+    "desktop_app_type": desktop_app_type,
+    "desktop_app_screenshot": desktop_app_screenshot,
     "mcp_call_tool": mcp_call_tool,
     "mcp_list_tools": mcp_list_tools,
     "todo_write": todo_write,
@@ -139,6 +156,11 @@ TOOLKIT_MAP: Dict[str, str] = {
     "browser_save_image": "browser",
     "browser_restart": "browser",
     "browser_screenshot": "browser",
+    "browser_tab_list": "browser", "browser_tab_new": "browser",
+    "browser_tab_close": "browser", "browser_tab_switch": "browser",
+    "browser_drag": "browser", "browser_file_upload": "browser",
+    "desktop_open_app": "desktop", "desktop_app_type": "desktop",
+    "desktop_app_screenshot": "desktop",
     "message_notify_user": "message", "message_ask_user": "message",
     "mcp_call_tool": "mcp", "mcp_list_tools": "mcp",
     "todo_write": "todo", "todo_update": "todo", "todo_read": "todo",
