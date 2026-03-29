@@ -42,6 +42,7 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
   const [isToolPanelVisible, setIsToolPanelVisible] = useState(true);
   const [rightPanelMode, setRightPanelMode] = useState<"tools" | "browser" | "files">("tools");
   const [showTakeOver, setShowTakeOver] = useState(false);
+  const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
   const insets = useSafeAreaInsets();
 
@@ -95,7 +96,10 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
     }
   }, []);
 
-  const handleTakeOver = useCallback((targetSessionId: string) => {
+  const handleTakeOver = useCallback((e2bSessionId: string) => {
+    // e2bSessionId is the E2B desktop session ID used for VNC connection.
+    // agentSessionId (sessionId state) is used for pause/resume API calls.
+    setTakeOverE2bSessionId(e2bSessionId || undefined);
     setShowTakeOver(true);
   }, []);
 
@@ -224,7 +228,8 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
       {/* TakeOver Overlay */}
       {showTakeOver && sessionId && (
         <TakeOverView
-          sessionId={sessionId}
+          agentSessionId={sessionId}
+          e2bSessionId={takeOverE2bSessionId}
           onClose={handleCloseTakeOver}
         />
       )}

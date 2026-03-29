@@ -86,6 +86,32 @@ CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 
 CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
 
+def _is_session_paused(session_id: str) -> bool:
+    """Check whether a session is paused via Redis key agent:{session_id}:paused.
+
+    Requires REDIS_HOST to be configured. Returns False gracefully when Redis
+    is unavailable — pause semantics are best-effort without Redis.
+    """
+    if not session_id:
+        return False
+    try:
+        _redis_host = os.environ.get("REDIS_HOST", "")
+        if not _redis_host:
+            return False
+        import redis as _redis_lib
+        _rc = _redis_lib.Redis(
+            host=_redis_host,
+            port=int(os.environ.get("REDIS_PORT", "6379")),
+            password=os.environ.get("REDIS_PASSWORD") or os.environ.get("REDIS_PASS") or None,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        _val = _rc.get("agent:{}:paused".format(session_id))
+        _rc.close()
+        return bool(_val)
+    except Exception:
+        return False
+
 if not CEREBRAS_API_KEY:
     _err_event = json.dumps({"type": "error", "error": "API key tidak dikonfigurasi. Tambahkan CEREBRAS_API_KEY di environment variables lalu restart server."})
     sys.stdout.write(_err_event + "\n")
@@ -1548,8 +1574,28 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
         loop = asyncio.get_event_loop()
         _prev_tools_supported = _TOOLS_SUPPORTED
 
+        async def _wait_if_paused() -> None:
+            """Block until the session is no longer paused (takeover mode).
+            Polls Redis every 1 second. Yields a notify event on first pause."""
+            if not self.session_id:
+                return
+            _emitted = False
+            _waited = 0
+            while _is_session_paused(self.session_id):
+                if not _emitted:
+                    _emitted = True
+                    yield make_event("notify", content="[Takeover] Agent dijeda. Menunggu kontrol dikembalikan...")
+                await asyncio.sleep(1)
+                _waited += 1
+                if _waited > 3600:
+                    break
+
         for iteration in range(self.max_tool_iterations):
             try:
+                # ── Takeover pause check: wait before each iteration ──────────
+                async for _pev in _wait_if_paused():
+                    yield _pev
+
                 if iteration % 3 == 0 and bool(os.environ.get("E2B_API_KEY", "")):
                     try:
                         from server.agent.tools.e2b_sandbox import keepalive as _e2b_keepalive
@@ -1576,6 +1622,10 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                 if tool_calls:
                     step_done = False
                     for tc_idx, tc in enumerate(tool_calls):
+                        # ── Per-tool pause check (handles batched tool calls) ──
+                        async for _pev2 in _wait_if_paused():
+                            yield _pev2
+
                         fn_name = tc.get("name", "")
                         fn_args = tc.get("arguments", {})
                         if isinstance(fn_args, str):

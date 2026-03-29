@@ -10,7 +10,7 @@ import multer from "multer";
 import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox } from "./e2b-desktop";
 import { requireAuth } from "./auth-routes";
 import { getCollection } from "./db/mongo";
-import { redisXRead, redisXRange } from "./db/redis";
+import { redisXRead, redisXRange, redisSet, redisGet, redisDel, getRedisClient } from "./db/redis";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -833,7 +833,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
       if (code !== 0) console.error(`Agent process exited with code ${code}. Stderr: ${session.stderrBuffer.slice(-500)}`);
 
-      // Sync completed session to MongoDB
+      // Sync completed session to MongoDB + cleanup Redis stream after 24h
       (async () => {
         try {
           const col = await getCollection("agent_sessions");
@@ -854,6 +854,17 @@ export async function registerRoutes(app: any): Promise<Server> {
         } catch (err: any) {
           console.warn("[sessions] Failed to sync session completion to MongoDB:", err.message);
         }
+        // Set a 24-hour expiry on the Redis stream so it self-cleans after events are replayed
+        try {
+          const rc = getRedisClient();
+          if (rc) {
+            await (rc as any).expire(`stream:session:${sid}`, 86400);
+          }
+        } catch {}
+        // Also clear any stale pause key left over from a crashed takeover
+        try {
+          await redisDel(`agent:${sid}:paused`);
+        } catch {}
       })();
     });
 
@@ -1052,6 +1063,46 @@ export async function registerRoutes(app: any): Promise<Server> {
       for (const client of session.clients) { try { client.end(); } catch {} }
     }
     res.json({ stopped: true });
+  });
+
+  // ─── Takeover: Pause agent for a session (set Redis key) ─────────────────
+  app.post("/api/agent/sessions/:sid/pause", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const owner: string = (session as any)._userId || "";
+    const requestingUser: string = req.user?.id || "";
+    if (owner && requestingUser !== owner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const key = `agent:${sid}:paused`;
+    const ok = await redisSet(key, "1", 3600);
+    console.log(`[Takeover] Session ${sid} paused (Redis ${ok ? "ok — agent will pause before next tool call" : "unavailable — pause may not propagate to Python agent"})`);
+    (session as any)._paused = true;
+    _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dijeda untuk takeover mode." })}\n\n`);
+    res.json({ paused: true, session_id: sid });
+  });
+
+  // ─── Takeover: Resume agent for a session (clear Redis key) ──────────────
+  app.post("/api/agent/sessions/:sid/resume", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const owner: string = (session as any)._userId || "";
+    const requestingUser: string = req.user?.id || "";
+    if (owner && requestingUser !== owner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const key = `agent:${sid}:paused`;
+    await redisDel(key);
+    (session as any)._paused = false;
+    console.log(`[Takeover] Session ${sid} resumed`);
+    _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dilanjutkan." })}\n\n`);
+    res.json({ resumed: true, session_id: sid });
   });
 
   // ─── Todo list endpoint (read todo for a session) ─────────────────────────

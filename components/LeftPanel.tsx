@@ -41,13 +41,19 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
       const res = await fetch(`${baseUrl}/api/sessions`, { headers });
       if (res.ok) {
         const data = await res.json();
-        const mapped: Session[] = (data.sessions || []).map((s: any) => ({
-          session_id: s.session_id,
-          title: `Session ${s.session_id.slice(-6)}`,
-          timestamp: s.startedAt || Date.now(),
-          preview: s.eventCount ? `${s.eventCount} events` : undefined,
-          is_running: s.is_running || false,
-        }));
+        const mapped: Session[] = (data.sessions || []).map((s: any) => {
+          const rawMsg: string = s.user_message || "";
+          const title = rawMsg.trim()
+            ? (rawMsg.length > 48 ? rawMsg.slice(0, 48) + "…" : rawMsg)
+            : `Session ${s.session_id.slice(-6)}`;
+          return {
+            session_id: s.session_id,
+            title,
+            timestamp: s.startedAt || Date.now(),
+            preview: s.eventCount ? `${s.eventCount} events` : undefined,
+            is_running: s.is_running || false,
+          };
+        });
         setSessions(mapped);
       }
     } catch (error) {

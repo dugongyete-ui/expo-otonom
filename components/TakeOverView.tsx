@@ -2,8 +2,13 @@
  * TakeOverView - Full-screen interactive VNC overlay.
  * Matches ai-manus TakeOverView.vue pattern.
  * Provides full interactive desktop control (viewOnly=false).
+ *
+ * Props:
+ *  - agentSessionId: agent session ID used for pause/resume API calls
+ *  - e2bSessionId:   E2B desktop session ID used for VNC WebSocket connection
+ *  - visible, onClose: standard overlay lifecycle
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -14,19 +19,51 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { VNCViewer } from "./VNCViewer";
+import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 
 interface TakeOverViewProps {
-  sessionId: string;
+  /** Agent session ID (for pause/resume API calls). */
+  agentSessionId: string;
+  /** E2B desktop session ID (for VNC WebSocket connection). Defaults to agentSessionId if not provided. */
+  e2bSessionId?: string;
   visible?: boolean;
   onClose: () => void;
 }
 
+async function callPauseResume(agentSessionId: string, action: "pause" | "resume"): Promise<boolean> {
+  if (!agentSessionId) return false;
+  try {
+    const baseUrl = getApiBaseUrl();
+    const token = getStoredToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const resp = await fetch(`${baseUrl}/api/agent/sessions/${agentSessionId}/${action}`, {
+      method: "POST",
+      headers,
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(`[TakeOverView] ${action} failed (${resp.status}): ${body}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[TakeOverView] ${action} call failed:`, err);
+    return false;
+  }
+}
+
 export function TakeOverView({
-  sessionId,
+  agentSessionId,
+  e2bSessionId,
   visible = true,
   onClose,
 }: TakeOverViewProps) {
   const [vncConnected, setVncConnected] = useState(false);
+  const pausedRef = useRef(false);
+
+  // The VNC viewer connects to the E2B desktop session (not the agent session)
+  const vncSessionId = e2bSessionId || agentSessionId;
 
   const handleVNCConnected = useCallback(() => {
     setVncConnected(true);
@@ -43,21 +80,35 @@ export function TakeOverView({
     console.log("[TakeOverView] VNC credentials required");
   }, []);
 
-  // Reset state when visibility changes
+  // Pause agent when takeover opens; resume when it closes
   useEffect(() => {
-    if (!visible) {
+    if (!agentSessionId) return;
+    if (visible && !pausedRef.current) {
+      pausedRef.current = true;
+      callPauseResume(agentSessionId, "pause");
+    } else if (!visible && pausedRef.current) {
+      pausedRef.current = false;
       setVncConnected(false);
+      callPauseResume(agentSessionId, "resume");
     }
-  }, [visible]);
+  }, [visible, agentSessionId]);
 
-  if (!visible || !sessionId) return null;
+  const handleClose = useCallback(() => {
+    if (agentSessionId && pausedRef.current) {
+      pausedRef.current = false;
+      callPauseResume(agentSessionId, "resume");
+    }
+    onClose();
+  }, [agentSessionId, onClose]);
+
+  if (!visible || !agentSessionId) return null;
 
   const content = (
     <View style={styles.container}>
-      {/* VNC Viewer - full screen, interactive */}
+      {/* VNC Viewer - full screen, interactive, connected via E2B session ID */}
       <View style={styles.vncContainer}>
         <VNCViewer
-          sessionId={sessionId}
+          sessionId={vncSessionId}
           enabled={visible}
           viewOnly={false}
           onConnected={handleVNCConnected}
@@ -74,11 +125,17 @@ export function TakeOverView({
         </View>
       )}
 
+      {/* Pause indicator */}
+      <View style={styles.pauseBadge}>
+        <Ionicons name="pause-circle" size={14} color="#FF9F0A" />
+        <Text style={styles.pauseText}>Agent Dijeda</Text>
+      </View>
+
       {/* Exit button at bottom center */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.exitButton}
-          onPress={onClose}
+          onPress={handleClose}
           activeOpacity={0.8}
         >
           <Ionicons name="exit-outline" size={16} color="#ffffff" />
@@ -103,7 +160,7 @@ export function TakeOverView({
       visible={visible}
       animationType="fade"
       presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       {content}
     </Modal>
@@ -149,6 +206,24 @@ const styles = StyleSheet.create({
   },
   connectedText: {
     color: "#ffffff",
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  pauseBadge: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  pauseText: {
+    color: "#FF9F0A",
     fontSize: 11,
     fontFamily: "Inter_500Medium",
   },
