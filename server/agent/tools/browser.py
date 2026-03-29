@@ -218,6 +218,27 @@ class E2BDesktopBrowserSession:
     # CDP remote debugging port used by Chrome in sandbox
     _CDP_PORT = 9222
 
+    def _wait_for_cdp_ready(self, max_retries: int = 10, interval: int = 3) -> bool:
+        """Wait for Chrome CDP port to be ready after launch.
+        
+        Polls /json endpoint on localhost:CDP_PORT up to max_retries times
+        with interval seconds between attempts (total max ~30s).
+        Returns True if CDP responded, False if all retries failed.
+        """
+        for attempt in range(1, max_retries + 1):
+            result = self._run(
+                "curl -s --max-time 2 http://localhost:{}/json 2>/dev/null | head -c 100".format(self._CDP_PORT),
+                timeout=5,
+            )
+            if result["exit_code"] == 0 and result["stdout"].strip().startswith("["):
+                logger.info("[Browser] CDP port %d ready after %d attempt(s)", self._CDP_PORT, attempt)
+                return True
+            if attempt < max_retries:
+                logger.debug("[Browser] CDP not ready (attempt %d/%d), waiting %ds...", attempt, max_retries, interval)
+                time.sleep(interval)
+        logger.error("[Browser] CDP port %d not ready after %d attempts (%ds timeout)", self._CDP_PORT, max_retries, max_retries * interval)
+        return False
+
     def _detect_display(self) -> str:
         """Detect the active X display inside the E2B Desktop sandbox.
         E2B Desktop uses XFCE4 which typically runs on :0. Verifies via xdpyinfo.
@@ -274,9 +295,11 @@ class E2BDesktopBrowserSession:
                         "{f} about:blank >/dev/null 2>&1 &".format(d=display, b=browser_app, f=cdp_flag),
                         timeout=10
                     )
-                    time.sleep(2)
-                    logger.info("[Browser] Launched %s on display %s via SDK", browser_app, display)
-                    return True
+                    logger.info("[Browser] Launched %s on display %s via SDK, waiting for CDP", browser_app, display)
+                    # Wait for CDP port — same guard applied to shell fallback path
+                    if self._wait_for_cdp_ready(max_retries=10, interval=3):
+                        return True
+                    logger.warning("[Browser] SDK-launched %s: CDP port not ready", browser_app)
                 except Exception:
                     continue
 
@@ -289,9 +312,12 @@ class E2BDesktopBrowserSession:
                 timeout=5
             )
             if res["exit_code"] == 0:
-                time.sleep(3)
                 logger.info("[Browser] Launched %s on display %s via shell", browser, display)
-                return True
+                # Wait for CDP port to become ready (retry loop)
+                if self._wait_for_cdp_ready(max_retries=10, interval=3):
+                    return True
+                logger.warning("[Browser] %s launched but CDP port not ready", browser)
+                continue
         logger.error("[Browser] All Chrome launch attempts failed for display %s", display)
         return False
 

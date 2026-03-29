@@ -2,6 +2,7 @@
  * FilePanel - Session file tracker panel.
  * Displays files written during the session, sourced from MongoDB session_files.
  * Uses GET /api/sessions/:sessionId/files endpoint.
+ * Supports inline preview: code (via CodeBlock), images, markdown (via MarkdownText).
  */
 import React, { useState, useCallback, useEffect } from "react";
 import {
@@ -13,9 +14,12 @@ import {
   ActivityIndicator,
   Platform,
   Linking,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getApiBaseUrl } from "@/lib/api-service";
+import { CodeBlock } from "@/components/CodeBlock";
+import { MarkdownText } from "@/components/MarkdownText";
 
 interface SessionFile {
   name: string;
@@ -33,6 +37,30 @@ interface FilePanelProps {
   onFileSelect?: (file: SessionFile) => void;
 }
 
+const CODE_EXTENSIONS = new Set([
+  "py", "js", "ts", "tsx", "jsx", "html", "css", "json", "yaml", "yml",
+  "sh", "bash", "sql", "xml", "toml", "ini", "conf", "env", "log",
+  "go", "rs", "java", "cpp", "c", "h", "rb", "php", "kt", "swift",
+  "dart", "r", "scala", "lua", "zig", "vue", "svelte",
+]);
+
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
+const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
+const TEXT_EXTENSIONS = new Set(["txt", "rtf", "csv", "tsv"]);
+
+function getFileExt(name: string): string {
+  return name.split(".").pop()?.toLowerCase() || "";
+}
+
+function isCodeFile(name: string): boolean { return CODE_EXTENSIONS.has(getFileExt(name)); }
+function isImageFile(name: string): boolean { return IMAGE_EXTENSIONS.has(getFileExt(name)); }
+function isMarkdownFile(name: string): boolean { return MARKDOWN_EXTENSIONS.has(getFileExt(name)); }
+function isTextFile(name: string): boolean { return TEXT_EXTENSIONS.has(getFileExt(name)); }
+
+function canPreview(name: string): boolean {
+  return isCodeFile(name) || isImageFile(name) || isMarkdownFile(name) || isTextFile(name);
+}
+
 export function FilePanel({
   sessionId,
   isVisible = false,
@@ -42,6 +70,10 @@ export function FilePanel({
   const [files, setFiles] = useState<SessionFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [previewFile, setPreviewFile] = useState<SessionFile | null>(null);
+  const [previewContent, setPreviewContent] = useState<string>("");
+  const [previewIsMarkdown, setPreviewIsMarkdown] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const loadFiles = useCallback(async () => {
     if (!sessionId) return;
@@ -69,16 +101,49 @@ export function FilePanel({
     }
   }, [isVisible, sessionId, loadFiles]);
 
-  const downloadFile = useCallback(async (file: SessionFile) => {
+  const getDownloadUrl = useCallback((file: SessionFile): string => {
     const baseUrl = getApiBaseUrl();
-    const url = file.download_url
-      ? `${baseUrl}${file.download_url}`
-      : `${baseUrl}/api/files/download?path=${encodeURIComponent(file.path)}&name=${encodeURIComponent(file.name)}`;
+    if (file.download_url) {
+      const normalised = file.download_url.replace("/api/files/download", "/api/sandbox/download");
+      return `${baseUrl}${normalised}`;
+    }
+    return `${baseUrl}/api/sandbox/download?path=${encodeURIComponent(file.path)}&name=${encodeURIComponent(file.name)}`;
+  }, []);
+
+  const downloadFile = useCallback(async (file: SessionFile) => {
+    const url = getDownloadUrl(file);
     if (Platform.OS === "web") {
       window.open(url, "_blank");
     } else {
       Linking.openURL(url).catch(() => {});
     }
+  }, [getDownloadUrl]);
+
+  const openPreview = useCallback(async (file: SessionFile) => {
+    setPreviewFile(file);
+    setPreviewContent("");
+    setPreviewIsMarkdown(false);
+    if (isImageFile(file.name)) return;
+
+    setPreviewLoading(true);
+    try {
+      const url = getDownloadUrl(file);
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      const truncated = text.length > 8000 ? text.slice(0, 8000) + "\n\n[truncated...]" : text;
+      setPreviewIsMarkdown(isMarkdownFile(file.name));
+      setPreviewContent(truncated);
+    } catch (e) {
+      setPreviewContent(`Failed to load preview: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [getDownloadUrl]);
+
+  const closePreview = useCallback(() => {
+    setPreviewFile(null);
+    setPreviewContent("");
   }, []);
 
   const formatSize = (bytes?: number) => {
@@ -89,7 +154,7 @@ export function FilePanel({
   };
 
   const getFileIcon = (name: string): keyof typeof Ionicons.glyphMap => {
-    const ext = name.split(".").pop()?.toLowerCase() || "";
+    const ext = getFileExt(name);
     const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
       py: "logo-python",
       js: "logo-javascript",
@@ -115,6 +180,55 @@ export function FilePanel({
 
   if (!isVisible) return null;
 
+  if (previewFile) {
+    const isImg = isImageFile(previewFile.name);
+    const isCode = isCodeFile(previewFile.name);
+    const ext = getFileExt(previewFile.name);
+    const imgUrl = isImg ? getDownloadUrl(previewFile) : "";
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={closePreview} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={14} color="#636366" />
+            <Text style={styles.backBtnText}>Files</Text>
+          </TouchableOpacity>
+          <View style={styles.previewHeaderCenter}>
+            <Text style={styles.previewFileName} numberOfLines={1}>{previewFile.name}</Text>
+          </View>
+          <TouchableOpacity style={styles.downloadBtn} onPress={() => downloadFile(previewFile)} activeOpacity={0.7}>
+            <Ionicons name="download-outline" size={14} color="#636366" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.previewArea} showsVerticalScrollIndicator>
+          {isImg ? (
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: imgUrl }} style={styles.previewImage} resizeMode="contain" />
+            </View>
+          ) : previewLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator size="small" color="#FFD60A" />
+              <Text style={styles.loadingText}>Loading preview...</Text>
+            </View>
+          ) : isCode ? (
+            <View style={styles.codePreviewContainer}>
+              <CodeBlock code={previewContent} language={ext} />
+            </View>
+          ) : previewIsMarkdown ? (
+            <View style={styles.markdownPreviewContainer}>
+              <MarkdownText text={previewContent} />
+            </View>
+          ) : (
+            <View style={styles.textPreviewContainer}>
+              <Text style={styles.previewText} selectable>{previewContent}</Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -123,19 +237,11 @@ export function FilePanel({
           <Text style={styles.headerTitle}>Session Files</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={loadFiles}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={styles.iconBtn} onPress={loadFiles} activeOpacity={0.7}>
             <Ionicons name="refresh-outline" size={14} color="#636366" />
           </TouchableOpacity>
           {onClose && (
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.iconBtn} onPress={onClose} activeOpacity={0.7}>
               <Ionicons name="close" size={14} color="#636366" />
             </TouchableOpacity>
           )}
@@ -163,15 +269,17 @@ export function FilePanel({
             <TouchableOpacity
               key={index}
               style={styles.fileItem}
-              onPress={() => onFileSelect?.(file)}
+              onPress={() => {
+                if (canPreview(file.name)) {
+                  openPreview(file);
+                } else {
+                  onFileSelect?.(file);
+                }
+              }}
               activeOpacity={0.7}
             >
               <View style={styles.fileIcon}>
-                <Ionicons
-                  name={getFileIcon(file.name)}
-                  size={14}
-                  color="#5AC8FA"
-                />
+                <Ionicons name={getFileIcon(file.name)} size={14} color="#5AC8FA" />
               </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
@@ -179,9 +287,15 @@ export function FilePanel({
                   <Text style={styles.fileSize}>{formatSize(file.size)}</Text>
                 )}
               </View>
+              {canPreview(file.name) && (
+                <Ionicons name="eye-outline" size={12} color="#8a8780" style={styles.eyeIcon} />
+              )}
               <TouchableOpacity
-                style={styles.downloadBtn}
-                onPress={() => downloadFile(file)}
+                style={styles.downloadBtnSmall}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  downloadFile(file);
+                }}
                 activeOpacity={0.7}
               >
                 <Ionicons name="download-outline" size={12} color="#636366" />
@@ -225,14 +339,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
   },
-  refreshBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  closeBtn: {
+  iconBtn: {
     width: 24,
     height: 24,
     borderRadius: 4,
@@ -273,7 +380,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#8a8780",
   },
+  eyeIcon: {
+    marginHorizontal: 2,
+  },
   downloadBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f5f3ee",
+  },
+  downloadBtnSmall: {
     width: 24,
     height: 24,
     borderRadius: 4,
@@ -312,5 +430,58 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     color: "#8a8780",
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  backBtnText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: "#636366",
+  },
+  previewHeaderCenter: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  previewFileName: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: "#1a1916",
+  },
+  previewArea: {
+    flex: 1,
+    backgroundColor: "#f8f7f4",
+  },
+  imageContainer: {
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+  previewImage: {
+    width: "100%",
+    height: 300,
+    borderRadius: 8,
+  },
+  codePreviewContainer: {
+    padding: 8,
+  },
+  markdownPreviewContainer: {
+    padding: 16,
+    backgroundColor: "#ffffff",
+  },
+  textPreviewContainer: {
+    padding: 16,
+    backgroundColor: "#ffffff",
+  },
+  previewText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#1a1916",
+    lineHeight: 22,
   },
 });

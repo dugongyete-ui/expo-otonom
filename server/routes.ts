@@ -61,6 +61,79 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({ status: "ok", timestamp: new Date().toISOString(), e2bEnabled: isE2BEnabled() });
   });
 
+  // ─── Config API (runtime config without restart) ──────────────────────────
+  // Load persisted config from MongoDB on startup and apply to process.env
+  (async () => {
+    try {
+      const col = await getCollection("app_config");
+      if (col) {
+        const doc = await (col as any).findOne({ _type: "app_config" }, { projection: { _id: 0 } });
+        if (doc) {
+          if (doc.CEREBRAS_CHAT_MODEL) process.env.CEREBRAS_CHAT_MODEL = doc.CEREBRAS_CHAT_MODEL;
+          if (doc.CEREBRAS_AGENT_MODEL) process.env.CEREBRAS_AGENT_MODEL = doc.CEREBRAS_AGENT_MODEL;
+          if (doc.SEARCH_PROVIDER) process.env.SEARCH_PROVIDER = doc.SEARCH_PROVIDER;
+          console.log("[Config] Loaded persisted config from MongoDB:", {
+            CEREBRAS_CHAT_MODEL: doc.CEREBRAS_CHAT_MODEL,
+            CEREBRAS_AGENT_MODEL: doc.CEREBRAS_AGENT_MODEL,
+            SEARCH_PROVIDER: doc.SEARCH_PROVIDER,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn("[Config] Failed to load persisted config from MongoDB:", err.message);
+    }
+  })();
+
+  app.get("/api/config", requireAuth, (_req: any, res: any) => {
+    res.json({
+      CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+      CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+      SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
+      AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
+      E2B_ENABLED: isE2BEnabled(),
+    });
+  });
+
+  app.put("/api/config", requireAuth, async (req: any, res: any) => {
+    const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER"];
+    const updates: Record<string, string> = {};
+
+    for (const key of allowed) {
+      if (req.body && typeof req.body[key] === "string" && req.body[key].trim()) {
+        updates[key] = req.body[key].trim();
+        process.env[key] = updates[key];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid config fields provided. Allowed: " + allowed.join(", ") });
+    }
+
+    // Persist to MongoDB so config survives server restarts
+    try {
+      const col = await getCollection("app_config");
+      if (col) {
+        await (col as any).updateOne(
+          { _type: "app_config" },
+          { $set: { ...updates, _type: "app_config", updated_at: new Date() } },
+          { upsert: true },
+        );
+      }
+    } catch (err: any) {
+      console.warn("[Config] Failed to persist config to MongoDB:", err.message);
+    }
+
+    console.log("[Config] Runtime config updated:", updates);
+    res.json({
+      updated: updates,
+      current: {
+        CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+        CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+        SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
+      },
+    });
+  });
+
   // ─── Chat endpoint (Streaming) ───────────────────────────────────────────
   app.post("/api/chat", requireAuth, async (req: any, res: any) => {
     const { messages } = req.body;
@@ -456,6 +529,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   // ─── Agent endpoint with SSE ───────────────────────────────────────────────
   app.post("/api/agent", requireAuth, async (req: any, res: any) => {
     const { message, messages, attachments, session_id, resume_from_session, is_continuation } = req.body;
+    const userId: string = (req.user && req.user.id) ? req.user.id : "auto-user";
     if (!message && (!messages || !Array.isArray(messages))) {
       return res.status(400).json({ error: "message or messages array is required" });
     }
@@ -472,6 +546,17 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
 
     const sid = session_id || randomUUID();
+
+    // ── Stamp user_id on session creation for ownership tracking ──────────────
+    // This ensures future resume requests can verify ownership via sessions collection.
+    getCollection("sessions").then((col) => {
+      if (!col) return;
+      (col as any).updateOne(
+        { session_id: sid },
+        { $setOnInsert: { session_id: sid, user_id: userId, created_at: new Date() } },
+        { upsert: true },
+      ).catch(() => {});
+    }).catch(() => {});
 
     // All execution now happens in E2B cloud sandbox — no local VNC needed
     const e2bKey = process.env.E2B_API_KEY || "";
@@ -527,13 +612,74 @@ export async function registerRoutes(app: any): Promise<Server> {
       },
     });
 
+    // ── Task 5: Session Resume — load full chat_history + plan from MongoDB ──
+    let resumeData: any = null;
+    if (resume_from_session) {
+      try {
+        // ── Primary: sessions collection (used by SessionService / SessionStore) ──
+        // Ownership enforced: filter by both session_id AND user_id (prevents IDOR).
+        const sessionsCol = await getCollection("sessions");
+        if (sessionsCol) {
+          const sessionDoc = await (sessionsCol as any).findOne(
+            { session_id: resume_from_session, user_id: userId },
+            { projection: { _id: 0 } },
+          );
+          if (sessionDoc) {
+            resumeData = {
+              chat_history: sessionDoc.chat_history || [],
+              plan: sessionDoc.plan || null,
+              user_message: sessionDoc.user_message || "",
+            };
+            console.log(
+              `[Agent] Loaded resume_data from sessions for ${resume_from_session} (user ${userId}): ` +
+              `${resumeData.chat_history.length} messages, plan=${!!resumeData.plan}`,
+            );
+          }
+        }
+        // ── Fallback: agent_sessions (legacy collection used in older write paths) ──
+        if (!resumeData) {
+          const agentSessCol = await getCollection("agent_sessions");
+          if (agentSessCol) {
+            const legacyDoc = await (agentSessCol as any).findOne(
+              { session_id: resume_from_session, user_id: userId },
+              { projection: { _id: 0 } },
+            );
+            if (legacyDoc) {
+              resumeData = {
+                chat_history: legacyDoc.chat_history || [],
+                plan: legacyDoc.plan || null,
+                user_message: legacyDoc.user_message || "",
+              };
+              console.log(
+                `[Agent] Loaded resume_data from agent_sessions (legacy) for ${resume_from_session} (user ${userId})`,
+              );
+            }
+          }
+        }
+        if (!resumeData) {
+          console.warn(
+            `[Agent] resume_from_session ${resume_from_session} not found for user ${userId} — ignoring resume`,
+          );
+        }
+      } catch (resumeErr: any) {
+        console.warn(`[Agent] Failed to load resume_data for ${resume_from_session}:`, resumeErr.message);
+      }
+    }
+
+    // Only pass resume_from_session to Python if ownership was verified in Node.js.
+    // If resumeData is null (session not found for this user), suppress the session ID
+    // to prevent Python's SessionService.resume_session() from loading another user's state.
+    const verifiedResumeSession = (resume_from_session && resumeData) ? resume_from_session : null;
+
     proc.stdin.write(JSON.stringify({
       message: message || "",
       messages: messages || [],
       model: agentModel,
       attachments: attachments || [],
       session_id: sid,
-      resume_from_session: resume_from_session || null,
+      user_id: userId,
+      resume_from_session: verifiedResumeSession,
+      resume_data: resumeData,
       is_continuation: is_continuation || false,
     }));
     proc.stdin.end();
@@ -1111,6 +1257,18 @@ except Exception as ex:
     return res.status(503).json({
       error: "File download requires an active E2B sandbox. E2B_API_KEY is not set or no active sandbox.",
     });
+  });
+
+  // ─── /api/sandbox/download — manus.im parity endpoint ───────────────────
+  // Same implementation as /api/files/download but also accepts `filename` param
+  // (in addition to `name`) for full contract compatibility.
+  app.get("/api/sandbox/download", requireAuth, (req: any, res: any) => {
+    // Normalize `filename` → `name` so the /api/files/download handler accepts it
+    if (req.query.filename && !req.query.name) {
+      req.query.name = req.query.filename;
+    }
+    const qs = new URLSearchParams(req.query as Record<string, string>).toString();
+    res.redirect(307, `/api/files/download?${qs}`);
   });
 
   // ─── File Upload endpoint ────────────────────────────────────────────────────

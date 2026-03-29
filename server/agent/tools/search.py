@@ -4,13 +4,13 @@ Upgraded to class-based architecture from Ai-DzeckV2 (Manus) pattern.
 Provides: SearchTool class + backward-compatible functions.
 
 Search provider priority:
-  1. Bing Web Search API (if BING_SEARCH_API_KEY is set) — primary
-  2. Tavily (if TAVILY_API_KEY is set) — secondary
-  3. DuckDuckGo HTML scraper — last resort (always available)
+  SEARCH_PROVIDER env var → bing API (if key) → tavily (if key) → bing_web scraper → duckduckgo
+  Default: bing_web if no API key, or bing if BING_SEARCH_API_KEY is set.
 """
 import re
 import os
 import json
+import base64
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -30,8 +30,8 @@ def _make_ssl_ctx() -> ssl.SSLContext:
 
 
 _DEFAULT_UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
 
 _DATE_RANGE_MAP = {
@@ -57,6 +57,15 @@ _BING_FRESHNESS_MAP = {
     "past_week": "Week",
     "past_month": "Month",
     "past_year": "Year",
+}
+
+# Bing Web scraper freshness filters
+_BING_WEB_FRESHNESS_MAP = {
+    "past_hour": 'ex1:"ez1"',
+    "past_day": 'ex1:"ez2"',
+    "past_week": 'ex1:"ez3"',
+    "past_month": 'ex1:"ez4"',
+    "past_year": 'ex1:"ez5"',
 }
 
 
@@ -105,6 +114,175 @@ def _bing_api_search(
             results.append({
                 "title": item.get("name", ""),
                 "url": item.get("url", ""),
+                "snippet": item.get("snippet", ""),
+            })
+        return results if results else None
+    except Exception:
+        return None
+
+
+# ─── Bing Web Scraper (no API key needed) ─────────────────────────────────────
+
+def _decode_bing_redirect(url: str) -> str:
+    """Extract real destination URL from a Bing /ck/a tracking redirect."""
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url)
+        u_values = parse_qs(parsed.query).get("u", [])
+        if u_values and u_values[0].startswith("a1"):
+            encoded = u_values[0][2:]
+            padding = 4 - len(encoded) % 4
+            if padding != 4:
+                encoded += "=" * padding
+            return base64.b64decode(encoded).decode("utf-8", errors="replace")
+    except Exception:
+        pass
+    return url
+
+
+def _bing_web_search(
+    query: str,
+    date_range: Optional[str] = None,
+    num_results: int = 8,
+) -> Optional[List[Dict[str, Any]]]:
+    """Search by scraping Bing HTML results directly (no API key needed).
+    Uses browser impersonation via User-Agent headers.
+    Returns list of results or None on failure.
+    """
+    try:
+        params: Dict[str, str] = {
+            "q": query,
+            "count": "20",
+        }
+        if date_range and date_range != "all":
+            freshness_filter = _BING_WEB_FRESHNESS_MAP.get(date_range)
+            if freshness_filter:
+                params["filters"] = freshness_filter
+
+        url = "https://www.bing.com/search?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": _DEFAULT_UA,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+            },
+        )
+        with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=20) as resp:
+            raw = resp.read()
+            encoding = resp.headers.get_content_charset("utf-8")
+            html = raw.decode(encoding, errors="replace")
+
+        results: List[Dict[str, Any]] = []
+
+        # Parse <li class="b_algo"> blocks
+        algo_pattern = re.compile(
+            r'<li[^>]*class="[^"]*b_algo[^"]*"[^>]*>(.*?)</li>',
+            re.DOTALL | re.IGNORECASE,
+        )
+        h2_link_pattern = re.compile(
+            r'<h2[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
+            re.DOTALL | re.IGNORECASE,
+        )
+        snippet_pattern = re.compile(
+            r'<(?:p|div)[^>]*class="[^"]*(?:b_lineclamp|b_descript|b_caption|b_paractl)[^"]*"[^>]*>(.*?)</(?:p|div)>',
+            re.DOTALL | re.IGNORECASE,
+        )
+
+        for block_match in algo_pattern.finditer(html):
+            if len(results) >= num_results:
+                break
+            block = block_match.group(1)
+
+            link_match = h2_link_pattern.search(block)
+            if not link_match:
+                continue
+
+            link = link_match.group(1)
+            title_raw = link_match.group(2)
+            title = re.sub(r"<[^>]+>", "", title_raw).strip()
+
+            if not title:
+                continue
+
+            # Decode Bing redirect URLs
+            if "/ck/a?" in link:
+                link = _decode_bing_redirect(link)
+
+            snippet = ""
+            snip_match = snippet_pattern.search(block)
+            if snip_match:
+                snippet = re.sub(r"<[^>]+>", "", snip_match.group(1)).strip()
+            if not snippet:
+                p_texts = re.findall(r"<p[^>]*>(.*?)</p>", block, re.DOTALL | re.IGNORECASE)
+                for p in p_texts:
+                    t = re.sub(r"<[^>]+>", "", p).strip()
+                    if len(t) > 20:
+                        snippet = t
+                        break
+
+            if title and link:
+                results.append({
+                    "title": title,
+                    "url": link,
+                    "snippet": snippet,
+                })
+
+        return results if results else None
+    except Exception:
+        return None
+
+
+# ─── Google Custom Search API ─────────────────────────────────────────────────
+
+def _google_api_search(
+    query: str,
+    date_range: Optional[str] = None,
+    num_results: int = 8,
+    api_key: str = "",
+    engine_id: str = "",
+) -> Optional[List[Dict[str, Any]]]:
+    """Search using Google Custom Search JSON API.
+    Requires GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID.
+    Returns list of results or None on failure.
+    """
+    if not api_key or not engine_id:
+        return None
+    try:
+        params: Dict[str, str] = {
+            "key": api_key,
+            "cx": engine_id,
+            "q": query,
+            "num": str(min(num_results, 10)),
+        }
+        _google_date_map = {
+            "past_hour": "d1",
+            "past_day": "d1",
+            "past_week": "w1",
+            "past_month": "m1",
+            "past_year": "y1",
+        }
+        if date_range and date_range != "all":
+            dr = _google_date_map.get(date_range)
+            if dr:
+                params["dateRestrict"] = dr
+
+        url = "https://www.googleapis.com/customsearch/v1?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": _DEFAULT_UA, "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        results = []
+        for item in data.get("items", [])[:num_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("link", ""),
                 "snippet": item.get("snippet", ""),
             })
         return results if results else None
@@ -236,6 +414,21 @@ def _ddg_search(
     return results
 
 
+# ─── Provider selection logic ─────────────────────────────────────────────────
+
+def _get_search_provider() -> str:
+    """Determine search provider from SEARCH_PROVIDER env var.
+    Falls back to bing if BING_SEARCH_API_KEY set, otherwise bing_web.
+    """
+    explicit = os.environ.get("SEARCH_PROVIDER", "").strip().lower()
+    if explicit in ("bing_web", "bing", "google", "tavily", "duckduckgo"):
+        return explicit
+    # Auto-detect based on available keys
+    if os.environ.get("BING_SEARCH_API_KEY", ""):
+        return "bing"
+    return "bing_web"
+
+
 # ─── Backward-compatible functions ───────────────────────────────────────────
 
 def info_search_web(
@@ -244,43 +437,60 @@ def info_search_web(
     num_results: int = 8,
 ) -> ToolResult:
     """Search the web.
-    Priority: Bing API → Tavily → DuckDuckGo.
+    Provider order: SEARCH_PROVIDER env → bing API (if key) → tavily (if key) → bing_web scraper → duckduckgo.
     """
     bing_key = os.environ.get("BING_SEARCH_API_KEY", "")
     tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    google_key = os.environ.get("GOOGLE_SEARCH_API_KEY", "")
+    google_engine_id = os.environ.get("GOOGLE_SEARCH_ENGINE_ID", "")
+
+    provider = _get_search_provider()
 
     try:
         results: List[Dict[str, Any]] = []
         engine = "duckduckgo"
 
-        # 1. Try Bing Web Search API (primary)
-        if bing_key:
-            bing_results = _bing_api_search(
-                query=query,
-                date_range=date_range,
-                num_results=num_results,
-                api_key=bing_key,
-            )
-            if bing_results is not None:
-                results = bing_results
-                engine = "bing"
+        def _try_provider(p: str) -> bool:
+            nonlocal results, engine
+            if p == "bing" and bing_key:
+                r = _bing_api_search(query=query, date_range=date_range, num_results=num_results, api_key=bing_key)
+                if r:
+                    results = r
+                    engine = "bing"
+                    return True
+            elif p == "google" and google_key and google_engine_id:
+                r = _google_api_search(query=query, date_range=date_range, num_results=num_results, api_key=google_key, engine_id=google_engine_id)
+                if r:
+                    results = r
+                    engine = "google"
+                    return True
+            elif p == "tavily" and tavily_key:
+                r = _tavily_search(query=query, date_range=date_range, num_results=num_results, api_key=tavily_key)
+                if r:
+                    results = r
+                    engine = "tavily"
+                    return True
+            elif p == "bing_web":
+                r = _bing_web_search(query=query, date_range=date_range, num_results=num_results)
+                if r:
+                    results = r
+                    engine = "bing_web"
+                    return True
+            elif p == "duckduckgo":
+                r = _ddg_search(query=query, date_range=date_range, num_results=num_results)
+                if r:
+                    results = r
+                    engine = "duckduckgo"
+                    return True
+            return False
 
-        # 2. Try Tavily (secondary)
-        if not results and tavily_key:
-            tavily_results = _tavily_search(
-                query=query,
-                date_range=date_range,
-                num_results=num_results,
-                api_key=tavily_key,
-            )
-            if tavily_results is not None:
-                results = tavily_results
-                engine = "tavily"
-
-        # 3. DuckDuckGo fallback (always available)
-        if not results:
-            results = _ddg_search(query=query, date_range=date_range, num_results=num_results)
-            engine = "duckduckgo"
+        # Try the configured provider first
+        if not _try_provider(provider):
+            # Fallback chain (spec): bing API → tavily → bing_web scraper → duckduckgo
+            # google is intentionally excluded from fallback — only used if SEARCH_PROVIDER=google
+            for fallback in ["bing", "tavily", "bing_web", "duckduckgo"]:
+                if fallback != provider and _try_provider(fallback):
+                    break
 
         formatted = "\n\n".join(
             f"{i+1}. [{r['title']}]({r['url']})\n   {r['snippet']}"

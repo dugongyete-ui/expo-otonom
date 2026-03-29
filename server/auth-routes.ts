@@ -237,6 +237,23 @@ export function requireAuth(req: any, res: any, next: any) {
 }
 
 export function registerAuthRoutes(app: any) {
+  // Startup warning if AUTH_PROVIDER=password but JWT_SECRET not set
+  const _startupMode = getAuthMode();
+  if (_startupMode !== "none") {
+    const _secret = process.env.JWT_SECRET;
+    if (!_secret) {
+      console.error(
+        `[auth] FATAL: AUTH_PROVIDER=${_startupMode} requires JWT_SECRET to be set. ` +
+        "Generate one with: openssl rand -hex 32. Server will throw on first auth request.",
+      );
+    } else if (_secret.length < 32) {
+      console.warn(
+        `[auth] WARNING: JWT_SECRET is too short (${_secret.length} chars < 32). ` +
+        "Use a longer secret for production security.",
+      );
+    }
+  }
+
   app.get("/api/auth/status", (_req: any, res: any) => {
     res.json({ auth_provider: getAuthMode() });
   });

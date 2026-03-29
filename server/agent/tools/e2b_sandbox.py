@@ -586,6 +586,43 @@ def _create_sandbox() -> Optional[Any]:
             threading.Thread(target=_bg_push, daemon=True).start()
             logger.info("[E2B] Config push started in background — sandbox ready for first command.")
 
+            # ── T6: Pre-launch Chrome with CDP port so browser.py can connect immediately ──
+            # This prevents the CDP race condition where browser.py tries to connect before
+            # Chrome is ready. Chrome is launched here with the required flags and we verify
+            # the CDP port is accepting connections before marking the sandbox as ready.
+            _cdp_port = 9222
+            _chrome_launch_cmd = (
+                f"DISPLAY=:0 nohup bash -c '"
+                f"for b in google-chrome chromium chromium-browser; do "
+                f"  which $b >/dev/null 2>&1 && "
+                f"  $b --no-sandbox --disable-dev-shm-usage --remote-debugging-port={_cdp_port} "
+                f"  --disable-gpu --disable-software-rasterizer about:blank "
+                f"  >/dev/null 2>&1 & break; done' "
+                f">/dev/null 2>&1 &"
+            )
+            try:
+                sb.commands.run(_chrome_launch_cmd, timeout=10)
+                # Poll CDP endpoint until ready (max 30s = 10 × 3s)
+                _cdp_ready = False
+                for _attempt in range(10):
+                    try:
+                        _cdp_result = sb.commands.run(
+                            f"curl -s --max-time 2 http://localhost:{_cdp_port}/json/version",
+                            timeout=5,
+                        )
+                        _cdp_out = getattr(_cdp_result, "stdout", "") or str(_cdp_result)
+                        if '"Browser"' in _cdp_out or '"webSocketDebuggerUrl"' in _cdp_out:
+                            _cdp_ready = True
+                            logger.info("[E2B] Chrome CDP ready on port %s (attempt %d)", _cdp_port, _attempt + 1)
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(3)
+                if not _cdp_ready:
+                    logger.warning("[E2B] Chrome CDP not confirmed ready — browser.py will retry on first use")
+            except Exception as _chrome_err:
+                logger.warning("[E2B] Chrome pre-launch failed (browser.py will handle): %s", _chrome_err)
+
             logger.info("[E2B-Desktop] Desktop workspace ready (id=%s, vnc=%s)", sb.sandbox_id, bool(_vnc_stream_url))
             _sandbox_create_attempts = 0
 

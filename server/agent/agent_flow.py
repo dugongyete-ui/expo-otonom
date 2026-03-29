@@ -2278,6 +2278,63 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     yield make_event("done", success=True, session_id=self.session_id)
                     return
 
+            # ── T5: Session Resume — if plan was restored from resume_data, skip replanning ──
+            # When a verified resumed session injects a plan (via run_agent_async), we bypass
+            # the planner and continue execution directly from the last unfinished step.
+            if self.plan is not None and resume_from_session and self.plan.steps:
+                _pending_steps = [s for s in self.plan.steps if not s.is_done()]
+                if _pending_steps:
+                    self.state = FlowState.EXECUTING
+                    yield make_event("plan", status=PlanStatus.RUNNING.value, plan=safe_plan_dict(self.plan))
+                    step_waiting = False
+                    _step_consecutive_failures: Dict[str, int] = {}
+                    _global_consecutive_failures = 0
+                    _MAX_GLOBAL_FAILURES = 4
+                    while True:
+                        step = self.plan.get_next_step()
+                        if not step:
+                            break
+                        self.plan.current_step_id = step.id
+                        step_waiting = False
+                        async for event in self.execute_step_async(self.plan, step, user_message):
+                            if event.get("type") == "waiting_for_user":
+                                step_waiting = True
+                            yield event
+                        if step_waiting:
+                            pending = [s.to_dict() for s in self.plan.steps if not s.is_done()]
+                            if self.session_id:
+                                if svc:
+                                    await svc.save_waiting_state(
+                                        self.session_id, self.plan.to_dict(), pending,
+                                        user_message=user_message,
+                                    )
+                            yield make_event("done", success=True, session_id=self.session_id, waiting_for_user=True)
+                            return
+                        if not step_waiting and self.session_id and svc:
+                            await svc.save_step_completed(self.session_id, step.to_dict())
+
+                    self.plan.status = ExecutionStatus.COMPLETED
+                    yield make_event("plan", status=PlanStatus.COMPLETED.value, plan=safe_plan_dict(self.plan))
+                    summary_text_r = ""
+                    async for event in self.summarize_async(self.plan, user_message):
+                        if event.get("type") == "message_chunk":
+                            summary_text_r += event.get("chunk", "")
+                        yield event
+                    if summary_text_r:
+                        self.chat_history.append({"role": "user", "content": user_message})
+                        self.chat_history.append({"role": "assistant", "content": summary_text_r})
+                        if self.session_id and svc:
+                            try:
+                                await svc.save_chat_history(self.session_id, self.chat_history[-40:])
+                            except Exception:
+                                pass
+                    if self.session_id and svc:
+                        await svc.complete_session(self.session_id, success=True)
+                    if self._created_files:
+                        yield make_event("files", files=self._created_files)
+                    yield make_event("done", success=True, session_id=self.session_id)
+                    return
+
             self.state = FlowState.PLANNING
             yield make_event("plan", status=PlanStatus.CREATING.value)
 
@@ -2471,7 +2528,9 @@ async def run_agent_async(
     user_message: str,
     attachments: Optional[List[str]] = None,
     session_id: Optional[str] = None,
+    user_id: str = "auto-user",
     resume_from_session: Optional[str] = None,
+    resume_data: Optional[Dict[str, Any]] = None,
     chat_history: Optional[List[Dict[str, Any]]] = None,
     is_continuation: bool = False,
 ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -2480,6 +2539,37 @@ async def run_agent_async(
     Used by both the CLI main() and the Node.js subprocess bridge.
     """
     agent = DzeckAgent(session_id=session_id)
+    # If resume_data was pre-loaded by Node.js from MongoDB, inject it into the agent
+    if resume_data:
+        if resume_data.get("chat_history") and not chat_history:
+            chat_history = resume_data["chat_history"]
+        if resume_data.get("plan") and resume_from_session:
+            try:
+                agent.plan = Plan.from_dict(resume_data["plan"])
+            except Exception:
+                pass
+    # ── T2: Load cross-session memories and prepend to chat history ──────────
+    _memory_context = ""
+    try:
+        from server.agent.services.memory_service import (
+            load_memories as _load_mem,
+            format_memories_for_prompt as _fmt_mem,
+        )
+        _memories = await _load_mem(user_id=user_id, limit=10)
+        if _memories:
+            _memory_context = _fmt_mem(_memories)
+    except Exception as _load_mem_err:
+        import logging as _lmlog
+        _lmlog.getLogger(__name__).warning("[memory] Failed to load memories: %s", _load_mem_err)
+
+    if _memory_context:
+        _mem_msg = {"role": "assistant", "content": f"[Memory context from previous sessions]\n{_memory_context}"}
+        if chat_history:
+            chat_history = [_mem_msg] + list(chat_history)
+        else:
+            chat_history = [_mem_msg]
+
+    all_events: list = []
     async for event in agent.run_async(
         user_message,
         attachments=attachments,
@@ -2487,7 +2577,45 @@ async def run_agent_async(
         chat_history=chat_history,
         is_continuation=is_continuation,
     ):
+        all_events.append(event)
         yield event
+
+    # ── T2: Auto-save cross-session memory after agent run completes ────────
+    # Reconstruct full assistant messages by accumulating message_chunk streams.
+    # agent emits: message_start → message_chunk* → message_end (no text in message_end).
+    if session_id:
+        try:
+            from server.agent.services.memory_service import extract_and_save_insights as _save_mem
+            # Build full assistant reply text by accumulating chunks between start/end markers
+            _assistant_msgs: list = []
+            _chunk_buf: list = []
+            for ev in all_events:
+                etype = ev.get("type", "")
+                if etype == "message_start":
+                    _chunk_buf = []
+                elif etype == "message_chunk":
+                    chunk = ev.get("chunk", "")
+                    if chunk:
+                        _chunk_buf.append(chunk)
+                elif etype in ("message_end", "message_correct"):
+                    # message_correct has corrected full text
+                    if etype == "message_correct" and ev.get("text"):
+                        _assistant_msgs.append({"role": "assistant", "content": ev["text"]})
+                    elif _chunk_buf:
+                        _assistant_msgs.append({"role": "assistant", "content": "".join(_chunk_buf)})
+                    _chunk_buf = []
+            # Also include agent's own accumulated chat_history (most complete source)
+            if not _assistant_msgs and hasattr(agent, "chat_history"):
+                for msg in agent.chat_history:
+                    if msg.get("role") == "assistant" and msg.get("content"):
+                        _assistant_msgs.append({"role": "assistant", "content": msg["content"]})
+
+            _messages = [{"role": "user", "content": user_message}] + _assistant_msgs
+            if len(_messages) > 1:
+                await _save_mem(session_id=session_id, messages=_messages, user_id=user_id)
+        except Exception as _mem_err:
+            import logging as _mlog
+            _mlog.getLogger(__name__).warning("[memory] Failed to save cross-session memory: %s", _mem_err)
 
 
 def main() -> None:
@@ -2503,7 +2631,9 @@ def main() -> None:
         messages = input_data.get("messages", [])
         attachments = input_data.get("attachments", [])
         session_id = input_data.get("session_id")
+        user_id = input_data.get("user_id", "auto-user")
         resume_from_session = input_data.get("resume_from_session")
+        resume_data = input_data.get("resume_data")  # pre-loaded from Node.js MongoDB fetch
         is_continuation = bool(input_data.get("is_continuation", False))
 
         if messages and not user_message:
@@ -2553,7 +2683,9 @@ def main() -> None:
                 user_message,
                 attachments=attachments or [],
                 session_id=session_id,
+                user_id=user_id,
                 resume_from_session=resume_from_session,
+                resume_data=resume_data,
                 chat_history=chat_history or None,
                 is_continuation=is_continuation,
             ):
