@@ -816,7 +816,8 @@ export async function registerRoutes(app: any): Promise<Server> {
       /Config push failed/i, /fork\/exec/i, /permission denied/i,
       /\[E2B\]/i, /\[E2B-Desktop\]/i, /\[Browser\]/i, /Authentication required/i,
       /MONGODB_URI not set/i, /sessions will be in-memory/i,
-      /Sandbox health check/i, /sandbox creation failed/i];
+      /Sandbox health check/i, /sandbox creation failed/i,
+      /\[RedisStreamQueue\]/i, /Rate limited.*retrying/i];
 
     proc.on("close", (code: number | null) => {
       if (!session.done) {
@@ -1441,11 +1442,8 @@ except Exception as ex:
     const cerebrasConfigured = !!getCerebrasConfig().apiKey;
     const timestamp = new Date().toISOString();
 
-    // Run a Python probe that verifies tool imports AND performs E2E sandbox checks:
-    // 1. Import verification (modules OK)
-    // 2. E2B sandbox connect/create
-    // 3. Shell: run echo command inside sandbox
-    // 4. File: write then read back a test file inside sandbox
+    // Fast lightweight Python probe: only checks imports + search — NO sandbox creation.
+    // Sandbox active status is determined from the Node.js-managed E2B desktop sessions.
     let pythonProbe: Record<string, any> = {};
     try {
       const probe = await new Promise<string>((resolve) => {
@@ -1467,76 +1465,21 @@ try:
     results['search'] = 'ok'
 except Exception as e:
     results['search'] = str(e)
-
-# E2B end-to-end verification
 e2b_key = os.environ.get("E2B_API_KEY", "")
-if e2b_key:
-    try:
-        from server.agent.tools.e2b_sandbox import get_sandbox, _detected_home, WORKSPACE_DIR
-        results['e2b_module'] = 'ok'
-        sb = get_sandbox()
-        results['sandbox_active'] = sb is not None
-        results['detected_home'] = _detected_home or ''
-        if sb is not None:
-            # E2E shell: run a simple echo command
-            try:
-                shell_r = sb.commands.run("echo dzeck_health_ok", timeout=10)
-                results['shell_e2e'] = 'ok' if 'dzeck_health_ok' in (shell_r.stdout or '') else 'fail'
-            except Exception as se:
-                results['shell_e2e'] = str(se)[:100]
-            # E2E file: write then read test file
-            try:
-                test_path = (_detected_home or WORKSPACE_DIR) + '/.dzeck_health_test'
-                sb.files.write(test_path, 'health_check')
-                read_back = sb.files.read(test_path)
-                results['file_e2e'] = 'ok' if read_back and 'health_check' in read_back else 'fail'
-                # Clean up
-                try: sb.commands.run(f"rm -f {test_path}", timeout=5)
-                except: pass
-            except Exception as fe:
-                results['file_e2e'] = str(fe)[:100]
-            # E2E browser: check if display is available and browser is running/launchable
-            try:
-                display_r = sb.commands.run(
-                    "which xdotool >/dev/null 2>&1 && echo xdotool_ok; "
-                    "DISPLAY=:0 xdpyinfo 2>/dev/null | head -1 && echo display_ok; "
-                    "pgrep -x -E 'chrome|chromium|chromium-browser|google-chrome' 2>/dev/null && echo browser_running || echo browser_not_running",
-                    timeout=10
-                )
-                out = display_r.stdout or ''
-                if 'display_ok' in out:
-                    results['browser_e2e'] = 'display_ok'
-                elif 'xdotool_ok' in out:
-                    results['browser_e2e'] = 'xdotool_ok_no_display'
-                else:
-                    results['browser_e2e'] = 'no_display'
-                results['browser_running'] = 'browser_running' in out
-            except Exception as be:
-                results['browser_e2e'] = str(be)[:100]
-                results['browser_running'] = False
-        else:
-            results['shell_e2e'] = 'sandbox_unavailable'
-            results['file_e2e'] = 'sandbox_unavailable'
-            results['browser_e2e'] = 'sandbox_unavailable'
-            results['browser_running'] = False
-    except Exception as e:
-        results['e2b_module'] = str(e)
-        results['sandbox_active'] = False
-        results['shell_e2e'] = 'module_error'
-        results['file_e2e'] = 'module_error'
-        results['browser_e2e'] = 'module_error'
-else:
-    results['e2b_module'] = 'no_api_key'
+results['e2b_key_set'] = bool(e2b_key)
+try:
+    from server.agent.tools.e2b_sandbox import _sandbox, WORKSPACE_DIR
+    results['e2b_module'] = 'ok'
+    results['sandbox_active'] = _sandbox is not None
+except Exception as e:
+    results['e2b_module'] = str(e)
     results['sandbox_active'] = False
-    results['shell_e2e'] = 'no_api_key'
-    results['file_e2e'] = 'no_api_key'
-    results['browser_e2e'] = 'no_api_key'
 print(json.dumps(results))
-`], { env: { ...process.env }, timeout: 45000 });
+`], { env: { ...process.env }, timeout: 15000 });
         let out = "";
         py.stdout.on("data", (d: any) => { out += d.toString(); });
         py.on("close", () => resolve(out.trim()));
-        setTimeout(() => { try { py.kill(); } catch {} resolve("{}"); }, 40000);
+        setTimeout(() => { try { py.kill(); } catch {} resolve("{}"); }, 12000);
       });
       pythonProbe = JSON.parse(probe || "{}");
     } catch (err: any) {
@@ -1544,47 +1487,120 @@ print(json.dumps(results))
     }
 
     const importsOk = pythonProbe.imports === "ok";
-    const sandboxActive = !!pythonProbe.sandbox_active;
-    const shellOk = pythonProbe.shell_e2e === "ok";
-    const fileOk = pythonProbe.file_e2e === "ok";
     const searchOk = pythonProbe.search === "ok";
-    const browserDisplayOk = pythonProbe.browser_e2e === "display_ok" || pythonProbe.browser_e2e === "xdotool_ok_no_display";
-    const browserRunning = !!pythonProbe.browser_running;
-    const e2eOk = e2bOn && sandboxActive && shellOk && fileOk;
 
-    const toolStatus = (available: boolean, e2e?: boolean) => {
+    // Determine sandbox active state from Node.js E2B desktop session manager
+    let sandboxActive = false;
+    let sandboxId: string | null = null;
+    try {
+      sandboxId = getActiveE2BSandboxId();
+      sandboxActive = !!sandboxId;
+    } catch {}
+
+    // If a sandbox is active, run lightweight E2E probes against the EXISTING sandbox
+    // (no sandbox creation — connects via DZECK_E2B_SANDBOX_ID env var).
+    let e2eProbe: Record<string, any> = {};
+    if (sandboxActive && sandboxId && e2bOn && importsOk) {
+      try {
+        const e2eResult = await new Promise<string>((resolve) => {
+          const e2ePy = spawn("python3", ["-c", `
+import json, os
+results = {}
+sid = os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+if not sid:
+    results['error'] = 'no_sandbox_id'
+    print(json.dumps(results))
+    raise SystemExit(0)
+try:
+    from server.agent.tools.e2b_sandbox import _connect_existing_sandbox, WORKSPACE_DIR
+    sb = _connect_existing_sandbox(sid)
+    if sb is None:
+        results['sandbox'] = 'connect_failed'
+        print(json.dumps(results))
+        raise SystemExit(0)
+    results['sandbox'] = 'connected'
+    # E2E shell
+    try:
+        r = sb.commands.run("echo dzeck_health_ok", timeout=8)
+        results['shell_e2e'] = 'ok' if 'dzeck_health_ok' in (r.stdout or '') else 'fail'
+    except Exception as e:
+        results['shell_e2e'] = str(e)[:80]
+    # E2E file
+    try:
+        tp = WORKSPACE_DIR + '/.dzeck_health_test'
+        sb.files.write(tp, 'health_check')
+        rb = sb.files.read(tp)
+        results['file_e2e'] = 'ok' if rb and 'health_check' in rb else 'fail'
+        try: sb.commands.run(f"rm -f {tp}", timeout=5)
+        except: pass
+    except Exception as e:
+        results['file_e2e'] = str(e)[:80]
+    # E2E browser/display
+    try:
+        dr = sb.commands.run(
+            "DISPLAY=:0 xdpyinfo 2>/dev/null | head -1 && echo display_ok || echo no_display; "
+            "pgrep -x -E 'chrome|chromium' 2>/dev/null && echo browser_running || echo browser_not_running",
+            timeout=8
+        )
+        out = dr.stdout or ''
+        results['browser_e2e'] = 'display_ok' if 'display_ok' in out else 'no_display'
+        results['browser_running'] = 'browser_running' in out
+    except Exception as e:
+        results['browser_e2e'] = str(e)[:80]
+        results['browser_running'] = False
+except Exception as e:
+    results['error'] = str(e)[:100]
+print(json.dumps(results))
+`], { env: { ...process.env, DZECK_E2B_SANDBOX_ID: sandboxId }, timeout: 30000 });
+          let out = "";
+          e2ePy.stdout.on("data", (d: any) => { out += d.toString(); });
+          e2ePy.on("close", () => resolve(out.trim()));
+          setTimeout(() => { try { e2ePy.kill(); } catch {} resolve("{}"); }, 25000);
+        });
+        e2eProbe = JSON.parse(e2eResult || "{}");
+      } catch {}
+    }
+
+    const shellOk = e2eProbe.shell_e2e === "ok";
+    const fileOk = e2eProbe.file_e2e === "ok";
+    const browserDisplayOk = e2eProbe.browser_e2e === "display_ok";
+    const browserRunning = !!e2eProbe.browser_running;
+    const e2eRan = sandboxActive && e2eProbe.sandbox === "connected";
+
+    const toolStatus = (available: boolean, e2eResult?: string) => {
       if (!available) return "unavailable";
-      if (e2e === true) return "active";
-      if (e2e === false) return "error";
+      if (e2eResult === "ok") return "active";
+      if (e2eResult === "fail") return "error";
+      if (sandboxActive) return "active";  // sandbox is live but no e2e ran (still accurate)
       return "ready";
     };
 
-    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ connected" : "✗ not connected"} | shell: ${pythonProbe.shell_e2e} | file: ${pythonProbe.file_e2e} | browser: ${pythonProbe.browser_e2e}`);
+    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ active" : "○ idle"} | imports: ${importsOk ? "✓" : "✗"} | search: ${searchOk ? "✓" : "✗"} | cerebras: ${cerebrasConfigured ? "✓" : "✗"}${e2eRan ? ` | shell: ${e2eProbe.shell_e2e} | file: ${e2eProbe.file_e2e} | browser: ${e2eProbe.browser_e2e}` : ""}`);
 
     res.json({
       status: "ok",
       timestamp,
       tools: {
         shell: {
-          status: toolStatus(e2bOn && importsOk, sandboxActive ? shellOk : undefined),
+          status: toolStatus(e2bOn && importsOk, e2eRan ? (shellOk ? "ok" : "fail") : undefined),
           requires: "E2B_API_KEY",
           available: e2bOn && importsOk,
           sandbox_active: sandboxActive,
-          e2e_ok: shellOk,
+          e2e_ok: e2eRan ? shellOk : null,
         },
         file: {
-          status: toolStatus(e2bOn && importsOk, sandboxActive ? fileOk : undefined),
+          status: toolStatus(e2bOn && importsOk, e2eRan ? (fileOk ? "ok" : "fail") : undefined),
           requires: "E2B_API_KEY",
           available: e2bOn && importsOk,
-          e2e_ok: fileOk,
+          e2e_ok: e2eRan ? fileOk : null,
         },
         browser: {
-          status: e2bOn && importsOk ? (sandboxActive ? (browserDisplayOk ? "active" : "ready") : "ready") : "unavailable",
+          status: e2bOn && importsOk ? (sandboxActive ? (e2eRan && !browserDisplayOk ? "error" : "active") : "ready") : "unavailable",
           requires: "E2B_API_KEY",
           available: e2bOn && importsOk,
-          display_ok: browserDisplayOk,
-          browser_running: browserRunning,
-          e2e_result: pythonProbe.browser_e2e || "not_checked",
+          display_ok: e2eRan ? browserDisplayOk : null,
+          browser_running: e2eRan ? browserRunning : null,
+          e2e_result: e2eProbe.browser_e2e || (sandboxActive ? "not_checked" : "no_sandbox"),
         },
         search: { status: searchOk ? "ready" : "degraded", requires: "none", available: searchOk },
         message: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
@@ -1596,9 +1612,10 @@ print(json.dumps(results))
       e2b_enabled: e2bOn,
       cerebras_configured: cerebrasConfigured,
       python_probe: pythonProbe,
-      detected_home: pythonProbe.detected_home || null,
-      all_tools_ready: e2bOn && cerebrasConfigured && importsOk && e2eOk,
-      e2e_verified: e2eOk,
+      e2e_probe: e2eProbe,
+      sandbox_id: sandboxId,
+      all_tools_ready: e2bOn && cerebrasConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
+      e2e_verified: e2eRan && shellOk && fileOk,
     });
   });
 

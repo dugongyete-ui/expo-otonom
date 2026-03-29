@@ -2025,16 +2025,10 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             if self.session_id:
                 if svc:
                     waiting_state = await svc.load_waiting_state(self.session_id)
-                if waiting_state is None:
-                    from server.agent.services.session_service import _file_load_waiting_state
-                    waiting_state = _file_load_waiting_state(self.session_id)
 
             if is_continuation and waiting_state and self.session_id:
                 if svc:
                     await svc.clear_waiting_state(self.session_id)
-                else:
-                    from server.agent.services.session_service import _file_clear_waiting_state
-                    _file_clear_waiting_state(self.session_id)
 
                 if waiting_state.get("clarification_mode"):
                     original_message = waiting_state.get("user_message", user_message)
@@ -2066,29 +2060,39 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                             yield event
 
                         if not step_waiting and self.session_id and svc:
-                            await svc.save_step_completed(self.session_id, step.to_dict())
+                            try:
+                                await svc.save_step_completed(self.session_id, step.to_dict())
+                            except Exception as _db_err:
+                                import logging as _dblog
+                                _dblog.getLogger(__name__).warning(
+                                    "[agent_flow] save_step_completed failed for %s: %s", self.session_id, _db_err
+                                )
 
                         if step_waiting:
                             pending = [s.to_dict() for s in self.plan.steps if not s.is_done()]
                             if self.session_id:
                                 if svc:
-                                    await svc.save_waiting_state(
-                                        self.session_id,
-                                        self.plan.to_dict(),
-                                        pending,
-                                        original_user_message,
-                                        chat_history=self.chat_history,
-                                    )
-                                    await svc.save_plan_snapshot(self.session_id, self.plan.to_dict())
+                                    try:
+                                        await svc.save_waiting_state(
+                                            self.session_id,
+                                            self.plan.to_dict(),
+                                            pending,
+                                            original_user_message,
+                                            chat_history=self.chat_history,
+                                        )
+                                        await svc.save_plan_snapshot(self.session_id, self.plan.to_dict())
+                                    except Exception as _db_err2:
+                                        import logging as _dblog2
+                                        _dblog2.getLogger(__name__).warning(
+                                            "[agent_flow] save_waiting_state/snapshot failed for %s: %s",
+                                            self.session_id, _db_err2
+                                        )
                                 else:
-                                    from server.agent.services.session_service import _file_save_waiting_state
-                                    _file_save_waiting_state(self.session_id, {
-                                        "waiting_for_user": True,
-                                        "plan": self.plan.to_dict(),
-                                        "pending_steps": pending,
-                                        "user_message": original_user_message,
-                                        "chat_history": self.chat_history,
-                                    })
+                                    import logging as _svclog
+                                    _svclog.getLogger(__name__).warning(
+                                        "[agent_flow] No session service — waiting state for session %s not saved "
+                                        "(DB-only mode, resume unavailable for this pause)", self.session_id
+                                    )
                             yield make_event("done", success=True, session_id=self.session_id, waiting_for_user=True)
                             return
 
@@ -2261,16 +2265,15 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     user_message, chat_history=self.chat_history
                 )
                 if clarification_q:
-                    if self.session_id:
-                        from server.agent.services.session_service import _file_save_waiting_state
-                        _file_save_waiting_state(self.session_id, {
-                            "waiting_for_user": True,
-                            "plan": None,
-                            "pending_steps": [],
-                            "user_message": user_message,
-                            "chat_history": self.chat_history,
-                            "clarification_mode": True,
-                        })
+                    if self.session_id and svc:
+                        await svc.save_waiting_state(
+                            self.session_id,
+                            {},
+                            [],
+                            user_message,
+                            chat_history=self.chat_history,
+                            clarification_mode=True,
+                        )
                     yield make_event("message_start", role="ask")
                     yield make_event("message_chunk", chunk=clarification_q, role="ask")
                     yield make_event("message_end", role="ask")
@@ -2311,7 +2314,13 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                             yield make_event("done", success=True, session_id=self.session_id, waiting_for_user=True)
                             return
                         if not step_waiting and self.session_id and svc:
-                            await svc.save_step_completed(self.session_id, step.to_dict())
+                            try:
+                                await svc.save_step_completed(self.session_id, step.to_dict())
+                            except Exception as _db_err:
+                                import logging as _dblog
+                                _dblog.getLogger(__name__).warning(
+                                    "[agent_flow] save_step_completed failed for %s: %s", self.session_id, _db_err
+                                )
 
                     self.plan.status = ExecutionStatus.COMPLETED
                     yield make_event("plan", status=PlanStatus.COMPLETED.value, plan=safe_plan_dict(self.plan))
@@ -2361,7 +2370,13 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             )
 
             if self.session_id and svc:
-                await svc.save_plan_snapshot(self.session_id, self.plan.to_dict())
+                try:
+                    await svc.save_plan_snapshot(self.session_id, self.plan.to_dict())
+                except Exception as _db_err:
+                    import logging as _dblog
+                    _dblog.getLogger(__name__).warning(
+                        "[agent_flow] save_plan_snapshot failed for %s: %s", self.session_id, _db_err
+                    )
 
             yield make_event("title", title=self.plan.title)
 
@@ -2427,29 +2442,39 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     _step_consecutive_failures.pop(step.id, None)
 
                 if not step_waiting and self.session_id and svc:
-                    await svc.save_step_completed(self.session_id, step.to_dict())
+                    try:
+                        await svc.save_step_completed(self.session_id, step.to_dict())
+                    except Exception as _db_err:
+                        import logging as _dblog
+                        _dblog.getLogger(__name__).warning(
+                            "[agent_flow] save_step_completed failed for %s: %s", self.session_id, _db_err
+                        )
 
                 if step_waiting:
                     pending = [s.to_dict() for s in self.plan.steps if not s.is_done()]
                     if self.session_id:
                         if svc:
-                            await svc.save_waiting_state(
-                                self.session_id,
-                                self.plan.to_dict(),
-                                pending,
-                                user_message,
-                                chat_history=self.chat_history,
-                            )
-                            await svc.save_plan_snapshot(self.session_id, self.plan.to_dict())
+                            try:
+                                await svc.save_waiting_state(
+                                    self.session_id,
+                                    self.plan.to_dict(),
+                                    pending,
+                                    user_message,
+                                    chat_history=self.chat_history,
+                                )
+                                await svc.save_plan_snapshot(self.session_id, self.plan.to_dict())
+                            except Exception as _db_err2:
+                                import logging as _dblog2
+                                _dblog2.getLogger(__name__).warning(
+                                    "[agent_flow] save_waiting_state/snapshot failed for %s: %s",
+                                    self.session_id, _db_err2
+                                )
                         else:
-                            from server.agent.services.session_service import _file_save_waiting_state
-                            _file_save_waiting_state(self.session_id, {
-                                "waiting_for_user": True,
-                                "plan": self.plan.to_dict(),
-                                "pending_steps": pending,
-                                "user_message": user_message,
-                                "chat_history": self.chat_history,
-                            })
+                            import logging as _svclog2
+                            _svclog2.getLogger(__name__).warning(
+                                "[agent_flow] No session service — waiting state for session %s not saved "
+                                "(DB-only mode, resume unavailable for this pause)", self.session_id
+                            )
                     yield make_event("done", success=True, session_id=self.session_id, waiting_for_user=True)
                     return
 

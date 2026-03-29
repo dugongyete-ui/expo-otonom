@@ -115,7 +115,8 @@ class SessionService:
         session_id: str,
         plan: Dict[str, Any],
     ) -> None:
-        """Save the current plan to both MongoDB and Redis cache."""
+        """Save the current plan to both MongoDB and Redis cache.
+        Raises RuntimeError if MongoDB is unavailable (explicit fail-fast per requirement #6)."""
         store = await self._get_session_store()
         cache = await self._get_cache_store()
 
@@ -128,7 +129,8 @@ class SessionService:
         session_id: str,
         step: Dict[str, Any],
     ) -> None:
-        """Record a completed step."""
+        """Record a completed step.
+        Raises RuntimeError if MongoDB is unavailable (explicit fail-fast per requirement #6)."""
         store = await self._get_session_store()
         await store.save_event(session_id, "step_completed", {"step": step})
 
@@ -253,16 +255,19 @@ class SessionService:
         pending_steps: List[Dict[str, Any]],
         user_message: str,
         chat_history: Optional[List[Dict[str, Any]]] = None,
+        clarification_mode: bool = False,
     ) -> None:
         """Save waiting_for_user state to Redis (primary) and MongoDB (fallback).
         No local file fallback — requires Redis or MongoDB."""
-        waiting_state = {
+        waiting_state: Dict[str, Any] = {
             "waiting_for_user": True,
             "plan": plan,
             "pending_steps": pending_steps,
             "user_message": user_message,
             "chat_history": chat_history or [],
         }
+        if clarification_mode:
+            waiting_state["clarification_mode"] = True
         try:
             cache = await self._get_cache_store()
             store = await self._get_session_store()
