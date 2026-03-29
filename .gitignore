@@ -12,3 +12,8 @@ __pycache__/
 
 expo-env.d.ts
 # @end expo-cli
+
+# Replit environment files (may contain secrets)
+.replit
+.replit.nix
+.local/
