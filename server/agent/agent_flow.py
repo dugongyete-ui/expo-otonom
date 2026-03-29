@@ -529,22 +529,34 @@ def build_tool_content(tool_name: str, tool_result: ToolResult) -> Optional[Dict
         "browser_tab_list", "browser_tab_new", "browser_tab_close", "browser_tab_switch",
         "browser_drag", "browser_file_upload",
     ):
+        # Cap screenshot_b64 at ~200KB base64 (~150KB raw) to keep SSE events small.
+        # IMPORTANT: drop entirely if too large — never truncate (truncated base64 = invalid image).
+        _MAX_SCREENSHOT_B64 = 204800  # 200KB base64
+        raw_shot = data.get("screenshot_b64", "")
+        if raw_shot and len(raw_shot) > _MAX_SCREENSHOT_B64:
+            logger.warning("[build_tool_content] screenshot_b64 too large (%d bytes) — dropping to prevent SSE corruption", len(raw_shot))
+            raw_shot = ""  # Drop; do NOT truncate (produces invalid base64)
         return {
             "type": "browser",
             "url": data.get("url", ""),
             "title": data.get("title", ""),
             "content": str(data.get("content", data.get("content_snippet", "")))[:2000],
             "save_path": data.get("save_path", ""),
-            "screenshot_b64": data.get("screenshot_b64", ""),
+            "screenshot_b64": raw_shot,
         }
     elif tool_name in ("desktop_open_app", "desktop_app_type", "desktop_app_screenshot"):
+        _MAX_SCREENSHOT_B64 = 204800
+        raw_shot = data.get("screenshot_b64", "")
+        if raw_shot and len(raw_shot) > _MAX_SCREENSHOT_B64:
+            logger.warning("[build_tool_content] desktop screenshot_b64 too large (%d bytes) — dropping", len(raw_shot))
+            raw_shot = ""
         return {
             "type": "browser",
             "url": "",
             "title": data.get("app", data.get("window", "")),
             "content": "",
             "save_path": "",
-            "screenshot_b64": data.get("screenshot_b64", ""),
+            "screenshot_b64": raw_shot,
         }
     elif tool_name == "image_view":
         # image_view returns data_uri (e.g. "data:image/png;base64,...")

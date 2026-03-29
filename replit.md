@@ -73,6 +73,25 @@ JWT tokens stored in AsyncStorage (mobile) / localStorage (web).
 - **Backend**: `npm run dev` (tsx server/index.ts) — port 5000
 - **Expo Go**: `npx expo start` — port 8083 (web)
 
+## Screenshot Compression (critical fix)
+Browser screenshot pipeline compresses PNG → JPEG 65% at 800px wide (~1.5MB → ~50KB):
+- E2B sandbox: `_take_screenshot()` in `browser.py` — PIL → ImageMagick → cp fallback chain
+- SSE safety: `build_tool_content()` in `agent_flow.py` drops (not truncates) screenshots >200KB to prevent SSE stream corruption
+- Mobile rendering: `BrowserContent` in `AgentToolCard.tsx` validates `data:image/jpeg;base64,` or `data:image/png;base64,` prefix before rendering, with `onError` graceful fallback
+- Markdown images: `MarkdownText.tsx` handles `![alt](url)` and inline base64 data URIs via `MarkdownImage` component
+
+## Page Content Extraction
+Browser tool uses `_fetch_page_content()` which:
+1. Tries `_ensure_page_deps()` — installs `lxml` + `beautifulsoup4` in E2B sandbox via pip (multiple fallback commands)
+2. If bs4 unavailable: falls back to `curl + python3 -c` regex-based text extraction (no external deps needed)
+
+## Python Agent Dependencies (`requirements.txt`)
+- `e2b>=2.0.0` + `e2b-desktop>=1.0.0`
+- `Pillow>=10.0.0` — screenshot compression (installed: 11.3.0)
+- `numpy>=1.24.0` — numerical operations (installed: 2.4.3)
+- `tavily-python>=0.5.0` — web search
+- `beautifulsoup4>=4.12.0` + `lxml>=4.9.0` — page content parsing (installed in E2B sandbox on demand)
+
 ## Dependencies
 All packages tracked in `package.json`. Key additions:
 - `@e2b/desktop` — E2B sandbox SDK

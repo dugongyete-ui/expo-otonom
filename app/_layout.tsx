@@ -149,6 +149,15 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // Failsafe: never show splash for more than 5 seconds
+  useEffect(() => {
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+      setShowSplash(false);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, []);
+
   if (showSplash) {
     return (
       <>

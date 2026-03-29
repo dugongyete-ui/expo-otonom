@@ -5,8 +5,8 @@
  *
  * Used by ChatMessage.tsx and FilePanel.tsx so both render markdown identically.
  */
-import React, { useMemo } from "react";
-import { Text, View, StyleSheet } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Text, View, StyleSheet, Image, TouchableOpacity, Linking } from "react-native";
 import { CodeBlock } from "@/components/CodeBlock";
 
 interface MarkdownTextProps {
@@ -71,6 +71,68 @@ function renderInline(
         {text.slice(lastIdx)}
       </Text>,
     );
+  }
+  return nodes;
+}
+
+function MarkdownImage({ alt, uri }: { alt: string; uri: string }) {
+  const [error, setError] = useState(false);
+  if (error) {
+    return (
+      <View style={styles.imgError}>
+        <Text style={styles.imgErrorText}>[Gambar: {alt || "Screenshot"}]</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.imgWrapper}>
+      <Image
+        source={{ uri }}
+        style={styles.img}
+        resizeMode="contain"
+        onError={() => setError(true)}
+      />
+      {alt ? <Text style={styles.imgCaption}>{alt}</Text> : null}
+    </View>
+  );
+}
+
+function renderInlineWithLinks(
+  text: string,
+  color: string,
+  baseSize: number,
+): React.ReactNode[] {
+  // First check for inline images/links mixed into text
+  const nodes: React.ReactNode[] = [];
+  const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = linkRegex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      const before = text.slice(lastIdx, match.index);
+      nodes.push(...renderInline(before, color, baseSize).map((n, i) =>
+        React.isValidElement(n) ? React.cloneElement(n as React.ReactElement, { key: `li-p-${key}-${i}` }) : n
+      ));
+    }
+    const linkText = match[1];
+    const linkUrl = match[2];
+    nodes.push(
+      <Text
+        key={`lk-${key++}`}
+        style={{ color: "#3B7FD4", fontSize: baseSize, textDecorationLine: "underline" }}
+        onPress={() => Linking.openURL(linkUrl).catch(() => {})}
+      >
+        {linkText}
+      </Text>,
+    );
+    lastIdx = match.index + match[0].length;
+  }
+  if (lastIdx < text.length) {
+    nodes.push(...renderInline(text.slice(lastIdx), color, baseSize));
+  }
+  if (nodes.length === 0) {
+    return renderInline(text, color, baseSize);
   }
   return nodes;
 }
@@ -193,10 +255,43 @@ export function MarkdownText({
         continue;
       }
 
+      // Markdown image: ![alt](url)
+      // Handles both regular URLs and base64 data URIs (e.g. from screenshots)
+      const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      if (imgMatch) {
+        const alt = imgMatch[1];
+        const uri = imgMatch[2];
+        const isBase64 = uri.startsWith("data:image/");
+        const isUrl = uri.startsWith("http://") || uri.startsWith("https://");
+        if (isBase64 || isUrl) {
+          result.push(
+            <MarkdownImage key={`img-${idx}`} alt={alt} uri={uri} />,
+          );
+          idx++;
+          continue;
+        }
+      }
+
+      // Markdown link: [text](url)
+      const linkMatch = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/);
+      if (linkMatch) {
+        result.push(
+          <TouchableOpacity
+            key={`link-${idx}`}
+            onPress={() => Linking.openURL(linkMatch[2]).catch(() => {})}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.link, { fontSize }]}>{linkMatch[1]}</Text>
+          </TouchableOpacity>,
+        );
+        idx++;
+        continue;
+      }
+
       // Regular paragraph line
       result.push(
         <Text key={`t-${idx}`} style={[styles.body, { color, fontSize }]} selectable>
-          {renderInline(line, color, fontSize)}
+          {renderInlineWithLinks(line, color, fontSize)}
         </Text>,
       );
       idx++;
@@ -252,5 +347,44 @@ const styles = StyleSheet.create({
     color: "#4a4740",
     paddingHorizontal: 5,
     borderRadius: 4,
+  },
+  link: {
+    color: "#3B7FD4",
+    textDecorationLine: "underline",
+    fontFamily: "Inter_400Regular",
+    lineHeight: 22,
+  },
+  imgWrapper: {
+    marginVertical: 8,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#f5f3ee",
+    borderWidth: 1,
+    borderColor: "#ddd9d0",
+  },
+  img: {
+    width: "100%",
+    height: 200,
+  },
+  imgCaption: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#8a8780",
+    textAlign: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  imgError: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#f5f3ee",
+    borderRadius: 6,
+    marginVertical: 4,
+  },
+  imgErrorText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#8a8780",
+    fontStyle: "italic",
   },
 });

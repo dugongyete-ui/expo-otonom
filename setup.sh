@@ -155,8 +155,9 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════════
 print_step "Menginstall SEMUA Python packages untuk Agent AI..."
 print_info "pydantic · requests · aiohttp · httpx · beautifulsoup4"
-print_info "playwright · e2b · redis · motor · websockify"
+print_info "playwright · e2b · e2b-desktop · redis · motor · websockify"
 print_info "lxml · aiofiles · dnspython · pymongo · certifi · PyYAML"
+print_info "Pillow · numpy · tavily-python"
 
 $PYTHON -m pip install $PIP_FLAGS \
   "pydantic>=2.10.0" \
@@ -167,6 +168,7 @@ $PYTHON -m pip install $PIP_FLAGS \
   "lxml>=4.9.0" \
   "playwright>=1.50.0" \
   "e2b>=2.0.0" \
+  "e2b-desktop>=1.0.0" \
   "redis>=5.0.0" \
   "motor>=3.0.0" \
   "pymongo>=4.0.0" \
@@ -179,6 +181,9 @@ $PYTHON -m pip install $PIP_FLAGS \
   "multidict>=6.0.0" \
   "yarl>=1.9.0" \
   "PyYAML>=6.0.0" \
+  "Pillow>=10.0.0" \
+  "numpy>=1.24.0" \
+  "tavily-python>=0.5.0" \
   2>&1 | tail -5
 
 print_ok "Semua Python packages berhasil diinstall"
@@ -211,6 +216,8 @@ check_py "pymongo"       "pymongo"
 check_py "aiofiles"      "aiofiles"
 check_py "websockify"    "websockify"
 check_py "yaml"          "PyYAML"
+check_py "PIL"           "Pillow (image processing)"
+check_py "numpy"         "numpy"
 
 if [ ${#FAILED_PY[@]} -eq 0 ]; then
   print_ok "Semua Python packages terverifikasi"

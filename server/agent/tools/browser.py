@@ -543,36 +543,59 @@ except Exception as e:
             self._page_deps_ok = True
             logger.info("[Browser] Page deps already available")
             return
-        # Install and then re-verify
+        # Install with multiple fallback methods
         self._run(
-            "pip install --quiet --break-system-packages lxml beautifulsoup4 2>/dev/null",
-            timeout=60
+            "pip install --quiet --break-system-packages lxml beautifulsoup4 2>/dev/null || "
+            "pip3 install --quiet lxml beautifulsoup4 2>/dev/null || "
+            "python3 -m pip install --quiet lxml beautifulsoup4 2>/dev/null || true",
+            timeout=90
         )
         verify = self._run("python3 -c 'import bs4, lxml' 2>/dev/null && echo OK", timeout=10)
         if "OK" in verify.get("stdout", ""):
             self._page_deps_ok = True
             logger.info("[Browser] Page deps installed successfully")
         else:
-            logger.warning("[Browser] Page deps install failed; will retry next call")
+            logger.warning("[Browser] Page deps install failed; will use curl fallback for content")
 
     def _fetch_page_content(self, url: str) -> dict:
-        """Fetch and parse page content via BeautifulSoup in sandbox."""
+        """Fetch and parse page content via BeautifulSoup in sandbox. Falls back to curl."""
         self._ensure_page_deps()
-        if not self._ensure_extract_script():
-            return {"success": False, "error": "Script not available", "title": "", "content": "", "interactive_elements": []}
         safe_url = url.replace("'", "%27")
-        scripts_dir = self._get_scripts_dir()
-        result = self._run(
-            "python3 {}/page_extract.py '{}'".format(scripts_dir, safe_url),
-            timeout=25
+
+        if self._page_deps_ok and self._ensure_extract_script():
+            scripts_dir = self._get_scripts_dir()
+            result = self._run(
+                "python3 {}/page_extract.py '{}'".format(scripts_dir, safe_url),
+                timeout=25
+            )
+            stdout = result["stdout"].strip()
+            if stdout:
+                try:
+                    return json.loads(stdout)
+                except Exception:
+                    return {"success": True, "title": "", "url": url, "content": stdout[:2000], "interactive_elements": []}
+
+        # Fallback: curl-based content extraction (no bs4 required)
+        curl_result = self._run(
+            "curl -s -L --max-time 15 -A 'Mozilla/5.0' '{}' 2>/dev/null | "
+            "python3 -c \""
+            "import sys, re; "
+            "html = sys.stdin.read(); "
+            "text = re.sub(r'<[^>]+>', ' ', html); "
+            "text = re.sub(r'[ \\t]+', ' ', text); "
+            "text = '\\n'.join(l.strip() for l in text.splitlines() if len(l.strip()) > 20); "
+            "print(text[:3000])"
+            "\" 2>/dev/null".format(safe_url),
+            timeout=20
         )
-        stdout = result["stdout"].strip()
-        if not stdout:
-            return {"success": False, "error": result["stderr"] or "No output", "title": "", "url": url, "content": "", "interactive_elements": []}
-        try:
-            return json.loads(stdout)
-        except Exception:
-            return {"success": True, "title": "", "url": url, "content": stdout[:2000], "interactive_elements": []}
+        content = curl_result.get("stdout", "").strip()
+        return {
+            "success": bool(content),
+            "title": "",
+            "url": url,
+            "content": content[:2000] if content else "Could not fetch page content.",
+            "interactive_elements": [],
+        }
 
     def _wait_for_page_ready(self, max_wait: int = 10) -> bool:
         """Poll CDP for document.readyState === 'complete', with sleep fallback.
@@ -693,17 +716,58 @@ sys.exit(1)
         return False
 
     def _take_screenshot(self, path: str = "/tmp/dzeck_screenshot.png") -> Optional[str]:
-        """Take a screenshot of the desktop and return base64 encoded data."""
-        res = self._run(
-            "DISPLAY=:0 scrot -z '{}' 2>/dev/null || "
-            "DISPLAY=:0 import -window root '{}' 2>/dev/null || true".format(path, path),
+        """Take a screenshot of the desktop, compress to JPEG for small payload, return base64."""
+        self._run(
+            "DISPLAY=:0 scrot -z '{0}' 2>/dev/null || "
+            "DISPLAY=:0 import -window root '{0}' 2>/dev/null || true".format(path),
             timeout=15
         )
-        from server.agent.tools.e2b_sandbox import get_sandbox, read_file_bytes
+        jpeg_path = path.replace(".png", "_thumb.jpg")
+        # Compress: resize to 800px wide max, JPEG quality 65 — reduces ~1.5MB PNG → ~50KB JPEG
+        self._run(
+            "python3 -c \""
+            "import sys; "
+            "try:"
+            "  from PIL import Image, ImageOps; import io; "
+            "  img = Image.open('{0}').convert('RGB'); "
+            "  w,h = img.size; "
+            "  nw = min(w, 800); nh = int(h * nw / w); "
+            "  img = img.resize((nw, nh), Image.LANCZOS); "
+            "  img.save('{1}', 'JPEG', quality=65, optimize=True); "
+            "  sys.exit(0)"
+            "except Exception as e:"
+            "  sys.stderr.write(str(e)); sys.exit(1)"
+            "\" 2>/dev/null || "
+            "convert '{0}' -resize '800x>' -quality 65 '{1}' 2>/dev/null || "
+            "cp '{0}' '{1}' 2>/dev/null || true".format(path, jpeg_path),
+            timeout=15
+        )
+        from server.agent.tools.e2b_sandbox import read_file_bytes
+        import base64 as _b64
+        # Try compressed JPEG first
+        data = read_file_bytes(jpeg_path)
+        if data and len(data) > 100:
+            return "data:image/jpeg;base64," + _b64.b64encode(data).decode()
+        # Fallback: raw PNG (cap at 200KB raw to avoid huge SSE lines)
         data = read_file_bytes(path)
         if data:
-            import base64
-            return "data:image/png;base64," + base64.b64encode(data).decode()
+            if len(data) > 204800:
+                # Too large — return compressed in-memory via PIL if available
+                try:
+                    from PIL import Image
+                    import io
+                    img = Image.open(io.BytesIO(data)).convert("RGB")
+                    w, h = img.size
+                    nw = min(w, 800); nh = int(h * nw / w)
+                    img = img.resize((nw, nh), Image.LANCZOS)
+                    buf = io.BytesIO()
+                    img.save(buf, "JPEG", quality=65, optimize=True)
+                    return "data:image/jpeg;base64," + _b64.b64encode(buf.getvalue()).decode()
+                except Exception:
+                    pass
+                # Last resort: return first 200KB base64
+                data = data[:204800]
+            return "data:image/png;base64," + _b64.b64encode(data).decode()
         return None
 
     def navigate(self, url: str) -> ToolResult:

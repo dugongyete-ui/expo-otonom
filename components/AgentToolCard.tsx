@@ -81,6 +81,13 @@ function SearchContent({ query, results }: { query?: string; results?: { title: 
 }
 
 function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; title?: string; content?: string; screenshotB64?: string }) {
+  const [imgError, setImgError] = useState(false);
+
+  // Validate base64 uri — must have proper prefix and reasonable length
+  const validScreenshot = screenshotB64 &&
+    (screenshotB64.startsWith("data:image/jpeg;base64,") || screenshotB64.startsWith("data:image/png;base64,")) &&
+    screenshotB64.length > 100;
+
   return (
     <View style={styles.browserBody}>
       {url ? (
@@ -90,18 +97,24 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
         </View>
       ) : null}
       {title ? <Text style={styles.browserTitle} numberOfLines={1}>{title}</Text> : null}
-      {screenshotB64 ? (
+      {validScreenshot && !imgError ? (
         <View style={styles.screenshotWrapper}>
           <Image
             source={{ uri: screenshotB64 }}
             style={styles.screenshotImage}
-            resizeMode="contain"
+            resizeMode="cover"
+            onError={() => setImgError(true)}
           />
         </View>
       ) : content ? (
         <ScrollView style={styles.browserContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.browserContentText} numberOfLines={8}>{content.slice(0, 800)}</Text>
+          <Text style={styles.browserContentText} numberOfLines={10}>{content.slice(0, 1200)}</Text>
         </ScrollView>
+      ) : validScreenshot && imgError ? (
+        <View style={[styles.screenshotWrapper, { alignItems: "center", justifyContent: "center", height: 60 }]}>
+          <Ionicons name="image-outline" size={20} color="#8a8780" />
+          <Text style={{ fontSize: 11, color: "#8a8780", marginTop: 4 }}>Screenshot tersedia</Text>
+        </View>
       ) : null}
     </View>
   );
