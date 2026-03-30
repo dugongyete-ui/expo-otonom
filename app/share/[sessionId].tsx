@@ -34,12 +34,15 @@ interface AgentEvent {
   content?: string;
   chunk?: string;
   text?: string;
+  title?: string;
   message?: string;
   function_name?: string;
+  tool_name?: string;
+  arguments?: Record<string, unknown>;
   status?: string;
-  tool_content?: any;
+  tool_content?: Record<string, unknown>;
   plan?: { steps?: PlanStep[] };
-  step?: PlanStep;
+  step?: Partial<PlanStep>;
   step_id?: string;
   step_status?: string;
   error?: string;
@@ -131,23 +134,67 @@ function parseEventsToSession(rawLines: string[]): ParsedSession {
         }
         break;
       case "tool":
-        if (evt.function_name) {
+      case "tool_call":
+        if (evt.function_name || evt.tool_name) {
+          const toolName = evt.function_name || evt.tool_name || "unknown";
           result.toolCalls.push({
-            name: evt.function_name,
+            name: toolName,
             status: evt.status || "called",
-            content: evt.tool_content || {},
+            content: evt.tool_content || evt.arguments || {},
           });
           const tc = evt.tool_content;
-          if (tc && tc.type === "file" && tc.file && tc.operation === "write") {
-            const alreadyAdded = result.files.some((f) => f.path === (tc.file || ""));
+          const tcFile = typeof tc?.file === "string" ? tc.file : null;
+          if (tc && tc.type === "file" && tcFile && tc.operation === "write") {
+            const alreadyAdded = result.files.some((f) => f.path === tcFile);
             if (!alreadyAdded) {
               result.files.push({
-                name: tc.file.split("/").pop() || tc.file,
-                path: tc.file,
+                name: tcFile.split("/").pop() || tcFile,
+                path: tcFile,
                 download_url: "",
               });
             }
           }
+        }
+        break;
+      case "tool_result":
+        if (evt.function_name || evt.tool_name) {
+          const tName = evt.function_name || evt.tool_name || "unknown";
+          const callIdx = result.toolCalls.findIndex((t) => t.name === tName && t.status === "called");
+          if (callIdx >= 0) {
+            result.toolCalls[callIdx] = { ...result.toolCalls[callIdx], status: evt.error ? "error" : "done" };
+          }
+        }
+        break;
+      case "step_start":
+        if (evt.step_id || evt.step?.id) {
+          const sid = evt.step_id || evt.step?.id;
+          const existing = result.planSteps.findIndex((s) => s.id === sid);
+          const newStep: PlanStep = {
+            id: sid,
+            title: evt.step?.title || evt.title,
+            description: evt.step?.description,
+            agent: evt.step?.agent,
+            status: "running",
+          };
+          if (existing >= 0) {
+            result.planSteps[existing] = { ...result.planSteps[existing], ...newStep };
+          } else {
+            result.planSteps.push(newStep);
+          }
+        }
+        break;
+      case "step_done":
+        if (evt.step_id || evt.step?.id) {
+          const sid = evt.step_id || evt.step?.id;
+          const idx = result.planSteps.findIndex((s) => s.id === sid);
+          if (idx >= 0) result.planSteps[idx] = { ...result.planSteps[idx], status: "completed" };
+        }
+        break;
+      case "step_failed":
+        if (evt.step_id || evt.step?.id) {
+          const sid = evt.step_id || evt.step?.id;
+          const idx = result.planSteps.findIndex((s) => s.id === sid);
+          if (idx >= 0) result.planSteps[idx] = { ...result.planSteps[idx], status: "failed" };
         }
         break;
       case "done":

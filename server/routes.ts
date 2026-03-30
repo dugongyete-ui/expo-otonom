@@ -89,6 +89,33 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
   })();
 
+  // Available model/provider options.
+  // These can be overridden by setting AVAILABLE_MODELS and AVAILABLE_PROVIDERS env vars
+  // (JSON arrays of {label, value} pairs).
+  const DEFAULT_MODELS = [
+    { label: "Qwen 3 235B (Default)", value: "qwen-3-235b-a22b-instruct-2507" },
+    { label: "Qwen 3 32B", value: "qwen-3-32b" },
+    { label: "Llama 4 Scout", value: "llama-4-scout-17b-16e-instruct" },
+    { label: "Llama 4 Maverick", value: "llama-4-maverick-17b-128e-instruct" },
+    { label: "Llama 3.3 70B", value: "llama-3.3-70b" },
+  ];
+  const DEFAULT_PROVIDERS = [
+    { label: "Cerebras", value: "cerebras" },
+    { label: "OpenAI", value: "openai" },
+    { label: "Anthropic", value: "anthropic" },
+  ];
+  const DEFAULT_SEARCH_PROVIDERS = [
+    { label: "Bing Web", value: "bing_web" },
+    { label: "Google", value: "google" },
+    { label: "DuckDuckGo", value: "duckduckgo" },
+  ];
+
+  function _parseJsonEnvList(envVar: string, fallback: Array<{ label: string; value: string }>) {
+    const raw = process.env[envVar];
+    if (!raw) return fallback;
+    try { return JSON.parse(raw) as Array<{ label: string; value: string }>; } catch { return fallback; }
+  }
+
   app.get("/api/config", (_req: any, res: any) => {
     res.json({
       CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
@@ -105,6 +132,10 @@ export async function registerRoutes(app: any): Promise<Server> {
       MCP_SERVER_URL: process.env.MCP_SERVER_URL || "",
       MCP_AUTH_TOKEN: process.env.MCP_AUTH_TOKEN ? "***" : "",
       EMAIL_ENABLED: !!(process.env.EMAIL_HOST),
+      // Dynamic lists consumed by SettingsPanel (can be overridden via env vars)
+      available_models: _parseJsonEnvList("AVAILABLE_MODELS", DEFAULT_MODELS),
+      available_providers: _parseJsonEnvList("AVAILABLE_PROVIDERS", DEFAULT_PROVIDERS),
+      available_search_providers: _parseJsonEnvList("AVAILABLE_SEARCH_PROVIDERS", DEFAULT_SEARCH_PROVIDERS),
     });
   });
 

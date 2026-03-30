@@ -20,6 +20,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { getApiBaseUrl } from "@/lib/api-service";
 
+interface SelectOption {
+  label: string;
+  value: string;
+}
+
 interface AppConfig {
   CEREBRAS_CHAT_MODEL?: string;
   CEREBRAS_AGENT_MODEL?: string;
@@ -35,6 +40,9 @@ interface AppConfig {
   modelName?: string;
   modelProvider?: string;
   searchProvider?: string;
+  available_models?: SelectOption[];
+  available_providers?: SelectOption[];
+  available_search_providers?: SelectOption[];
 }
 
 interface SettingsPanelProps {
@@ -43,7 +51,7 @@ interface SettingsPanelProps {
   authToken: string;
 }
 
-const MODEL_PRESETS = [
+const FALLBACK_MODELS: SelectOption[] = [
   { label: "Qwen 3 235B (Default)", value: "qwen-3-235b-a22b-instruct-2507" },
   { label: "Qwen 3 32B", value: "qwen-3-32b" },
   { label: "Llama 4 Scout", value: "llama-4-scout-17b-16e-instruct" },
@@ -51,13 +59,13 @@ const MODEL_PRESETS = [
   { label: "Llama 3.3 70B", value: "llama-3.3-70b" },
 ];
 
-const PROVIDER_PRESETS = [
+const FALLBACK_PROVIDERS: SelectOption[] = [
   { label: "Cerebras", value: "cerebras" },
   { label: "OpenAI", value: "openai" },
   { label: "Anthropic", value: "anthropic" },
 ];
 
-const SEARCH_PRESETS = [
+const FALLBACK_SEARCH_PROVIDERS: SelectOption[] = [
   { label: "Bing Web", value: "bing_web" },
   { label: "Google", value: "google" },
   { label: "DuckDuckGo", value: "duckduckgo" },
@@ -157,6 +165,10 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
   const [googleApiKey, setGoogleApiKey] = useState("");
   const [googleEngineId, setGoogleEngineId] = useState("");
 
+  const [modelOptions, setModelOptions] = useState<SelectOption[]>(FALLBACK_MODELS);
+  const [providerOptions, setProviderOptions] = useState<SelectOption[]>(FALLBACK_PROVIDERS);
+  const [searchOptions, setSearchOptions] = useState<SelectOption[]>(FALLBACK_SEARCH_PROVIDERS);
+
   const apiBase = getApiBaseUrl();
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` };
 
@@ -171,6 +183,9 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
       if (!configRes.ok) throw new Error(`HTTP ${configRes.status}`);
       const data: AppConfig = await configRes.json();
       setConfig(data);
+      if (data.available_models?.length) setModelOptions(data.available_models);
+      if (data.available_providers?.length) setProviderOptions(data.available_providers);
+      if (data.available_search_providers?.length) setSearchOptions(data.available_search_providers);
       const prefs = prefsRes.ok ? await prefsRes.json().catch(() => ({})) : {};
       setAgentModel(prefs.model || data.CEREBRAS_AGENT_MODEL || data.modelName || "qwen-3-235b-a22b-instruct-2507");
       setChatModel(data.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507");
@@ -274,14 +289,14 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
         ) : (
           <ScrollView contentContainerStyle={styles.content}>
             <SectionHeader title="Model Configuration" />
-            <OptionPicker label="Model Provider" options={PROVIDER_PRESETS} value={modelProvider} onChange={setModelProvider} />
-            <OptionPicker label="Agent Model" options={MODEL_PRESETS} value={agentModel} onChange={setAgentModel} />
+            <OptionPicker label="Model Provider" options={providerOptions} value={modelProvider} onChange={setModelProvider} />
+            <OptionPicker label="Agent Model" options={modelOptions} value={agentModel} onChange={setAgentModel} />
             <FieldInput label="Agent Model (Custom)" value={agentModel} onChangeText={setAgentModel} placeholder="model-name" />
-            <OptionPicker label="Chat Model" options={MODEL_PRESETS} value={chatModel} onChange={setChatModel} />
+            <OptionPicker label="Chat Model" options={modelOptions} value={chatModel} onChange={setChatModel} />
             <FieldInput label="Chat Model (Custom)" value={chatModel} onChangeText={setChatModel} placeholder="model-name" />
 
             <SectionHeader title="Search" />
-            <OptionPicker label="Search Provider" options={SEARCH_PRESETS} value={searchProvider} onChange={setSearchProvider} />
+            <OptionPicker label="Search Provider" options={searchOptions} value={searchProvider} onChange={setSearchProvider} />
             {searchProvider === "google" && (
               <>
                 <FieldInput label="Google Search API Key" value={googleApiKey} onChangeText={setGoogleApiKey} placeholder="AIza..." secureTextEntry />
