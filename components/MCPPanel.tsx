@@ -23,7 +23,7 @@ import { getApiBaseUrl } from "@/lib/api-service";
 interface MCPServer {
   name: string;
   url: string;
-  auth_token?: string;
+  has_auth_token?: boolean;
   enabled: boolean;
   description?: string;
   transport?: string;
@@ -102,6 +102,8 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
     transport: "sse",
     enabled: true,
   });
+  // Tracks whether user actually typed a new token during editing
+  const [tokenChanged, setTokenChanged] = useState(false);
 
   const apiBase = getApiBaseUrl();
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` };
@@ -128,6 +130,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
   const resetForm = () => {
     setForm({ name: "", url: "", auth_token: "", description: "", transport: "sse", enabled: true });
     setEditingServer(null);
+    setTokenChanged(false);
   };
 
   const openAddForm = () => {
@@ -139,12 +142,13 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
     setForm({
       name: server.name,
       url: server.url,
-      auth_token: server.auth_token || "",
+      auth_token: "",
       description: server.description || "",
       transport: server.transport || "sse",
       enabled: server.enabled,
     });
     setEditingServer(server);
+    setTokenChanged(false);
     setShowAddForm(true);
   };
 
@@ -156,11 +160,25 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
     setIsSaving(true);
     setError(null);
     try {
-      const body = { ...form, name: form.name.trim(), url: form.url.trim() };
       const isEdit = !!editingServer;
       const method = isEdit ? "PUT" : "POST";
-      const url = isEdit ? `${apiBase}/api/mcp/config/${encodeURIComponent(editingServer!.name)}` : `${apiBase}/api/mcp/config`;
-      const res = await fetch(url, { method, headers, body: JSON.stringify(body) });
+      const endpoint = isEdit
+        ? `${apiBase}/api/mcp/config/${encodeURIComponent(editingServer!.name)}`
+        : `${apiBase}/api/mcp/config`;
+
+      const body: Record<string, any> = {
+        name: form.name.trim(),
+        url: form.url.trim(),
+        description: form.description,
+        transport: form.transport,
+        enabled: form.enabled,
+      };
+      // Only send auth_token when adding new, or when editing and user explicitly typed one
+      if (!isEdit || tokenChanged) {
+        body.auth_token = form.auth_token;
+      }
+
+      const res = await fetch(endpoint, { method, headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       await fetchServers();
       setShowAddForm(false);
@@ -236,7 +254,13 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
             <Text style={styles.formTitle}>{editingServer ? `Edit "${editingServer.name}"` : "Add MCP Server"}</Text>
             <FormField label="Name *" value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="my-mcp-server" />
             <FormField label="URL *" value={form.url} onChangeText={(v) => setForm((f) => ({ ...f, url: v }))} placeholder="https://mcp.example.com/sse" />
-            <FormField label="Auth Token" value={form.auth_token} onChangeText={(v) => setForm((f) => ({ ...f, auth_token: v }))} placeholder="Bearer token (optional)" secureTextEntry />
+            <FormField
+              label={editingServer?.has_auth_token ? "Auth Token (configured — leave blank to keep)" : "Auth Token"}
+              value={form.auth_token}
+              onChangeText={(v) => { setForm((f) => ({ ...f, auth_token: v })); setTokenChanged(true); }}
+              placeholder={editingServer?.has_auth_token ? "Enter new token to replace..." : "Bearer token (optional)"}
+              secureTextEntry
+            />
             <FormField label="Description" value={form.description} onChangeText={(v) => setForm((f) => ({ ...f, description: v }))} placeholder="What does this MCP server do?" />
 
             <View style={styles.fieldRow}>

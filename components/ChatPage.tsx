@@ -80,6 +80,7 @@ export function ChatPage({
   const [showSettings, setShowSettings] = useState(false);
   const [showMCPPanel, setShowMCPPanel] = useState(false);
   const [showModelSettings, setShowModelSettings] = useState(false);
+  const [activeModel, setActiveModel] = useState("qwen-3-235b-a22b-instruct-2507");
   const { locale, changeLocale } = useI18n();
   const { logout } = useAuth();
   const [attachments, setAttachments] = useState<any[]>([]);
@@ -101,6 +102,18 @@ export function ChatPage({
       }, 100);
     }
   }, [messages, streamingContent, isLoading]);
+
+  // Load active model from server config so Settings panel changes take effect
+  useEffect(() => {
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    fetch(`${base}/api/config`)
+      .then((r) => r.json())
+      .then((cfg) => {
+        const m = cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
+        if (m) setActiveModel(m);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!isAgentMode) return;
@@ -522,7 +535,7 @@ export function ChatPage({
           {
             message: msgText,
             messages: historyMsgs,
-            model: "qwen-3-235b-a22b-instruct-2507",
+            model: activeModel,
             attachments: [],
             session_id: activeSessionIdRef.current,
             is_continuation: wasContinuation,
@@ -684,7 +697,17 @@ export function ChatPage({
 
       <SettingsPanel
         visible={showModelSettings}
-        onClose={() => setShowModelSettings(false)}
+        onClose={() => {
+          setShowModelSettings(false);
+          const base = typeof window !== "undefined" ? window.location.origin : "";
+          fetch(`${base}/api/config`)
+            .then((r) => r.json())
+            .then((cfg) => {
+              const m = cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
+              if (m) setActiveModel(m);
+            })
+            .catch(() => {});
+        }}
         authToken={getStoredToken()}
       />
 

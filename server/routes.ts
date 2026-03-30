@@ -169,9 +169,17 @@ export async function registerRoutes(app: any): Promise<Server> {
         return res.json({ servers: [] });
       }
       const servers = await (col as any).find({}, { projection: { _id: 0 } }).toArray();
+      // Mask auth_token value but include has_auth_token flag so UI can show
+      // "token configured" without revealing or accidentally overwriting the real value.
       const masked = servers.map((s: any) => ({
-        ...s,
-        auth_token: s.auth_token ? "***" : "",
+        name: s.name,
+        url: s.url,
+        description: s.description || "",
+        transport: s.transport || "sse",
+        enabled: s.enabled !== false,
+        has_auth_token: !!s.auth_token,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
       }));
       res.json({ servers: masked });
     } catch (err: any) {
@@ -181,7 +189,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   app.post("/api/mcp/config", requireAdmin, async (req: any, res: any) => {
-    const { name, url, auth_token, description } = req.body || {};
+    const { name, url, auth_token, description, transport, enabled } = req.body || {};
     if (!name || !url) {
       return res.status(400).json({ error: "name and url are required" });
     }
@@ -190,11 +198,13 @@ export async function registerRoutes(app: any): Promise<Server> {
       if (!col) {
         return res.status(503).json({ error: "Database unavailable" });
       }
-      const doc = {
+      const doc: Record<string, any> = {
         name: String(name).trim(),
         url: String(url).trim(),
         auth_token: auth_token ? String(auth_token).trim() : "",
         description: description ? String(description).trim() : "",
+        transport: transport ? String(transport).trim() : "sse",
+        enabled: enabled !== false,
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -205,7 +215,8 @@ export async function registerRoutes(app: any): Promise<Server> {
       );
       console.log(`[MCP Config] Registered MCP server: ${doc.name} → ${doc.url}`);
       _reloadMcpServers().catch(() => {});
-      res.status(201).json({ ok: true, server: { ...doc, auth_token: doc.auth_token ? "***" : "" } });
+      const { auth_token: _t, ...safeDoc } = doc;
+      res.status(201).json({ ok: true, server: { ...safeDoc, has_auth_token: !!doc.auth_token } });
     } catch (err: any) {
       console.warn("[MCP Config] Failed to register MCP server:", err.message);
       res.status(500).json({ error: "Failed to register MCP server" });
@@ -214,7 +225,7 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.put("/api/mcp/config/:name", requireAdmin, async (req: any, res: any) => {
     const { name } = req.params;
-    const { url, auth_token, description } = req.body || {};
+    const { url, auth_token, description, transport, enabled } = req.body || {};
     try {
       const col = await getCollection("mcp_configs");
       if (!col) {
@@ -222,8 +233,17 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
       const updates: Record<string, any> = { updated_at: new Date() };
       if (url) updates.url = String(url).trim();
-      if (auth_token !== undefined) updates.auth_token = String(auth_token).trim();
+      // Only update auth_token if caller sends a non-empty, non-masked value
+      if (auth_token !== undefined && auth_token !== "" && auth_token !== "***") {
+        updates.auth_token = String(auth_token).trim();
+      }
+      // Clear token only if explicitly sent as empty string (not masked)
+      if (auth_token === "") {
+        updates.auth_token = "";
+      }
       if (description !== undefined) updates.description = String(description).trim();
+      if (transport !== undefined) updates.transport = String(transport).trim();
+      if (enabled !== undefined) updates.enabled = !!enabled;
 
       const result = await (col as any).updateOne({ name }, { $set: updates });
       if (result.matchedCount === 0) {
@@ -1830,8 +1850,42 @@ except Exception as ex:
           : multerErr.message || "Upload gagal";
         return res.status(400).json({ error: msg });
       }
+      const { sessionId } = req.params;
+      const requestingUserId: string = req.user?.id || "";
+
+      // ── Session ownership check (same pattern as GET /files) ──────────────
+      const liveSession = activeAgentSessions.get(sessionId);
+      if (liveSession) {
+        const sessionOwner: string = (liveSession as any)._userId || "";
+        if (!sessionOwner || requestingUserId !== sessionOwner) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } else {
+        let ownerVerified = false;
+        try {
+          const sessionCol = await getCollection("agent_sessions");
+          if (sessionCol) {
+            const sessionDoc = await (sessionCol as any).findOne(
+              { session_id: sessionId },
+              { projection: { user_id: 1 } },
+            );
+            if (sessionDoc) {
+              const owner: string = sessionDoc.user_id || "";
+              if (!owner || requestingUserId !== owner) {
+                return res.status(403).json({ error: "Access denied" });
+              }
+              ownerVerified = true;
+            }
+          }
+        } catch (err: any) {
+          console.warn("[SessionUpload] Ownership check failed:", err.message);
+        }
+        if (!ownerVerified) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
       try {
-        const { sessionId } = req.params;
         const files = (req.files as any[]) || [];
         if (files.length === 0) {
           return res.status(400).json({ error: "Tidak ada file yang diunggah" });
@@ -1908,19 +1962,20 @@ except Exception as ex:
             throw e2bErr;
           }
 
-          // Store the file reference in MongoDB session_files collection
+          // Store in MongoDB session_files using canonical schema
+          // (matches the existing GET /api/sessions/:sessionId/files reader)
           try {
-            const db = await getMongoDb();
-            if (db) {
-              await db.collection("session_files").insertOne({
+            const col = await getCollection("session_files");
+            if (col) {
+              await (col as any).insertOne({
                 session_id: sessionId,
-                filename: fileName,
-                mime,
+                name: fileName,
+                path: sandboxPath,
                 size,
-                sandbox_path: sandboxPath,
+                mime_type: mime,
                 download_url: downloadUrl,
-                uploaded_at: new Date(),
-                uploaded_by: req.user?.userId || "unknown",
+                created_at: new Date(),
+                user_id: requestingUserId,
               });
             }
           } catch (dbErr: any) {
@@ -1928,15 +1983,14 @@ except Exception as ex:
           }
 
           return {
-            filename: fileName,
+            name: fileName,
             path: sandboxPath,
-            mime,
+            mime_type: mime,
             size,
             is_image: isImage,
             is_text: isText,
             preview,
             download_url: downloadUrl,
-            sandbox_path: sandboxPath,
             session_id: sessionId,
           };
         }));
@@ -1946,22 +2000,6 @@ except Exception as ex:
         res.status(500).json({ error: "Upload gagal: " + err.message });
       }
     });
-  });
-
-  // ─── Get files for a session ──────────────────────────────────────────────────
-  app.get("/api/sessions/:sessionId/files", requireAuth, async (req: any, res: any) => {
-    const { sessionId } = req.params;
-    try {
-      const db = await getMongoDb();
-      if (!db) return res.json({ files: [] });
-      const files = await db.collection("session_files")
-        .find({ session_id: sessionId })
-        .sort({ uploaded_at: -1 })
-        .toArray();
-      res.json({ files });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
   });
 
   // ─── File list endpoint (files in E2B sandbox output directory) ─────────────
