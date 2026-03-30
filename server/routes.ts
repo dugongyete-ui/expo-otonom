@@ -1819,6 +1819,151 @@ except Exception as ex:
     });
   });
 
+  // ─── Session-specific upload endpoint ────────────────────────────────────────
+  // POST /api/sessions/:sessionId/upload
+  // Same as /api/upload but associates the file with a session in MongoDB.
+  app.post("/api/sessions/:sessionId/upload", requireAuth, (req: any, res: any, next: any) => {
+    upload.array("files", 10)(req, res, async (multerErr: any) => {
+      if (multerErr) {
+        const msg = multerErr.code === "LIMIT_FILE_SIZE"
+          ? "File terlalu besar (max 50MB)"
+          : multerErr.message || "Upload gagal";
+        return res.status(400).json({ error: msg });
+      }
+      try {
+        const { sessionId } = req.params;
+        const files = (req.files as any[]) || [];
+        if (files.length === 0) {
+          return res.status(400).json({ error: "Tidak ada file yang diunggah" });
+        }
+
+        const sandboxId = getActiveE2BSandboxId();
+        const e2bKey = process.env.E2B_API_KEY || "";
+
+        if (!sandboxId || !e2bKey) {
+          return res.status(503).json({
+            error: "File upload requires an active E2B sandbox. No sandbox is currently connected.",
+          });
+        }
+
+        const result = await Promise.all(files.map(async (f: any) => {
+          const fileName = f.originalname;
+          const mime = f.mimetype || "application/octet-stream";
+          const size = f.size;
+          const buffer: Buffer = f.buffer;
+          const isImage = mime.startsWith("image/");
+          const isText = mime.startsWith("text/") || /\.(txt|md|py|js|ts|json|csv|xml|html|css|sh|yaml|yml|toml|ini|log)$/i.test(fileName);
+
+          let preview: string | null = null;
+          if (isText && size < 500 * 1024) {
+            try { preview = buffer.toString("utf-8"); } catch {}
+          }
+
+          let sandboxPath = `/home/user/sessions/${sessionId}/${fileName}`;
+          let downloadUrl = "";
+
+          try {
+            const pushResult = await new Promise<{ ok: boolean; path: string }>((resolve) => {
+              const py = spawn("python3", ["-c", `
+import sys, os
+e2b_key = os.environ.get("E2B_API_KEY", "")
+sandbox_id = sys.argv[1]
+dest_path = sys.argv[2]
+try:
+    from e2b_desktop import Sandbox
+    sb = Sandbox.connect(sandbox_id, api_key=e2b_key)
+    data = sys.stdin.buffer.read()
+    parent = os.path.dirname(dest_path)
+    if parent:
+        sb.commands.run(f"mkdir -p {parent}", timeout=10)
+    sb.files.write(dest_path, data)
+    print("ok:" + dest_path)
+except Exception as ex:
+    sys.stderr.write(str(ex))
+    sys.exit(1)
+`, sandboxId, sandboxPath], { env: { ...process.env }, timeout: 30000 });
+              let out = "";
+              let errOut = "";
+              py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+              py.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+              py.stdin.write(buffer);
+              py.stdin.end();
+              py.on("close", (code: number | null) => {
+                if (code === 0 && out.startsWith("ok:")) {
+                  resolve({ ok: true, path: out.slice(3).trim() });
+                } else {
+                  resolve({ ok: false, path: sandboxPath });
+                }
+              });
+              py.on("error", () => resolve({ ok: false, path: sandboxPath }));
+            });
+
+            if (pushResult.ok) {
+              sandboxPath = pushResult.path;
+              downloadUrl = `/api/files/download?sandbox_id=${encodeURIComponent(sandboxId)}&path=${encodeURIComponent(sandboxPath)}&name=${encodeURIComponent(fileName)}`;
+            } else {
+              throw new Error(`E2B push failed for ${fileName}`);
+            }
+          } catch (e2bErr: any) {
+            throw e2bErr;
+          }
+
+          // Store the file reference in MongoDB session_files collection
+          try {
+            const db = await getMongoDb();
+            if (db) {
+              await db.collection("session_files").insertOne({
+                session_id: sessionId,
+                filename: fileName,
+                mime,
+                size,
+                sandbox_path: sandboxPath,
+                download_url: downloadUrl,
+                uploaded_at: new Date(),
+                uploaded_by: req.user?.userId || "unknown",
+              });
+            }
+          } catch (dbErr: any) {
+            console.warn("[SessionUpload] Failed to record file in MongoDB:", dbErr.message);
+          }
+
+          return {
+            filename: fileName,
+            path: sandboxPath,
+            mime,
+            size,
+            is_image: isImage,
+            is_text: isText,
+            preview,
+            download_url: downloadUrl,
+            sandbox_path: sandboxPath,
+            session_id: sessionId,
+          };
+        }));
+
+        res.json({ files: result, session_id: sessionId });
+      } catch (err: any) {
+        res.status(500).json({ error: "Upload gagal: " + err.message });
+      }
+    });
+  });
+
+  // ─── Get files for a session ──────────────────────────────────────────────────
+  app.get("/api/sessions/:sessionId/files", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    try {
+      const db = await getMongoDb();
+      if (!db) return res.json({ files: [] });
+      const files = await db.collection("session_files")
+        .find({ session_id: sessionId })
+        .sort({ uploaded_at: -1 })
+        .toArray();
+      res.json({ files });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ─── File list endpoint (files in E2B sandbox output directory) ─────────────
   app.get("/api/files/list", async (_req: any, res: any) => {
     const sandboxId = getActiveE2BSandboxId();
@@ -2149,6 +2294,64 @@ print(json.dumps(results))
       sandbox_id: sandboxId,
       all_tools_ready: e2bOn && cerebrasConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
       e2e_verified: e2eRan && shellOk && fileOk,
+    });
+  });
+
+  // ─── Global health check endpoint ─────────────────────────────────────────
+  // GET /api/health — verifies MongoDB, Redis, and E2B connectivity.
+  // If a critical service is not available, returns 503 with clear error message.
+  app.get("/api/health", async (_req: any, res: any) => {
+    const timestamp = new Date().toISOString();
+    const services: Record<string, { status: string; message: string }> = {};
+
+    // Check MongoDB
+    try {
+      const db = await getMongoDb();
+      if (db) {
+        await db.command({ ping: 1 });
+        services.mongodb = { status: "ok", message: "Connected" };
+      } else {
+        services.mongodb = { status: "unavailable", message: "MONGODB_URI not set or connection failed" };
+      }
+    } catch (err: any) {
+      services.mongodb = { status: "error", message: err.message };
+    }
+
+    // Check Redis
+    try {
+      const rc = getRedisClient();
+      if (rc) {
+        await rc.ping();
+        services.redis = { status: "ok", message: "Connected" };
+      } else {
+        services.redis = { status: "unavailable", message: "REDIS_HOST not set or connection failed" };
+      }
+    } catch (err: any) {
+      services.redis = { status: "error", message: err.message };
+    }
+
+    // Check E2B
+    services.e2b = {
+      status: isE2BEnabled() ? "configured" : "unavailable",
+      message: isE2BEnabled() ? "E2B_API_KEY set" : "E2B_API_KEY not set",
+    };
+
+    // Check Cerebras
+    services.cerebras = {
+      status: !!process.env.CEREBRAS_API_KEY ? "configured" : "unavailable",
+      message: !!process.env.CEREBRAS_API_KEY ? "CEREBRAS_API_KEY set" : "CEREBRAS_API_KEY not set",
+    };
+
+    const criticalOk = services.mongodb.status === "ok";
+    const overallStatus = criticalOk ? "ok" : "degraded";
+
+    res.status(criticalOk ? 200 : 503).json({
+      status: overallStatus,
+      timestamp,
+      services,
+      message: criticalOk
+        ? "All critical services are healthy"
+        : "One or more critical services are unavailable — check MongoDB connection",
     });
   });
 

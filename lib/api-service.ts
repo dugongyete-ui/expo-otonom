@@ -312,6 +312,132 @@ class ApiService {
       return [];
     }
   }
+
+  /**
+   * Connect to an existing agent session SSE stream with automatic reconnect.
+   * Uses Redis XRANGE replay (via /api/sessions/:sessionId/stream?last_event_id=...)
+   * to replay missed events after a disconnection.
+   *
+   * Returns a stop function. Call it to permanently stop reconnecting.
+   */
+  connectSessionSSE(
+    sessionId: string,
+    callbacks: AgentCallbacks & { onReconnect?: (attempt: number) => void } = {}
+  ): () => void {
+    const { onMessage, onError, onDone, onReconnect } = callbacks;
+    let stopped = false;
+    let lastEventId = "0";
+    let retryDelay = 1500;
+    let retryCount = 0;
+    const MAX_RETRIES = 10;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+    const stop = () => {
+      stopped = true;
+      reader?.cancel().catch(() => {});
+    };
+
+    const connect = async () => {
+      if (stopped) return;
+
+      try {
+        const url = `${this.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/stream?last_event_id=${encodeURIComponent(lastEventId)}`;
+        const response = await fetch(url, { headers: authHeaders() });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            onError?.(new Error(`Session ${sessionId} not found`));
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        retryCount = 0;
+        retryDelay = 1500;
+        reader = response.body?.getReader() || null;
+        if (!reader) throw new Error("Response body not readable");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let isClosed = false;
+
+        while (!stopped && !isClosed) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            if (buffer.trim()) {
+              processLine(buffer);
+              buffer = "";
+            }
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            if (trimmed.startsWith("id: ")) {
+              lastEventId = trimmed.slice(4).trim();
+              continue;
+            }
+
+            if (!trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+
+            if (data === "[DONE]") {
+              isClosed = true;
+              onDone?.();
+              return;
+            }
+
+            processLine(trimmed);
+          }
+        }
+      } catch (err: any) {
+        if (stopped) return;
+        reader = null;
+      }
+
+      if (!stopped) {
+        retryCount++;
+        if (retryCount > MAX_RETRIES) {
+          onError?.(new Error(`SSE: max reconnect attempts (${MAX_RETRIES}) exceeded for session ${sessionId}`));
+          return;
+        }
+        onReconnect?.(retryCount);
+        const delay = Math.min(retryDelay * Math.pow(1.5, retryCount - 1), 30000);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        connect();
+      }
+    };
+
+    function processLine(line: string) {
+      const trimmed = line.startsWith("data: ") ? line.slice(6) : line;
+      try {
+        const event: AgentEvent = JSON.parse(trimmed);
+        onMessage?.(event);
+      } catch {}
+    }
+
+    connect();
+    return stop;
+  }
+
+  /**
+   * Health check: fetch /api/health and return parsed result.
+   */
+  async health(): Promise<{ status: string; services: Record<string, any> }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/health`);
+      return await res.json();
+    } catch (err: any) {
+      return { status: "error", services: { error: { status: "error", message: err.message } } };
+    }
+  }
 }
 
 export const apiService = new ApiService();

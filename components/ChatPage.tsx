@@ -4,11 +4,13 @@ import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
 import { AgentThinking } from "./AgentThinking";
-import { apiService, AgentEvent, ChatMessage as ApiChatMessage } from "../lib/api-service";
+import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken } from "../lib/api-service";
 import { randomUUID } from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n, t as translate } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
+import { MCPPanel } from "./MCPPanel";
+import { SettingsPanel } from "./SettingsPanel";
 
 interface AgentPlanStep {
   id: string;
@@ -76,6 +78,8 @@ export function ChatPage({
   const [stepHistory, setStepHistory] = useState<string[]>([]);
   const [title, setTitle] = useState(isAgentMode ? "Dzeck Agent" : "Dzeck Chat");
   const [showSettings, setShowSettings] = useState(false);
+  const [showMCPPanel, setShowMCPPanel] = useState(false);
+  const [showModelSettings, setShowModelSettings] = useState(false);
   const { locale, changeLocale } = useI18n();
   const { logout } = useAuth();
   const [attachments, setAttachments] = useState<any[]>([]);
@@ -638,6 +642,28 @@ export function ChatPage({
 
             <TouchableOpacity
               style={styles.logoutBtn}
+              onPress={() => {
+                setShowSettings(false);
+                setShowModelSettings(true);
+              }}
+            >
+              <Ionicons name="options-outline" size={16} color="#6C5CE7" />
+              <Text style={[styles.logoutBtnText, { color: "#6C5CE7" }]}>Model & Config</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() => {
+                setShowSettings(false);
+                setShowMCPPanel(true);
+              }}
+            >
+              <Ionicons name="server-outline" size={16} color="#6C5CE7" />
+              <Text style={[styles.logoutBtnText, { color: "#6C5CE7" }]}>MCP Servers</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutBtn}
               onPress={async () => {
                 setShowSettings(false);
                 await logout();
@@ -649,6 +675,18 @@ export function ChatPage({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <MCPPanel
+        visible={showMCPPanel}
+        onClose={() => setShowMCPPanel(false)}
+        authToken={getStoredToken()}
+      />
+
+      <SettingsPanel
+        visible={showModelSettings}
+        onClose={() => setShowModelSettings(false)}
+        authToken={getStoredToken()}
+      />
 
       <FlatList
         ref={flatListRef}

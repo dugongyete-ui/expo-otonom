@@ -62,6 +62,34 @@ JWT tokens stored in AsyncStorage (mobile) / localStorage (web).
 - `POST /api/sessions/:id/share` — Toggle public sharing (`is_shared: true/false`)
 - `GET /api/sessions/:id/share` — Get sharing status + URL
 - `GET /api/sessions/:id/events` — Get events for shared session (public read-only)
+- `app/share/[sessionId].tsx` — Full read-only public share view with tabs for Messages, Plan, Tools
+
+## Session Files API
+- `POST /api/sessions/:sessionId/upload` — Upload file(s) for a specific session; stores metadata in MongoDB `session_files`
+- `GET /api/sessions/:sessionId/files` — List all files uploaded to a session
+
+## Health API
+- `GET /api/health` — Returns status of MongoDB, Redis, E2B, and Cerebras; 200 if healthy, 503 if MongoDB unavailable
+
+## MCP Server Management
+- `GET /api/mcp/config` — List configured MCP servers (admin only)
+- `POST /api/mcp/config` — Add a new MCP server
+- `PUT /api/mcp/config/:name` — Update a specific MCP server
+- `DELETE /api/mcp/config/:name` — Remove a MCP server
+- `components/MCPPanel.tsx` — Full MCP management UI (add/edit/delete/enable servers)
+
+## Model & Settings
+- `GET /api/config` — Get app config (model names, search provider, feature flags)
+- `PUT /api/config` — Update runtime config (model names, search provider)
+- `components/SettingsPanel.tsx` — Model selection + search provider + status UI
+
+## Agent Tools (multimedia + email)
+- `server/agent/tools/multimedia.py` — `MultimediaTool`: export_pdf, render_diagram, speech_to_text, export_slides, upload_file
+- `server/agent/tools/email_tool.py` — `EmailTool`: send_email
+- All new tools registered in `server/agent/tools/registry.py` (TOOLS dict, ALL_TOOL_INSTANCES, TOOLKIT_MAP)
+
+## SSE Reconnect
+- `lib/api-service.ts` — `apiService.connectSessionSSE(sessionId, callbacks)`: connects to session stream with exponential backoff reconnect (max 10 retries), uses Redis XRANGE replay via `last_event_id` param
 
 ## Internationalization (i18n)
 - Two locales: English (`en`) and Indonesian (`id`)
