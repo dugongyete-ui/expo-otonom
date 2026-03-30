@@ -108,7 +108,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     });
   });
 
-  app.put("/api/config", requireAuth, async (req: any, res: any) => {
+  app.put("/api/config", requireAdmin, async (req: any, res: any) => {
     const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
     const updates: Record<string, string> = {};
 
@@ -148,6 +148,49 @@ export async function registerRoutes(app: any): Promise<Server> {
         SHOW_GITHUB_BUTTON: process.env.SHOW_GITHUB_BUTTON || "false",
       },
     });
+  });
+
+  // ─── Per-user model/provider preferences ─────────────────────────────────
+  // GET  /api/user/prefs  — get current user's stored preferences
+  // PUT  /api/user/prefs  — save current user's preferences to MongoDB
+
+  app.get("/api/user/prefs", requireAuth, async (req: any, res: any) => {
+    const userId: string = req.user?.id || "";
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const col = await getCollection("user_preferences");
+      const doc = col ? await (col as any).findOne({ user_id: userId }, { projection: { _id: 0, user_id: 0 } }) : null;
+      res.json(doc || {});
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to load preferences: " + err.message });
+    }
+  });
+
+  app.put("/api/user/prefs", requireAuth, async (req: any, res: any) => {
+    const userId: string = req.user?.id || "";
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const allowed = ["model", "modelProvider", "searchProvider", "theme", "language"];
+    const updates: Record<string, string> = {};
+    for (const key of allowed) {
+      if (req.body && typeof req.body[key] === "string" && req.body[key].trim()) {
+        updates[key] = req.body[key].trim();
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid preference fields. Allowed: " + allowed.join(", ") });
+    }
+    try {
+      const col = await getCollection("user_preferences");
+      if (!col) return res.status(503).json({ error: "Database unavailable" });
+      await (col as any).updateOne(
+        { user_id: userId },
+        { $set: { ...updates, user_id: userId, updated_at: new Date() } },
+        { upsert: true },
+      );
+      res.json({ updated: updates });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to save preferences: " + err.message });
+    }
   });
 
   // ─── MCP Config Management API ────────────────────────────────────────────
@@ -1964,8 +2007,61 @@ except Exception as ex:
             throw e2bErr;
           }
 
-          // Store in MongoDB session_files using canonical schema
-          // (matches the existing GET /api/sessions/:sessionId/files reader)
+          // Store file bytes in MongoDB GridFS for persistent access.
+          // Falls back to E2B sandbox path URL if GridFS is unavailable.
+          let gridfsFileId: string | null = null;
+          try {
+            gridfsFileId = await new Promise<string | null>((resolve) => {
+              const b64 = buffer.toString("base64");
+              const pyScript = `
+import asyncio, base64, json, sys
+from server.agent.db.gridfs import upload_file
+async def main():
+    data = base64.b64decode(sys.argv[5])
+    fid = await upload_file(
+        session_id=sys.argv[1],
+        filename=sys.argv[2],
+        data_bytes=data,
+        mime_type=sys.argv[3],
+        user_id=sys.argv[4],
+    )
+    print(json.dumps({"file_id": fid}))
+asyncio.run(main())
+`.trim();
+              const pyProc = spawn("python3", ["-c", pyScript, sessionId, fileName, mime, requestingUserId, b64], {
+                env: { ...process.env },
+                timeout: 30000,
+              });
+              let out = "";
+              let errOut = "";
+              pyProc.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+              pyProc.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+              pyProc.on("close", (code: number | null) => {
+                if (code === 0 && out.trim()) {
+                  try {
+                    const parsed = JSON.parse(out.trim());
+                    resolve(parsed.file_id || null);
+                  } catch {
+                    resolve(null);
+                  }
+                } else {
+                  console.warn("[SessionUpload] GridFS upload failed:", errOut.trim() || out.trim());
+                  resolve(null);
+                }
+              });
+              pyProc.on("error", () => resolve(null));
+            });
+          } catch (gfsErr: any) {
+            console.warn("[SessionUpload] GridFS spawn error:", gfsErr.message);
+          }
+
+          // If GridFS succeeded, use its URL as the canonical download URL.
+          if (gridfsFileId) {
+            downloadUrl = `/api/files/${gridfsFileId}`;
+          }
+
+          // Record metadata in session_files collection with canonical schema.
+          // (matches GET /api/sessions/:sessionId/files reader and GridFS list)
           try {
             const col = await getCollection("session_files");
             if (col) {
@@ -1976,6 +2072,7 @@ except Exception as ex:
                 size,
                 mime_type: mime,
                 download_url: downloadUrl,
+                gridfs_file_id: gridfsFileId || null,
                 created_at: new Date(),
                 user_id: requestingUserId,
               });
@@ -1993,6 +2090,7 @@ except Exception as ex:
             is_text: isText,
             preview,
             download_url: downloadUrl,
+            gridfs_file_id: gridfsFileId || undefined,
             session_id: sessionId,
           };
         }));
@@ -2382,8 +2480,14 @@ print(json.dumps(results))
       message: !!process.env.CEREBRAS_API_KEY ? "CEREBRAS_API_KEY set" : "CEREBRAS_API_KEY not set",
     };
 
-    const criticalOk = services.mongodb.status === "ok";
+    const mongoOk = services.mongodb.status === "ok";
+    const redisOk = services.redis.status === "ok";
+    const criticalOk = mongoOk && redisOk;
     const overallStatus = criticalOk ? "ok" : "degraded";
+    const failingServices = [
+      ...(!mongoOk ? ["MongoDB"] : []),
+      ...(!redisOk ? ["Redis"] : []),
+    ];
 
     res.status(criticalOk ? 200 : 503).json({
       status: overallStatus,
@@ -2391,7 +2495,7 @@ print(json.dumps(results))
       services,
       message: criticalOk
         ? "All critical services are healthy"
-        : "One or more critical services are unavailable — check MongoDB connection",
+        : `Critical services unavailable: ${failingServices.join(", ")}`,
     });
   });
 

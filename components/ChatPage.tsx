@@ -103,16 +103,18 @@ export function ChatPage({
     }
   }, [messages, streamingContent, isLoading]);
 
-  // Load active model from server config so Settings panel changes take effect
+  // Load active model: user prefs (per-user MongoDB) take priority over global config
   useEffect(() => {
     const base = getApiBaseUrl();
-    fetch(`${base}/api/config`)
-      .then((r) => r.json())
-      .then((cfg) => {
-        const m = cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
-        if (m) setActiveModel(m);
-      })
-      .catch(() => {});
+    const token = getStoredToken();
+    const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
+    Promise.all([
+      fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+      fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
+    ]).then(([prefs, cfg]) => {
+      const m = prefs.model || cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
+      if (m) setActiveModel(m);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -699,13 +701,16 @@ export function ChatPage({
         visible={showModelSettings}
         onClose={() => {
           setShowModelSettings(false);
-          fetch(`${getApiBaseUrl()}/api/config`)
-            .then((r) => r.json())
-            .then((cfg) => {
-              const m = cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
-              if (m) setActiveModel(m);
-            })
-            .catch(() => {});
+          const base = getApiBaseUrl();
+          const token = getStoredToken();
+          const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
+          Promise.all([
+            fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+            fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
+          ]).then(([prefs, cfg]) => {
+            const m = prefs.model || cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
+            if (m) setActiveModel(m);
+          }).catch(() => {});
         }}
         authToken={getStoredToken()}
       />
@@ -716,7 +721,7 @@ export function ChatPage({
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
           if (item.files && item.files.length > 0) {
-            const base = typeof window !== "undefined" ? window.location.origin : "";
+            const base = getApiBaseUrl();
             return (
               <View style={styles.fileCardContainer}>
                 <View style={styles.fileCardHeader}>

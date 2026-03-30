@@ -1,6 +1,8 @@
 /**
  * Settings Panel — Model selection and global config.
- * Reads from GET /api/config, saves to PUT /api/config.
+ * Loads from GET /api/config (global defaults) + GET /api/user/prefs (per-user override).
+ * Saves model/provider preferences to PUT /api/user/prefs (per-user, requireAuth).
+ * Admin API key settings (Google CSE) are saved to PUT /api/config (requireAdmin).
  */
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -162,20 +164,24 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiBase}/api/config`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: AppConfig = await res.json();
+      const [configRes, prefsRes] = await Promise.all([
+        fetch(`${apiBase}/api/config`),
+        fetch(`${apiBase}/api/user/prefs`, { headers }),
+      ]);
+      if (!configRes.ok) throw new Error(`HTTP ${configRes.status}`);
+      const data: AppConfig = await configRes.json();
       setConfig(data);
-      setAgentModel(data.CEREBRAS_AGENT_MODEL || data.modelName || "qwen-3-235b-a22b-instruct-2507");
+      const prefs = prefsRes.ok ? await prefsRes.json().catch(() => ({})) : {};
+      setAgentModel(prefs.model || data.CEREBRAS_AGENT_MODEL || data.modelName || "qwen-3-235b-a22b-instruct-2507");
       setChatModel(data.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507");
-      setModelProvider(data.MODEL_PROVIDER || data.modelProvider || "cerebras");
-      setSearchProvider(data.SEARCH_PROVIDER || data.searchProvider || "bing_web");
+      setModelProvider(prefs.modelProvider || data.MODEL_PROVIDER || data.modelProvider || "cerebras");
+      setSearchProvider(prefs.searchProvider || data.SEARCH_PROVIDER || data.searchProvider || "bing_web");
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, [apiBase]);
+  }, [apiBase, headers]);
 
   useEffect(() => {
     if (visible) fetchConfig();
@@ -186,21 +192,36 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
     setError(null);
     setSuccessMsg(null);
     try {
-      const body: Record<string, string> = {
-        CEREBRAS_AGENT_MODEL: agentModel,
-        CEREBRAS_CHAT_MODEL: chatModel,
-        MODEL_PROVIDER: modelProvider,
-        SEARCH_PROVIDER: searchProvider,
+      const prefsBody: Record<string, string> = {
+        model: agentModel,
+        modelProvider,
+        searchProvider,
       };
-      if (googleApiKey.trim()) body.GOOGLE_SEARCH_API_KEY = googleApiKey.trim();
-      if (googleEngineId.trim()) body.GOOGLE_SEARCH_ENGINE_ID = googleEngineId.trim();
-
-      const res = await fetch(`${apiBase}/api/config`, {
+      const prefsRes = await fetch(`${apiBase}/api/user/prefs`, {
         method: "PUT",
         headers,
-        body: JSON.stringify(body),
+        body: JSON.stringify(prefsBody),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      if (!prefsRes.ok) {
+        const errJson = await prefsRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `HTTP ${prefsRes.status}`);
+      }
+
+      if (googleApiKey.trim() || googleEngineId.trim()) {
+        const adminBody: Record<string, string> = {};
+        if (googleApiKey.trim()) adminBody.GOOGLE_SEARCH_API_KEY = googleApiKey.trim();
+        if (googleEngineId.trim()) adminBody.GOOGLE_SEARCH_ENGINE_ID = googleEngineId.trim();
+        const adminRes = await fetch(`${apiBase}/api/config`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(adminBody),
+        });
+        if (!adminRes.ok && adminRes.status !== 403) {
+          const errJson = await adminRes.json().catch(() => ({}));
+          throw new Error(errJson.error || `HTTP ${adminRes.status}`);
+        }
+      }
+
       setSuccessMsg("Settings saved successfully");
       setTimeout(() => setSuccessMsg(null), 3000);
       await fetchConfig();
