@@ -1936,7 +1936,10 @@ except Exception as ex:
           return res.status(400).json({ error: "Tidak ada file yang diunggah" });
         }
 
-        const sandboxId = getActiveE2BSandboxId();
+        // Prefer session-bound sandbox (stored on live session) over the global singleton.
+        // This prevents cross-session sandbox contamination when multiple users are active.
+        const sessionBoundSandboxId: string = (liveSession as any)?._sandboxId || "";
+        const sandboxId = sessionBoundSandboxId || getActiveE2BSandboxId();
         const e2bKey = process.env.E2B_API_KEY || "";
 
         if (!sandboxId || !e2bKey) {
@@ -2007,17 +2010,16 @@ except Exception as ex:
             throw e2bErr;
           }
 
-          // Store file bytes in MongoDB GridFS for persistent access.
-          // Falls back to E2B sandbox path URL if GridFS is unavailable.
+          // Store file bytes in MongoDB GridFS via stdin (safe for large files — no argv limit).
+          // Args: session_id, filename, mime_type, user_id  |  stdin: raw file bytes
           let gridfsFileId: string | null = null;
           try {
             gridfsFileId = await new Promise<string | null>((resolve) => {
-              const b64 = buffer.toString("base64");
               const pyScript = `
-import asyncio, base64, json, sys
+import asyncio, json, sys
 from server.agent.db.gridfs import upload_file
 async def main():
-    data = base64.b64decode(sys.argv[5])
+    data = sys.stdin.buffer.read()
     fid = await upload_file(
         session_id=sys.argv[1],
         filename=sys.argv[2],
@@ -2028,14 +2030,16 @@ async def main():
     print(json.dumps({"file_id": fid}))
 asyncio.run(main())
 `.trim();
-              const pyProc = spawn("python3", ["-c", pyScript, sessionId, fileName, mime, requestingUserId, b64], {
+              const pyProc = spawn("python3", ["-c", pyScript, sessionId, fileName, mime, requestingUserId], {
                 env: { ...process.env },
-                timeout: 30000,
+                timeout: 60000,
               });
               let out = "";
               let errOut = "";
               pyProc.stdout.on("data", (d: Buffer) => { out += d.toString(); });
               pyProc.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+              pyProc.stdin.write(buffer);
+              pyProc.stdin.end();
               pyProc.on("close", (code: number | null) => {
                 if (code === 0 && out.trim()) {
                   try {
@@ -2045,7 +2049,7 @@ asyncio.run(main())
                     resolve(null);
                   }
                 } else {
-                  console.warn("[SessionUpload] GridFS upload failed:", errOut.trim() || out.trim());
+                  console.warn("[SessionUpload] GridFS upload stderr:", errOut.trim() || out.trim());
                   resolve(null);
                 }
               });
@@ -2055,10 +2059,16 @@ asyncio.run(main())
             console.warn("[SessionUpload] GridFS spawn error:", gfsErr.message);
           }
 
-          // If GridFS succeeded, use its URL as the canonical download URL.
-          if (gridfsFileId) {
-            downloadUrl = `/api/files/${gridfsFileId}`;
+          // GridFS persistence is mandatory — hard-fail if GridFS is unavailable.
+          if (!gridfsFileId) {
+            throw new Error(
+              `GridFS storage unavailable for file '${fileName}'. ` +
+              "MongoDB GridFS is required for file persistence (no fallback).",
+            );
           }
+
+          // GridFS succeeded — use its URL as the canonical download URL.
+          downloadUrl = `/api/files/${gridfsFileId}`;
 
           // Record metadata in session_files collection with canonical schema.
           // (matches GET /api/sessions/:sessionId/files reader and GridFS list)
@@ -2072,7 +2082,7 @@ asyncio.run(main())
                 size,
                 mime_type: mime,
                 download_url: downloadUrl,
-                gridfs_file_id: gridfsFileId || null,
+                gridfs_file_id: gridfsFileId,
                 created_at: new Date(),
                 user_id: requestingUserId,
               });
@@ -2090,7 +2100,7 @@ asyncio.run(main())
             is_text: isText,
             preview,
             download_url: downloadUrl,
-            gridfs_file_id: gridfsFileId || undefined,
+            gridfs_file_id: gridfsFileId,
             session_id: sessionId,
           };
         }));
