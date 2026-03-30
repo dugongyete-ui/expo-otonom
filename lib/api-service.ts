@@ -341,8 +341,8 @@ class ApiService {
       if (stopped) return;
 
       try {
-        // Use the Redis-backed stream endpoint which supports last_event_id for replay
-        const url = `${this.baseUrl}/api/agent/stream-redis/${encodeURIComponent(sessionId)}?last_event_id=${encodeURIComponent(lastEventId)}`;
+        // Use the Redis-backed stream endpoint which supports last_id for replay
+        const url = `${this.baseUrl}/api/agent/stream-redis/${encodeURIComponent(sessionId)}?last_id=${encodeURIComponent(lastEventId)}`;
         const response = await fetch(url, { headers: authHeaders() });
 
         if (!response.ok) {

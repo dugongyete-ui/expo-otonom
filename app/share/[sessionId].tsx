@@ -3,7 +3,7 @@
  * Read-only view that shows plan steps, messages, tool calls, and output files.
  * Does NOT require authentication (public share).
  */
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, ComponentProps } from "react";
 import {
   View,
   Text,
@@ -18,11 +18,14 @@ import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getApiBaseUrl } from "@/lib/api-service";
 
+type IoniconsName = ComponentProps<typeof Ionicons>["name"];
+type PlanStepStatus = "pending" | "running" | "completed" | "failed";
+
 interface PlanStep {
   id?: string;
   title?: string;
+  status?: PlanStepStatus;
   description?: string;
-  status?: "pending" | "running" | "completed" | "failed";
   agent?: string;
 }
 
@@ -112,10 +115,18 @@ function parseEventsToSession(rawLines: string[]): ParsedSession {
       case "step":
         if (evt.step && evt.step_id) {
           const idx = result.planSteps.findIndex((s) => s.id === evt.step_id);
+          const validStatuses: PlanStepStatus[] = ["pending", "running", "completed", "failed"];
+          const parsedStatus = validStatuses.includes(evt.step_status as PlanStepStatus)
+            ? (evt.step_status as PlanStepStatus)
+            : undefined;
           if (idx >= 0) {
-            result.planSteps[idx] = { ...result.planSteps[idx], ...evt.step, status: (evt.step_status as any) || result.planSteps[idx].status };
+            result.planSteps[idx] = {
+              ...result.planSteps[idx],
+              ...evt.step,
+              status: parsedStatus ?? result.planSteps[idx].status,
+            };
           } else if (evt.step) {
-            result.planSteps.push({ ...evt.step, id: evt.step_id, status: (evt.step_status as any) || "pending" });
+            result.planSteps.push({ ...evt.step, id: evt.step_id, status: parsedStatus ?? "pending" });
           }
         }
         break;
@@ -151,16 +162,19 @@ function parseEventsToSession(rawLines: string[]): ParsedSession {
   return result;
 }
 
-function StepBadge({ status }: { status?: string }) {
+const STEP_ICONS: Record<string, IoniconsName> = {
+  completed: "checkmark-circle",
+  running: "radio-button-on",
+  failed: "close-circle",
+};
+
+function StepBadge({ status }: { status?: PlanStepStatus }) {
   const color =
     status === "completed" ? "#30D158" :
     status === "running" ? "#FFD60A" :
     status === "failed" ? "#FF453A" : "#636366";
-  const icon =
-    status === "completed" ? "checkmark-circle" :
-    status === "running" ? "radio-button-on" :
-    status === "failed" ? "close-circle" : "ellipse-outline";
-  return <Ionicons name={icon as any} size={14} color={color} />;
+  const icon: IoniconsName = (status && STEP_ICONS[status]) || "ellipse-outline";
+  return <Ionicons name={icon} size={14} color={color} />;
 }
 
 export default function SharePage() {

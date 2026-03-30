@@ -1201,12 +1201,14 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.on("close", () => { closed = true; });
 
     // Send any already-available events via XRANGE first (catch-up)
+    // Each event is prefixed with an SSE `id:` line so the client can track
+    // the cursor and pass it back as `?last_id=` on reconnect.
     try {
       const catchUp = await redisXRange(streamKey, cursor);
       for (const entry of catchUp) {
         const raw = entry.fields.data || "";
         if (raw) {
-          try { res.write(`data: ${raw}\n\n`); } catch {}
+          try { res.write(`id: ${entry.id}\ndata: ${raw}\n\n`); } catch {}
           cursor = entry.id;
         }
       }
@@ -1225,7 +1227,7 @@ export async function registerRoutes(app: any): Promise<Server> {
         for (const entry of entries) {
           const raw = entry.fields.data || "";
           if (raw) {
-            try { res.write(`data: ${raw}\n\n`); } catch {}
+            try { res.write(`id: ${entry.id}\ndata: ${raw}\n\n`); } catch {}
             cursor = entry.id;
           }
         }

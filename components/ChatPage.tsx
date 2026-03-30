@@ -105,7 +105,7 @@ export function ChatPage({
 
   // Load active model from server config so Settings panel changes take effect
   useEffect(() => {
-    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const base = getApiBaseUrl();
     fetch(`${base}/api/config`)
       .then((r) => r.json())
       .then((cfg) => {
@@ -699,8 +699,7 @@ export function ChatPage({
         visible={showModelSettings}
         onClose={() => {
           setShowModelSettings(false);
-          const base = typeof window !== "undefined" ? window.location.origin : "";
-          fetch(`${base}/api/config`)
+          fetch(`${getApiBaseUrl()}/api/config`)
             .then((r) => r.json())
             .then((cfg) => {
               const m = cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
