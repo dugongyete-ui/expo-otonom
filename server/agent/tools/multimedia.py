@@ -47,19 +47,16 @@ class MultimediaTool(BaseTool):
             "Returns the path of the generated PDF."
         ),
         parameters={
-            "type": "object",
-            "properties": {
-                "input_path": {
-                    "type": "string",
-                    "description": "Absolute path to the Markdown (.md) file inside the sandbox",
-                },
-                "output_path": {
-                    "type": "string",
-                    "description": "Absolute path for the output PDF file. Defaults to input_path with .pdf extension.",
-                },
+            "input_path": {
+                "type": "string",
+                "description": "Absolute path to the Markdown (.md) file inside the sandbox",
             },
-            "required": ["input_path"],
+            "output_path": {
+                "type": "string",
+                "description": "Absolute path for the output PDF file. Defaults to input_path with .pdf extension.",
+            },
         },
+        required=["input_path"],
     )
     def export_pdf(self, input_path: str, output_path: Optional[str] = None) -> ToolResult:
         if not output_path:
@@ -93,19 +90,16 @@ class MultimediaTool(BaseTool):
             "Returns the path of the generated PNG image."
         ),
         parameters={
-            "type": "object",
-            "properties": {
-                "input_path": {
-                    "type": "string",
-                    "description": "Absolute path to the diagram file (.mmd, .d2, .puml, or .md)",
-                },
-                "output_path": {
-                    "type": "string",
-                    "description": "Absolute path for the output PNG. Defaults to input_path with .png extension.",
-                },
+            "input_path": {
+                "type": "string",
+                "description": "Absolute path to the diagram file (.mmd, .d2, .puml, or .md)",
             },
-            "required": ["input_path"],
+            "output_path": {
+                "type": "string",
+                "description": "Absolute path for the output PNG. Defaults to input_path with .png extension.",
+            },
         },
+        required=["input_path"],
     )
     def render_diagram(self, input_path: str, output_path: Optional[str] = None) -> ToolResult:
         if not output_path:
@@ -139,15 +133,12 @@ class MultimediaTool(BaseTool):
             "Returns the transcribed text."
         ),
         parameters={
-            "type": "object",
-            "properties": {
-                "input_path": {
-                    "type": "string",
-                    "description": "Absolute path to the audio file inside the sandbox",
-                },
+            "input_path": {
+                "type": "string",
+                "description": "Absolute path to the audio file inside the sandbox",
             },
-            "required": ["input_path"],
         },
+        required=["input_path"],
     )
     def speech_to_text(self, input_path: str) -> ToolResult:
         cmd = f"manus-speech-to-text {input_path} 2>&1"
@@ -178,24 +169,21 @@ class MultimediaTool(BaseTool):
             "Returns the path of the exported file."
         ),
         parameters={
-            "type": "object",
-            "properties": {
-                "input_path": {
-                    "type": "string",
-                    "description": "Absolute path to the input presentation file",
-                },
-                "output_path": {
-                    "type": "string",
-                    "description": "Absolute path for the exported file. Defaults to input_path with appropriate extension.",
-                },
-                "format": {
-                    "type": "string",
-                    "enum": ["pdf", "pptx"],
-                    "description": "Output format: 'pdf' or 'pptx'. Defaults to 'pdf'.",
-                },
+            "input_path": {
+                "type": "string",
+                "description": "Absolute path to the input presentation file",
             },
-            "required": ["input_path"],
+            "output_path": {
+                "type": "string",
+                "description": "Absolute path for the exported file. Defaults to input_path with appropriate extension.",
+            },
+            "format": {
+                "type": "string",
+                "enum": ["pdf", "pptx"],
+                "description": "Output format: 'pdf' or 'pptx'. Defaults to 'pdf'.",
+            },
         },
+        required=["input_path"],
     )
     def export_slides(self, input_path: str, output_path: Optional[str] = None, format: str = "pdf") -> ToolResult:
         fmt = format.lower() if format else "pdf"
@@ -232,15 +220,12 @@ class MultimediaTool(BaseTool):
             "Returns the public URL of the uploaded file."
         ),
         parameters={
-            "type": "object",
-            "properties": {
-                "input_path": {
-                    "type": "string",
-                    "description": "Absolute path to the file to upload inside the sandbox",
-                },
+            "input_path": {
+                "type": "string",
+                "description": "Absolute path to the file to upload inside the sandbox",
             },
-            "required": ["input_path"],
         },
+        required=["input_path"],
     )
     def upload_file(self, input_path: str) -> ToolResult:
         cmd = f"manus-upload-file {input_path} 2>&1"

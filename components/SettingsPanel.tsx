@@ -26,6 +26,7 @@ interface AppConfig {
   SHOW_GITHUB_BUTTON?: string;
   GOOGLE_SEARCH_API_KEY?: string;
   GOOGLE_SEARCH_ENGINE_ID?: string;
+  GOOGLE_SEARCH_CONFIGURED?: boolean;
   E2B_ENABLED?: boolean;
   EMAIL_ENABLED?: boolean;
   authProvider?: string;

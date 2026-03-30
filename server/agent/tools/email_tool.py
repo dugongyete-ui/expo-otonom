@@ -3,7 +3,7 @@ Email tool for Dzeck AI Agent.
 Wraps the email_service to allow the agent to send emails.
 """
 import logging
-from typing import Optional, List
+from typing import Optional
 
 from server.agent.models.tool_result import ToolResult
 from server.agent.tools.base import BaseTool, tool
@@ -22,31 +22,28 @@ class EmailTool(BaseTool):
             "Returns success status and message ID if sent successfully."
         ),
         parameters={
-            "type": "object",
-            "properties": {
-                "to": {
-                    "type": "string",
-                    "description": "Recipient email address (or comma-separated list for multiple recipients)",
-                },
-                "subject": {
-                    "type": "string",
-                    "description": "Email subject line",
-                },
-                "body": {
-                    "type": "string",
-                    "description": "Email body (plain text or HTML)",
-                },
-                "html": {
-                    "type": "boolean",
-                    "description": "If true, body is treated as HTML. Default: false (plain text)",
-                },
-                "cc": {
-                    "type": "string",
-                    "description": "CC recipient(s) — comma-separated email addresses",
-                },
+            "to": {
+                "type": "string",
+                "description": "Recipient email address (or comma-separated list for multiple recipients)",
             },
-            "required": ["to", "subject", "body"],
+            "subject": {
+                "type": "string",
+                "description": "Email subject line",
+            },
+            "body": {
+                "type": "string",
+                "description": "Email body (plain text or HTML)",
+            },
+            "html": {
+                "type": "boolean",
+                "description": "If true, body is treated as HTML. Default: false (plain text)",
+            },
+            "cc": {
+                "type": "string",
+                "description": "CC recipient(s) — comma-separated email addresses",
+            },
         },
+        required=["to", "subject", "body"],
     )
     def send_email(
         self,
