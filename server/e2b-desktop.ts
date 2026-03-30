@@ -52,6 +52,8 @@ interface E2BDesktopSession {
   resolution: { width: number; height: number };
   timeout: number;
   error?: string;
+  agentSessionId?: string;
+  userId?: string;
   _idleTimer: ReturnType<typeof setTimeout> | null;
   _wsClients: Set<WsWebSocket>;
   _sandbox: Sandbox | null;
@@ -90,6 +92,8 @@ async function persistSessionToRedis(session: E2BDesktopSession): Promise<void> 
       resolution: session.resolution,
       timeout: session.timeout,
       error: session.error,
+      userId: session.userId || "",
+      agentSessionId: session.agentSessionId || "",
     });
     await redisSet(`${REDIS_SESSION_PREFIX}${session.id}`, data, REDIS_SESSION_TTL);
   } catch (err: any) {
@@ -152,6 +156,8 @@ async function loadSessionsFromRedis(): Promise<void> {
           resolution: meta.resolution || DEFAULT_RESOLUTION,
           timeout: meta.timeout || DEFAULT_TIMEOUT,
           error: meta.error,
+          userId: meta.userId || "",
+          agentSessionId: meta.agentSessionId || "",
           _idleTimer: null,
           _wsClients: new Set(),
           _sandbox: sandbox,
@@ -445,11 +451,27 @@ export function getActiveE2BSandboxId(): string | null {
 }
 
 /**
+ * Link an agent session ID to an E2B desktop session by sandbox ID.
+ * This enables pause/resume to find the correct agent session.
+ */
+export function linkAgentSessionToSandbox(agentSessionId: string, sandboxId: string, userId?: string): void {
+  for (const session of activeSessions.values()) {
+    if (session.sandboxId === sandboxId) {
+      session.agentSessionId = agentSessionId;
+      if (userId) session.userId = userId;
+      console.log(`[E2B-Desktop] Linked agent session ${agentSessionId} to sandbox ${sandboxId} (session ${session.id})`);
+      persistSessionToRedis(session).catch(() => {});
+      return;
+    }
+  }
+}
+
+/**
  * Create a new E2B Desktop sandbox and register it as an active session.
  * Returns the session_id and sandbox_id so the frontend can connect to VNC,
  * and the Python agent can receive the sandbox_id via DZECK_E2B_SANDBOX_ID.
  */
-export async function createAndRegisterE2BSandbox(startUrl?: string): Promise<{
+export async function createAndRegisterE2BSandbox(startUrl?: string, userId?: string): Promise<{
   sessionId: string;
   sandboxId: string;
   streamUrl: string | null;
@@ -469,6 +491,7 @@ export async function createAndRegisterE2BSandbox(startUrl?: string): Promise<{
     streamUrl: null,
     resolution: DEFAULT_RESOLUTION,
     timeout: DEFAULT_TIMEOUT,
+    userId: userId || "",
     _idleTimer: null,
     _wsClients: new Set(),
     _sandbox: result.sandbox,
@@ -645,6 +668,7 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
         streamUrl: null,
         resolution: effectiveRes,
         timeout: effectiveTimeout,
+        userId: req.user?.id || "",
         _idleTimer: null,
         _wsClients: new Set(),
         _sandbox: result.sandbox,
@@ -976,6 +1000,65 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
       return res.status(404).json({ error: "Session not found" });
     }
     res.json({ destroyed: true, session_id: req.params.id });
+  });
+
+  // Pause Session (VNC takeover: agent stops, user gets control)
+  app.post("/api/e2b/sessions/:id/pause", requireAuth, async (req: any, res: any) => {
+    const session = activeSessions.get(req.params.id);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const requestingUserId: string = req.user?.id || "";
+    if (!session.userId || session.userId !== requestingUserId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      const { redisSet: _redisSet } = await import("./db/redis.js");
+      const agentSessionId = session.agentSessionId || req.body?.agent_session_id || "";
+      if (agentSessionId) {
+        await _redisSet(`agent:${agentSessionId}:paused`, "1", 3600);
+        console.log(`[E2B-Desktop] Paused agent ${agentSessionId} for desktop takeover (session ${session.id})`);
+      }
+      touchSession(session);
+      res.json({
+        paused: true,
+        session_id: session.id,
+        agent_session_id: agentSessionId,
+        vnc_url: session.streamUrl || session.vncUrl,
+        message: "Agent paused. You now have control of the desktop via VNC.",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: `Pause failed: ${err.message}` });
+    }
+  });
+
+  // Resume Session (return control to agent after user takeover)
+  app.post("/api/e2b/sessions/:id/resume", requireAuth, async (req: any, res: any) => {
+    const session = activeSessions.get(req.params.id);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const requestingUserId: string = req.user?.id || "";
+    if (!session.userId || session.userId !== requestingUserId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      const { redisDel: _redisDel } = await import("./db/redis.js");
+      const agentSessionId = session.agentSessionId || req.body?.agent_session_id || "";
+      if (agentSessionId) {
+        await _redisDel(`agent:${agentSessionId}:paused`);
+        console.log(`[E2B-Desktop] Resumed agent ${agentSessionId} (session ${session.id})`);
+      }
+      touchSession(session);
+      res.json({
+        resumed: true,
+        session_id: session.id,
+        agent_session_id: agentSessionId,
+        message: "Agent resumed. Agent now has control of the desktop.",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: `Resume failed: ${err.message}` });
+    }
   });
 
   // Screenshot

@@ -116,23 +116,46 @@ def _build_tool_schemas() -> List[Dict[str, Any]]:
     return schemas
 
 
+_redis_pause_client = None
+_redis_pause_client_lock = None
+
+
+def _get_redis_pause_client():
+    """Get or create a cached synchronous Redis client for pause/stop checks."""
+    global _redis_pause_client, _redis_pause_client_lock
+    import threading
+    if _redis_pause_client_lock is None:
+        _redis_pause_client_lock = threading.Lock()
+    with _redis_pause_client_lock:
+        if _redis_pause_client is not None:
+            return _redis_pause_client
+        _redis_host = os.environ.get("REDIS_HOST", "")
+        if not _redis_host:
+            return None
+        try:
+            import redis as _redis_lib
+            _client = _redis_lib.Redis(
+                host=_redis_host,
+                port=int(os.environ.get("REDIS_PORT", "6379")),
+                password=os.environ.get("REDIS_PASSWORD") or os.environ.get("REDIS_PASS") or None,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+            )
+            _client.ping()
+            _redis_pause_client = _client
+            return _redis_pause_client
+        except Exception:
+            return None
+
+
 def _is_session_paused(session_id: str) -> bool:
     if not session_id:
         return False
     try:
-        _redis_host = os.environ.get("REDIS_HOST", "")
-        if not _redis_host:
+        rc = _get_redis_pause_client()
+        if rc is None:
             return False
-        import redis as _redis_lib
-        _rc = _redis_lib.Redis(
-            host=_redis_host,
-            port=int(os.environ.get("REDIS_PORT", "6379")),
-            password=os.environ.get("REDIS_PASSWORD") or os.environ.get("REDIS_PASS") or None,
-            socket_connect_timeout=2,
-            socket_timeout=2,
-        )
-        _val = _rc.get("agent:{}:paused".format(session_id))
-        _rc.close()
+        _val = rc.get("agent:{}:paused".format(session_id))
         return bool(_val)
     except Exception:
         return False
@@ -143,19 +166,10 @@ def _is_session_stopped(session_id: str) -> bool:
     if not session_id:
         return False
     try:
-        _redis_host = os.environ.get("REDIS_HOST", "")
-        if not _redis_host:
+        rc = _get_redis_pause_client()
+        if rc is None:
             return False
-        import redis as _redis_lib
-        _rc = _redis_lib.Redis(
-            host=_redis_host,
-            port=int(os.environ.get("REDIS_PORT", "6379")),
-            password=os.environ.get("REDIS_PASSWORD") or os.environ.get("REDIS_PASS") or None,
-            socket_connect_timeout=2,
-            socket_timeout=2,
-        )
-        _val = _rc.get("agent:{}:stop".format(session_id))
-        _rc.close()
+        _val = rc.get("agent:{}:stop".format(session_id))
         return bool(_val)
     except Exception:
         return False
@@ -1582,8 +1596,10 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     waiting_state = await svc.load_waiting_state(self.session_id)
 
             # Create session record in MongoDB (best-effort; lifecycle tracking)
+            # Pass user_id so ownership is guaranteed even if Python doc lands first.
             if not waiting_state and self.session_id and svc:
-                await svc.create_session(user_message, session_id=self.session_id)
+                _session_user_id = os.environ.get("DZECK_USER_ID", "") or ""
+                await svc.create_session(user_message, session_id=self.session_id, user_id=_session_user_id or None)
 
             if is_continuation and waiting_state and self.session_id:
                 if svc:

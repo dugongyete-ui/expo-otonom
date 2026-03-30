@@ -30,7 +30,6 @@ from server.agent.models.tool_result import ToolResult
 logger = logging.getLogger(__name__)
 
 _E2B_API_KEY_AT_IMPORT = os.environ.get("E2B_API_KEY", "")
-E2B_ENABLED = bool(_E2B_API_KEY_AT_IMPORT)
 
 
 _browser_lock = threading.Lock()
@@ -1898,8 +1897,8 @@ class _E2BRequiredBrowserStub:
 
 
 def _is_e2b_enabled() -> bool:
-    """Dynamic E2B check -- re-reads env each call so late-set secrets are picked up."""
-    return bool(os.environ.get("E2B_API_KEY", "") or _E2B_API_KEY_AT_IMPORT)
+    """Dynamic E2B check — always re-reads env so late-set secrets are picked up."""
+    return bool(os.environ.get("E2B_API_KEY", ""))
 
 
 def _make_session() -> Any:

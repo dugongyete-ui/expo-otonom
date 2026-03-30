@@ -60,10 +60,12 @@ class SessionService:
         user_message: str,
         session_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
     ) -> str:
         """
         Create a new agent session.
         Returns the session_id.
+        user_id is forwarded to the store so ownership is always persisted.
         """
         sid = session_id or self.generate_session_id()
         store = await self._get_session_store()
@@ -73,6 +75,7 @@ class SessionService:
             session_id=sid,
             user_message=user_message,
             metadata=metadata or {},
+            user_id=user_id,
         )
 
         await cache.cache_session_state(sid, {

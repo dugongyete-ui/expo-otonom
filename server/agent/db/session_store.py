@@ -110,8 +110,13 @@ class SessionStore:
         session_id: str,
         user_message: str,
         metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create a new agent session document."""
+        """Create or upsert a session document (idempotent).
+        
+        user_id is written in $set (not $setOnInsert) to guarantee ownership is always
+        stamped even when Python creates the document before the TS write lands.
+        """
         now = datetime.now(timezone.utc)
         doc = {
             "session_id": session_id,
@@ -126,9 +131,29 @@ class SessionStore:
             "error": None,
             "metadata": metadata or {},
         }
+        if user_id:
+            doc["user_id"] = user_id
         if self._connected:
             try:
-                await self._sessions.insert_one(doc)
+                set_fields: Dict[str, Any] = {
+                    "status": "running",
+                    "updated_at": now,
+                }
+                if user_id:
+                    set_fields["user_id"] = user_id
+                await self._sessions.update_one(
+                    {"session_id": session_id},
+                    {
+                        "$setOnInsert": {
+                            "session_id": session_id,
+                            "created_at": now,
+                            "user_message": user_message,
+                            "metadata": metadata or {},
+                        },
+                        "$set": set_fields,
+                    },
+                    upsert=True,
+                )
             except Exception as e:
                 logger.error("[SessionStore] create_session error: %s", e)
         doc.pop("_id", None)

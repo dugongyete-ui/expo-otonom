@@ -19,21 +19,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 
 CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
-CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
-
-if not CEREBRAS_API_KEY:
-    _err_event = json.dumps({
-        "type": "error",
-        "error": (
-            "API key tidak dikonfigurasi. "
-            "Tambahkan CEREBRAS_API_KEY di environment variables lalu restart server."
-        ),
-    })
-    sys.stdout.write(_err_event + "\n")
-    sys.stdout.flush()
-    sys.stdout.write(json.dumps({"type": "done"}) + "\n")
-    sys.stdout.flush()
-    sys.exit(1)
 
 _NO_TOOL_CALL_MODELS = {"llama3.1-8b", "llama-3.1-8b-instruct"}
 
@@ -73,12 +58,13 @@ def _build_request_body(
 
 
 def _make_cerebras_request(url: str, body: Dict[str, Any]) -> urllib.request.Request:
+    api_key = os.environ.get("CEREBRAS_API_KEY", "")
     return urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Authorization": "Bearer {}".format(CEREBRAS_API_KEY),
+            "Authorization": "Bearer {}".format(api_key),
             "User-Agent": "DzeckAI/2.0",
         },
         method="POST",

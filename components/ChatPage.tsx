@@ -96,6 +96,10 @@ export function ChatPage({
   const isWaitingRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
+  const sseReconnectAttemptsRef = useRef(0);
+  const sseReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastEventIdRef = useRef<string>("0");
+  const MAX_SSE_RECONNECT_ATTEMPTS = 3;
   const [streamingContent, setStreamingContent] = useState("");
   const [lastBrowserEvent, setLastBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
 
@@ -410,12 +414,21 @@ export function ChatPage({
 
     if (type === "message_correct") {
       const correctedText = event.text || "";
-      if (correctedText && streamingMsgIdRef.current) {
-        setMessages(prev => prev.map(m =>
-          m.id === streamingMsgIdRef.current
-            ? { ...m, content: correctedText }
-            : m
-        ));
+      if (correctedText) {
+        setMessages(prev => {
+          if (streamingMsgIdRef.current) {
+            return prev.map(m =>
+              m.id === streamingMsgIdRef.current
+                ? { ...m, content: correctedText }
+                : m
+            );
+          }
+          // No active stream ref — update the last assistant message
+          const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === "assistant");
+          if (lastAssistantIdx === -1) return prev;
+          const realIdx = prev.length - 1 - lastAssistantIdx;
+          return prev.map((m, i) => i === realIdx ? { ...m, content: correctedText } : m);
+        });
       }
       return;
     }
@@ -548,6 +561,50 @@ export function ChatPage({
           content: m.content,
         }));
 
+        sseReconnectAttemptsRef.current = 0;
+        lastEventIdRef.current = "0";
+
+        const _sseOnError = (err: Error) => {
+          const attempt = sseReconnectAttemptsRef.current;
+          if (attempt < MAX_SSE_RECONNECT_ATTEMPTS && activeSessionIdRef.current) {
+            sseReconnectAttemptsRef.current += 1;
+            const delay = Math.pow(2, attempt) * 1500;
+            const sessionId = activeSessionIdRef.current;
+            console.warn(`[SSE] Disconnected, reconnecting to stream in ${delay}ms (attempt ${attempt + 1}/${MAX_SSE_RECONNECT_ATTEMPTS})...`);
+            if (sseReconnectTimerRef.current) clearTimeout(sseReconnectTimerRef.current);
+            sseReconnectTimerRef.current = setTimeout(async () => {
+              try {
+                const cancel = await apiService.agentStreamReconnect(
+                  sessionId,
+                  lastEventIdRef.current,
+                  { onMessage: _sseOnMessage, onError: _sseOnError, onDone: _sseOnDone }
+                );
+                cancelRef.current = cancel;
+              } catch {
+                handleEvent({ type: "error", error: err.message });
+              }
+            }, delay);
+          } else {
+            handleEvent({ type: "error", error: err.message });
+          }
+        };
+
+        const _sseOnMessage = (event: any) => {
+          if (event._streamId) lastEventIdRef.current = event._streamId;
+          handleEvent(event);
+        };
+
+        const _sseOnDone = () => {
+          sseReconnectAttemptsRef.current = 0;
+          if (sseReconnectTimerRef.current) {
+            clearTimeout(sseReconnectTimerRef.current);
+            sseReconnectTimerRef.current = null;
+          }
+          handleEvent({ type: "done" });
+          setIsLoading(false);
+          cancelRef.current = null;
+        };
+
         const cancel = await apiService.agent(
           {
             message: msgText,
@@ -557,15 +614,7 @@ export function ChatPage({
             session_id: activeSessionIdRef.current,
             is_continuation: wasContinuation,
           },
-          {
-            onMessage: handleEvent,
-            onError: (err) => handleEvent({ type: "error", error: err.message }),
-            onDone: () => {
-              handleEvent({ type: "done" });
-              setIsLoading(false);
-              cancelRef.current = null;
-            },
-          }
+          { onMessage: _sseOnMessage, onError: _sseOnError, onDone: _sseOnDone }
         );
         cancelRef.current = cancel;
       } else {

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import multer from "multer";
-import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox, getSessionBySandboxId } from "./e2b-desktop";
+import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox, getSessionBySandboxId, linkAgentSessionToSandbox } from "./e2b-desktop";
 import { requireAuth, requireAdmin } from "./auth-routes";
 import { getCollection, getMongoDb } from "./db/mongo";
 import { redisXRead, redisXRange, redisSet, redisGet, redisDel, getRedisClient } from "./db/redis";
@@ -357,15 +357,20 @@ export async function registerRoutes(app: any): Promise<Server> {
   }, 5 * 60 * 1000);
 
   function _broadcastToSession(session: AgentSession, line: string) {
+    const idx = session.eventQueue.length;
+    const sid: string = (session as any)._sessionId || "";
+    // Emit SSE id: field for live events so clients can track cursor for reconnect.
+    // Format: mem:{sid}:{index} — distinct from Redis stream IDs but usable as last_id.
+    const sseIdLine = (line.startsWith("data: ") && line !== "data: [DONE]\n\n" && sid)
+      ? `id: mem:${sid}:${idx}\n` : "";
+    const fullLine = sseIdLine ? `${sseIdLine}${line}` : line;
     session.eventQueue.push(line);
     for (const client of session.clients) {
       try {
-        client.write(line);
+        client.write(fullLine);
         if (typeof client.flush === "function") client.flush();
       } catch {}
     }
-
-    const sid: string = (session as any)._sessionId;
 
     // Persist each non-DONE event line to MongoDB session_events + Redis Stream
     if (sid && line !== "data: [DONE]\n\n" && line.startsWith("data: ")) {
@@ -395,7 +400,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
     }
 
-    // Throttle sync to MongoDB agent_sessions: update every 10 events to avoid write storm
+    // Throttle sync to MongoDB sessions: update every 10 events to avoid write storm
     if ((session as any)._mongoSyncing) return;
     const eventCount = session.eventQueue.length;
     const lastSyncedCount: number = (session as any)._lastSyncedEventCount ?? -1;
@@ -403,7 +408,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       (session as any)._mongoSyncing = true;
       (session as any)._lastSyncedEventCount = eventCount;
       if (sid) {
-        getCollection("agent_sessions").then((col) => {
+        getCollection("sessions").then((col) => {
           if (!col) return;
           return (col as any).updateOne(
             { session_id: sid },
@@ -433,7 +438,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     let historySessions: any[] = [];
 
     try {
-      const col = await getCollection("agent_sessions");
+      const col = await getCollection("sessions");
       if (col) {
         const cursor = col.find(
           {},
@@ -637,26 +642,38 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
     } else {
       // Session not in memory — look up ownership in MongoDB.
-      // If MongoDB is unavailable or session not found, deny access.
+      // Check unified 'sessions' collection first (primary), then legacy 'agent_sessions'.
       let ownerVerified = false;
       try {
-        const sessionCol = await getCollection("agent_sessions");
+        // Primary: sessions collection (unified write path)
+        const sessionCol = await getCollection("sessions");
+        let sessionDoc: any = null;
         if (sessionCol) {
-          const sessionDoc = await (sessionCol as any).findOne(
+          sessionDoc = await (sessionCol as any).findOne(
             { session_id: sessionId },
             { projection: { user_id: 1 } },
           );
-          if (sessionDoc) {
-            const owner: string = sessionDoc.user_id || "";
-            if (!owner) {
-              // Session record exists but has no user_id (legacy record) — deny access
-              return res.status(403).json({ error: "Access denied" });
-            }
-            if (requestingUserId !== owner) {
-              return res.status(403).json({ error: "Access denied" });
-            }
-            ownerVerified = true;
+        }
+        // Fallback: agent_sessions collection (legacy write path)
+        if (!sessionDoc) {
+          const agentSessionCol = await getCollection("agent_sessions");
+          if (agentSessionCol) {
+            sessionDoc = await (agentSessionCol as any).findOne(
+              { session_id: sessionId },
+              { projection: { user_id: 1 } },
+            );
           }
+        }
+        if (sessionDoc) {
+          const owner: string = sessionDoc.user_id || "";
+          if (!owner) {
+            // Session record exists but has no user_id (legacy record) — deny access
+            return res.status(403).json({ error: "Access denied" });
+          }
+          if (requestingUserId !== owner) {
+            return res.status(403).json({ error: "Access denied" });
+          }
+          ownerVerified = true;
         }
       } catch (err: any) {
         console.warn("[session_files] Ownership check failed:", err.message);
@@ -730,12 +747,16 @@ export async function registerRoutes(app: any): Promise<Server> {
     const sid = session_id || randomUUID();
 
     // ── Stamp user_id on session creation for ownership tracking ──────────────
-    // This ensures future resume requests can verify ownership via sessions collection.
+    // user_id is in $set (not $setOnInsert) to ensure it's always written even if Python
+    // created the session document first without user_id (prevents ownership race).
     getCollection("sessions").then((col) => {
       if (!col) return;
       (col as any).updateOne(
         { session_id: sid },
-        { $setOnInsert: { session_id: sid, user_id: userId, created_at: new Date() } },
+        {
+          $set: { user_id: userId, updated_at: new Date() },
+          $setOnInsert: { session_id: sid, created_at: new Date() },
+        },
         { upsert: true },
       ).catch(() => {});
     }).catch(() => {});
@@ -765,7 +786,7 @@ export async function registerRoutes(app: any): Promise<Server> {
         // No existing sandbox — create one now so Python uses the same sandbox user sees
         console.log(`[Agent] No active E2B session, creating new sandbox for Python agent...`);
         try {
-          const newSession = await createAndRegisterE2BSandbox("https://www.google.com");
+          const newSession = await createAndRegisterE2BSandbox("https://www.google.com", userId);
           if (newSession) {
             dzeckSandboxId = newSession.sandboxId;
             preLaunchE2BSessionId = newSession.sessionId;
@@ -792,6 +813,9 @@ export async function registerRoutes(app: any): Promise<Server> {
         DZECK_USER_ID: userId || "",
         E2B_API_KEY: e2bKey,
         ...(dzeckSandboxId ? { DZECK_E2B_SANDBOX_ID: dzeckSandboxId } : {}),
+        // If Python will create its own sandbox (no pre-existing sandbox ID), mark ownership
+        // so _cleanup_e2b_sandbox() runs at agent exit and prevents sandbox leaks.
+        ...(!dzeckSandboxId ? { DZECK_AGENT_OWNS_SANDBOX: "1" } : {}),
       },
     });
 
@@ -880,26 +904,33 @@ export async function registerRoutes(app: any): Promise<Server> {
     (session as any)._sandboxId = dzeckSandboxId || null;
     activeAgentSessions.set(sid, session);
 
-    // Sync new session to MongoDB for persistent history
+    // Sync new session to MongoDB sessions collection (unified)
     const sessionUserId: string = req.user?.id || "unknown";
     (session as any)._userId = sessionUserId;
+
+    // Link agent session to E2B desktop sandbox for pause/resume correlation
+    if (dzeckSandboxId) {
+      linkAgentSessionToSandbox(sid, dzeckSandboxId, sessionUserId);
+    }
     (async () => {
       try {
-        const col = await getCollection("agent_sessions");
+        const col = await getCollection("sessions");
         if (col) {
           await (col as any).updateOne(
             { session_id: sid },
             {
               $set: {
-                session_id: sid,
                 user_id: sessionUserId,
                 done: false,
                 startedAt: sessionStartedAt,
                 eventCount: 0,
                 is_running: true,
                 user_message: message || (messages && messages.length > 0 ? messages[messages.length - 1]?.content : ""),
-                created_at: new Date(),
                 updated_at: new Date(),
+              },
+              $setOnInsert: {
+                session_id: sid,
+                created_at: new Date(),
               },
             },
             { upsert: true },
@@ -944,9 +975,13 @@ export async function registerRoutes(app: any): Promise<Server> {
               if (!(session as any)._sandboxId) {
                 (session as any)._sandboxId = parsed.sandbox_id;
               }
+              const _agentSidForLink: string = (session as any)._sessionId || sid;
+              const _agentUserIdForLink: string = (session as any)._userId || "";
               registerExternalE2BSandbox(parsed.sandbox_id, parsed.vnc_url)
                 .then((result) => {
                   console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.sessionId}`);
+                  // Link this agent session to the E2B desktop session so pause/resume works
+                  linkAgentSessionToSandbox(_agentSidForLink, parsed.sandbox_id, _agentUserIdForLink);
                   const enriched = { ...parsed, e2b_session_id: result.sessionId };
                   _broadcastToSession(session, `data: ${JSON.stringify(enriched)}\n\n`);
                 })
@@ -1021,10 +1056,10 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
       if (code !== 0) console.error(`Agent process exited with code ${code}. Stderr: ${session.stderrBuffer.slice(-500)}`);
 
-      // Sync completed session to MongoDB + cleanup Redis stream after 24h
+      // Sync completed session to MongoDB sessions collection + cleanup Redis stream after 24h
       (async () => {
         try {
-          const col = await getCollection("agent_sessions");
+          const col = await getCollection("sessions");
           if (col) {
             await (col as any).updateOne(
               { session_id: sid },
@@ -1072,7 +1107,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       // Allow historical replay via MongoDB ownership check
       let histVerified = false;
       try {
-        const hc = await getCollection("agent_sessions");
+        const hc = await getCollection("sessions");
         if (hc) {
           const hd = await (hc as any).findOne({ session_id: sid }, { projection: { user_id: 1 } });
           if (hd) {
@@ -1086,12 +1121,16 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
       // Session is done — fall through to XRANGE replay below with an empty session shell
       // (no active session to add client to, so just replay events and close)
+      // mem: cursors are in-memory only and cannot be applied to Redis XRANGE; normalize to "0"
+      const redisReplayCursor = lastId.startsWith("mem:") ? "0" : lastId;
       setupSSEHeaders(res);
       try {
-        const streamEntries = await redisXRange(`stream:session:${sid}`, lastId);
+        const streamEntries = await redisXRange(`stream:session:${sid}`, redisReplayCursor);
         for (const entry of streamEntries) {
           const raw = entry.fields.data || "";
-          if (raw) { try { res.write(`data: ${raw}\n\n`); } catch {} }
+          if (raw) {
+            try { res.write(`id: ${entry.id}\ndata: ${raw}\n\n`); } catch {}
+          }
         }
       } catch {}
       try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
@@ -1108,25 +1147,43 @@ export async function registerRoutes(app: any): Promise<Server> {
     session.clients.add(res);
 
     if (replay) {
-      // Attempt Redis XRANGE replay first (durable log), fall back to in-memory
+      // Attempt Redis XRANGE replay first (durable log), fall back to in-memory.
+      // Emit SSE id: field with entry ID so client can resume from last seen.
       let replayed = false;
-      try {
-        const streamEntries = await redisXRange(`stream:session:${sid}`, lastId);
-        if (streamEntries.length > 0) {
-          replayed = true;
-          for (const entry of streamEntries) {
-            const raw = entry.fields.data || "";
-            if (raw) {
-              try { res.write(`data: ${raw}\n\n`); } catch {}
+      if (!lastId.startsWith("mem:")) {
+        // Attempt Redis replay for Redis stream IDs
+        try {
+          const streamEntries = await redisXRange(`stream:session:${sid}`, lastId);
+          if (streamEntries.length > 0) {
+            replayed = true;
+            for (const entry of streamEntries) {
+              const raw = entry.fields.data || "";
+              if (raw) {
+                try {
+                  res.write(`id: ${entry.id}\ndata: ${raw}\n\n`);
+                } catch {}
+              }
             }
           }
+        } catch (streamErr: any) {
+          console.warn("[stream] Redis XRANGE replay failed:", streamErr.message);
         }
-      } catch (streamErr: any) {
-        console.warn("[stream] Redis XRANGE replay failed:", streamErr.message);
       }
       if (!replayed) {
-        for (const line of session.eventQueue) {
-          try { res.write(line); } catch {}
+        // In-memory fallback: parse mem:sid:index cursor if present
+        let startIdx = 0;
+        if (lastId.startsWith("mem:")) {
+          const parts = lastId.split(":");
+          const parsedIdx = parseInt(parts[2] || "0", 10);
+          if (!isNaN(parsedIdx)) startIdx = parsedIdx + 1;
+        }
+        const queueSlice = session.eventQueue.slice(startIdx);
+        for (let i = 0; i < queueSlice.length; i++) {
+          const eventIdx = startIdx + i;
+          const line = queueSlice[i];
+          const idPrefix = (line.startsWith("data: ") && line !== "data: [DONE]\n\n")
+            ? `id: mem:${sid}:${eventIdx}\n` : "";
+          try { res.write(`${idPrefix}${line}`); } catch {}
         }
       }
     }
@@ -1156,7 +1213,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     } else {
       let streamVerified = false;
       try {
-        const sc = await getCollection("agent_sessions");
+        const sc = await getCollection("sessions");
         if (sc) {
           const sd = await (sc as any).findOne({ session_id: sid }, { projection: { user_id: 1 } });
           if (sd) {

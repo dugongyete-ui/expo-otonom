@@ -43,6 +43,7 @@ export interface AgentEvent {
   url?: string;
   results?: Array<{ title: string; url: string; snippet?: string; content?: string }>;
   query?: string;
+  _streamId?: string;
 }
 
 export interface AgentRequest {
@@ -223,9 +224,17 @@ class ApiService {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let lastSeenId = "";
 
       const processAgentLine = (line: string): boolean => {
         const trimmed = line.trim();
+
+        // Track SSE id: field for stream cursor / reconnect
+        if (trimmed.startsWith("id: ")) {
+          lastSeenId = trimmed.slice(4).trim();
+          return false;
+        }
+
         if (!trimmed || !trimmed.startsWith("data: ")) return false;
 
         const data = trimmed.slice(6);
@@ -237,6 +246,8 @@ class ApiService {
 
         try {
           const event: AgentEvent = JSON.parse(data);
+          // Attach the last seen stream ID so callers can track cursor
+          if (lastSeenId) event._streamId = lastSeenId;
           onMessage?.(event);
         } catch (e) {
           console.error("Failed to parse SSE event:", e);
@@ -286,6 +297,84 @@ class ApiService {
       };
     } catch (error) {
       console.error("Agent API error:", error);
+      onError?.(error instanceof Error ? error : new Error(String(error)));
+      return () => { isClosed = true; };
+    }
+  }
+
+  /**
+   * Reconnect to an existing agent session stream without spawning a new agent.
+   * Uses GET /api/agent/stream/:sid?replay=true&last_id=<cursor>
+   * Safe to call on transient disconnect — will not duplicate the agent run.
+   */
+  async agentStreamReconnect(
+    sessionId: string,
+    lastEventId: string,
+    callbacks: AgentCallbacks = {}
+  ): Promise<() => void> {
+    const { onMessage, onError, onDone } = callbacks;
+    let isClosed = false;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+    try {
+      const url = `${this.baseUrl}/api/agent/stream/${encodeURIComponent(sessionId)}?replay=true&last_id=${encodeURIComponent(lastEventId)}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: authHeaders({ Accept: "text/event-stream" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      reader = response.body?.getReader() || null;
+      if (!reader) throw new Error("Response body is not readable");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let lastSeenId = "";
+
+      const processLine = (line: string): boolean => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("id: ")) {
+          lastSeenId = trimmed.slice(4).trim();
+          return false;
+        }
+        if (!trimmed || !trimmed.startsWith("data: ")) return false;
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") { isClosed = true; onDone?.(); return true; }
+        try {
+          const event: AgentEvent = JSON.parse(data);
+          if (lastSeenId) event._streamId = lastSeenId;
+          onMessage?.(event);
+        } catch {}
+        return false;
+      };
+
+      const processStream = async () => {
+        try {
+          while (!isClosed) {
+            const { done, value } = await reader!.read();
+            if (done) {
+              if (buffer.trim()) { processLine(buffer); buffer = ""; }
+              if (!isClosed) { isClosed = true; onDone?.(); }
+              break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) { if (processLine(line)) break; }
+          }
+        } catch (error) {
+          if (!isClosed) { isClosed = true; onError?.(error instanceof Error ? error : new Error(String(error))); }
+        }
+      };
+
+      processStream();
+
+      return () => { isClosed = true; reader?.cancel().catch(() => {}); };
+    } catch (error) {
+      console.error("Agent stream reconnect error:", error);
       onError?.(error instanceof Error ? error : new Error(String(error)));
       return () => { isClosed = true; };
     }

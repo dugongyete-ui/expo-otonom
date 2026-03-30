@@ -14,6 +14,20 @@ export interface Message {
   isLoading?: boolean;
 }
 
+export interface AgentPlan {
+  title?: string;
+  steps: Array<{ id?: string; title: string; status?: string }>;
+  status?: string;
+}
+
+export interface AgentFile {
+  name: string;
+  path: string;
+  size?: number;
+  mime_type?: string;
+  download_url?: string;
+}
+
 export interface VncInfo {
   vncUrl: string;
   sandboxId: string;
@@ -35,6 +49,8 @@ export function useChat(
   const [isWaitingForUser, setIsWaitingForUser] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
+  const [agentFiles, setAgentFiles] = useState<AgentFile[]>([]);
   const cancelRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
@@ -47,54 +63,6 @@ export function useChat(
       prev.map((msg) => (msg.id === id ? { ...msg, ...updates } : msg))
     );
   }, []);
-
-  const sendMessage = useCallback(
-    async (text: string, useAgent: boolean = false, attachments: any[] = []) => {
-      if (!text.trim() && attachments.length === 0) return;
-
-      setError(null);
-
-      const userMessage: Message = {
-        id: `msg-${Date.now()}`,
-        type: "user",
-        content: text,
-        timestamp: new Date(),
-      };
-      addMessage(userMessage);
-
-      if (isWaitingForUser && sessionIdRef.current) {
-        setIsWaitingForUser(false);
-        setIsLoading(true);
-        try {
-          await handleAgentChat(text, sessionIdRef.current, true, attachments);
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : "Unknown error";
-          setError(errorMsg);
-          console.error("Chat error:", err);
-        } finally {
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      setIsLoading(true);
-
-      try {
-        if (useAgent) {
-          await handleAgentChat(text, undefined, false, attachments);
-        } else {
-          await handleSimpleChat(text);
-        }
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Unknown error";
-        setError(errorMsg);
-        console.error("Chat error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [addMessage, isWaitingForUser]
-  );
 
   const handleSimpleChat = useCallback(
     async (text: string) => {
@@ -128,7 +96,7 @@ export function useChat(
   );
 
   const handleAgentChat = useCallback(
-    async (text: string, existingSessionId?: string, isContinuation?: boolean, attachments?: any[]) => {
+    async (text: string, existingSessionId?: string, isContinuation?: boolean, attachments?: any[], currentMessages?: Message[]) => {
       return new Promise<void>((resolve, reject) => {
         const onEvent = (event: AgentEvent) => {
           if (event.type === "session") {
@@ -279,6 +247,50 @@ export function useChat(
                 title: event.title || "",
               });
             }
+          } else if (event.type === "plan") {
+            // Agent plan received — store plan state
+            if (event.plan) {
+              setAgentPlan({
+                title: event.plan.title || event.title,
+                steps: (event.plan.steps || []).map((s: any) => ({
+                  id: s.id,
+                  title: s.title || s.description || "",
+                  status: s.status,
+                })),
+                status: event.status || event.plan.status,
+              });
+            }
+          } else if (event.type === "message_correct") {
+            // Correct/finalize the last assistant message with the complete text
+            if (event.text || event.content) {
+              const correctedText = event.text || event.content;
+              setMessages((prev) => {
+                const lastAssistantIdx = [...prev].reverse().findIndex((m) => m.type === "assistant");
+                if (lastAssistantIdx >= 0) {
+                  const idx = prev.length - 1 - lastAssistantIdx;
+                  const updated = [...prev];
+                  updated[idx] = { ...updated[idx], content: correctedText, isLoading: false };
+                  return updated;
+                }
+                return prev;
+              });
+            }
+          } else if (event.type === "files") {
+            // Files created/modified by the agent
+            if (Array.isArray(event.files) && event.files.length > 0) {
+              const newFiles: AgentFile[] = event.files.map((f: any) => ({
+                name: f.name || f.filename || "",
+                path: f.path || "",
+                size: f.size,
+                mime_type: f.mime_type || f.type,
+                download_url: f.download_url || f.url || "",
+              }));
+              setAgentFiles((prev) => {
+                const existingPaths = new Set(prev.map((f) => f.path));
+                const unique = newFiles.filter((f) => !existingPaths.has(f.path));
+                return [...prev, ...unique];
+              });
+            }
           } else if (event.type === "todo_update") {
             // todo_update events are informational — no UI message needed,
             // frontend can poll /api/sessions/:id/todos for the latest state
@@ -300,10 +312,18 @@ export function useChat(
         };
 
         try {
+          // Build chat history from current messages (user/assistant only, no tool/step)
+          const historyMessages = (currentMessages || [])
+            .filter((m) => m.type === "user" || m.type === "assistant")
+            .map((m) => ({
+              role: m.type === "user" ? ("user" as const) : ("assistant" as const),
+              content: m.content,
+            }));
+
           apiService.agent(
             {
               message: text,
-              messages: [],
+              messages: historyMessages,
               attachments: attachments || [],
               session_id: existingSessionId || undefined,
               is_continuation: isContinuation || false,
@@ -320,6 +340,54 @@ export function useChat(
     [addMessage]
   );
 
+  const sendMessage = useCallback(
+    async (text: string, useAgent: boolean = false, attachments: any[] = []) => {
+      if (!text.trim() && attachments.length === 0) return;
+
+      setError(null);
+
+      const userMessage: Message = {
+        id: `msg-${Date.now()}`,
+        type: "user",
+        content: text,
+        timestamp: new Date(),
+      };
+      addMessage(userMessage);
+
+      if (isWaitingForUser && sessionIdRef.current) {
+        setIsWaitingForUser(false);
+        setIsLoading(true);
+        try {
+          await handleAgentChat(text, sessionIdRef.current, true, attachments, messages);
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : "Unknown error";
+          setError(errorMsg);
+          console.error("Chat error:", err);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        if (useAgent) {
+          await handleAgentChat(text, undefined, false, attachments, messages);
+        } else {
+          await handleSimpleChat(text);
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        setError(errorMsg);
+        console.error("Chat error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [addMessage, isWaitingForUser, messages, handleAgentChat, handleSimpleChat]
+  );
+
   const stop = useCallback(() => {
     if (cancelRef.current) {
       cancelRef.current();
@@ -331,6 +399,8 @@ export function useChat(
   const clear = useCallback(() => {
     setMessages([]);
     setError(null);
+    setAgentPlan(null);
+    setAgentFiles([]);
   }, []);
 
   return {
@@ -344,5 +414,7 @@ export function useChat(
     addMessage,
     updateMessage,
     sessionId,
+    agentPlan,
+    agentFiles,
   };
 }
