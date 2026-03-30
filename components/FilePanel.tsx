@@ -81,12 +81,41 @@ export function FilePanel({
     setError("");
     try {
       const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/files`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setFiles(data.files || []);
+      const headers: Record<string, string> = {};
+      try {
+        const { getStoredToken } = require("@/lib/api-service");
+        const tok = getStoredToken?.();
+        if (tok) headers["Authorization"] = `Bearer ${tok}`;
+      } catch {}
+      const [sandboxRes, gridfsRes] = await Promise.allSettled([
+        fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/files`, { credentials: "include", headers }),
+        fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/gridfs-files`, { credentials: "include", headers }),
+      ]);
+      const sandboxFiles: SessionFile[] =
+        sandboxRes.status === "fulfilled" && sandboxRes.value.ok
+          ? ((await sandboxRes.value.json()).files || [])
+          : [];
+      const gridfsFiles: SessionFile[] =
+        gridfsRes.status === "fulfilled" && gridfsRes.value.ok
+          ? ((await gridfsRes.value.json()).files || []).map((f: any) => ({
+              name: f.filename || f.name,
+              path: f.filename || f.name,
+              size: f.size,
+              mime_type: f.mime_type,
+              created_at: f.upload_date || f.created_at,
+              download_url: f.download_url || `/api/files/${f.file_id}`,
+            }))
+          : [];
+      const seen = new Set<string>();
+      const merged: SessionFile[] = [];
+      for (const f of [...gridfsFiles, ...sandboxFiles]) {
+        const key = f.download_url || f.path || f.name;
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(f);
+        }
+      }
+      setFiles(merged);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load files");
       setFiles([]);
@@ -104,6 +133,12 @@ export function FilePanel({
   const getDownloadUrl = useCallback((file: SessionFile): string => {
     const baseUrl = getApiBaseUrl();
     if (file.download_url) {
+      if (file.download_url.startsWith("http")) {
+        return file.download_url;
+      }
+      if (file.download_url.startsWith("/api/files/") && !file.download_url.startsWith("/api/files/download")) {
+        return `${baseUrl}${file.download_url}`;
+      }
       const normalised = file.download_url.replace("/api/files/download", "/api/sandbox/download");
       return `${baseUrl}${normalised}`;
     }

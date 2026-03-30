@@ -4,6 +4,7 @@ Agent Runner for Dzeck AI Agent.
 Public async entry point (`run_agent_async`) and the synchronous
 subprocess stdio bridge (`main`) that the Node.js backend calls.
 """
+import os
 import sys
 import json
 import asyncio
@@ -101,11 +102,74 @@ async def run_agent_async(
             _mlog.getLogger(__name__).warning("[memory] Failed to save cross-session memory: %s", _mem_err)
 
 
+def _emit(event: Dict[str, Any]) -> None:
+    sys.stdout.write(json.dumps(event, default=str) + "\n")
+    sys.stdout.flush()
+
+
+async def _update_session_status(session_id: str, status: str, error: Optional[str] = None) -> None:
+    """Update session status in MongoDB (best-effort — never raises)."""
+    if not session_id:
+        return
+    try:
+        from server.agent.db.session_store import get_session_store
+        store = await get_session_store()
+        updates: Dict[str, Any] = {"status": status}
+        if error:
+            updates["error"] = error
+        await store.update_session(session_id, updates)
+    except Exception as _sse:
+        sys.stderr.write("[agent_runner] session status update failed: {}\n".format(_sse))
+        sys.stderr.flush()
+
+
+async def _cleanup_e2b_sandbox() -> None:
+    """Kill E2B sandbox when agent exits — only if this process created it.
+
+    Only runs when DZECK_AGENT_OWNS_SANDBOX=1 is set in the environment.
+    This prevents killing sandboxes that belong to active takeover sessions or
+    were created externally.
+    """
+    if os.environ.get("DZECK_AGENT_OWNS_SANDBOX", "") != "1":
+        return
+    sandbox_id = os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+    if not sandbox_id:
+        return
+    try:
+        from server.agent.tools.e2b_sandbox import get_sandbox
+        sb = get_sandbox()
+        if sb is not None:
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, sb.kill)
+                sys.stderr.write("[agent_runner] E2B sandbox killed: {}\n".format(sandbox_id))
+            except Exception as _ke:
+                sys.stderr.write("[agent_runner] E2B sandbox kill warning: {}\n".format(_ke))
+    except Exception as _ce:
+        sys.stderr.write("[agent_runner] E2B cleanup error: {}\n".format(_ce))
+    sys.stderr.flush()
+
+
 def main() -> None:
     """
     Synchronous entry point for Node.js subprocess bridge.
     Reads JSON from stdin, runs async agent, writes events to stdout.
     """
+    # ── Preflight: validate required environment variables ────────────────────
+    _missing = []
+    if not os.environ.get("CEREBRAS_API_KEY", ""):
+        _missing.append("CEREBRAS_API_KEY")
+    if not os.environ.get("E2B_API_KEY", ""):
+        _missing.append("E2B_API_KEY")
+    if not os.environ.get("MONGODB_URI", ""):
+        _missing.append("MONGODB_URI")
+    if _missing:
+        _emit({
+            "type": "error",
+            "error": "Required environment variables are not set: {}. Configure them and restart the server.".format(", ".join(_missing)),
+        })
+        _emit({"type": "done", "success": False})
+        return
+
     try:
         raw_input = sys.stdin.read()
         input_data = json.loads(raw_input)
@@ -126,12 +190,8 @@ def main() -> None:
                     break
 
         if not user_message:
-            event = json.dumps({"type": "error", "error": "No user message provided"})
-            sys.stdout.write(event + "\n")
-            sys.stdout.flush()
-            event = json.dumps({"type": "done", "success": False})
-            sys.stdout.write(event + "\n")
-            sys.stdout.flush()
+            _emit({"type": "error", "error": "No user message provided"})
+            _emit({"type": "done", "success": False})
             return
 
         chat_history: List[Dict[str, Any]] = []
@@ -147,6 +207,15 @@ def main() -> None:
                     chat_history = chat_history[:-1]
 
         async def _run():
+            # Initialize MongoDB schema indexes (best-effort, non-blocking)
+            if session_id:
+                try:
+                    from server.agent.db.schema import initialize_schema
+                    await initialize_schema()
+                except Exception as _schema_err:
+                    sys.stderr.write("[agent_runner] Schema init warning: {}\n".format(_schema_err))
+                    sys.stderr.flush()
+
             _stream_q = None
             if session_id:
                 try:
@@ -158,28 +227,106 @@ def main() -> None:
                         "[agent_runner] Redis stream queue unavailable (replay disabled): %s", _sq_err
                     )
 
-            async for event in run_agent_async(
-                user_message,
-                attachments=attachments or [],
-                session_id=session_id,
-                user_id=user_id,
-                resume_from_session=resume_from_session,
-                resume_data=resume_data,
-                chat_history=chat_history or None,
-                is_continuation=is_continuation,
-            ):
-                line = json.dumps(event, default=str)
-                sys.stdout.write(line + "\n")
-                sys.stdout.flush()
+            # Mark session as running
+            if session_id:
+                await _update_session_status(session_id, "running")
 
-                if _stream_q is not None and _stream_q.is_connected:
+            _success = False
+            _done_seen = False
+            _error_msg: Optional[str] = None
+
+            async def _log_phase_event(event: Dict[str, Any]) -> None:
+                """Write phase-level events to session_events for observability."""
+                if not session_id:
+                    return
+                ev_type = event.get("type", "")
+                plan_status = event.get("status", "")
+                # Log plan phase transitions
+                if ev_type == "plan" and plan_status:
                     try:
-                        await _stream_q.xadd(event)
-                    except Exception as _xadd_err:
-                        import logging as _xlog
-                        _xlog.getLogger(__name__).warning(
-                            "[agent_runner] Redis XADD failed (event not durable): %s", _xadd_err
-                        )
+                        from server.agent.db.session_store import get_session_store
+                        store = await get_session_store()
+                        await store.save_event(session_id, "phase_plan_{}".format(plan_status), {
+                            "plan_status": plan_status,
+                            "step_count": len(event.get("plan", {}).get("steps", [])) if event.get("plan") else 0,
+                        })
+                    except Exception:
+                        pass
+                # Log step start/end
+                elif ev_type == "step":
+                    step_status = event.get("step_status", "")
+                    if step_status in ("running", "done", "failed"):
+                        try:
+                            from server.agent.db.session_store import get_session_store
+                            store = await get_session_store()
+                            await store.save_event(session_id, "phase_step_{}".format(step_status), {
+                                "step_id": event.get("step_id"),
+                                "step_title": event.get("step", {}).get("title") if event.get("step") else None,
+                            })
+                        except Exception:
+                            pass
+
+            try:
+                async for event in run_agent_async(
+                    user_message,
+                    attachments=attachments or [],
+                    session_id=session_id,
+                    user_id=user_id,
+                    resume_from_session=resume_from_session,
+                    resume_data=resume_data,
+                    chat_history=chat_history or None,
+                    is_continuation=is_continuation,
+                ):
+                    line = json.dumps(event, default=str)
+                    sys.stdout.write(line + "\n")
+                    sys.stdout.flush()
+
+                    if _stream_q is not None and _stream_q.is_connected:
+                        try:
+                            await _stream_q.xadd(event)
+                        except Exception as _xadd_err:
+                            import logging as _xlog
+                            _xlog.getLogger(__name__).warning(
+                                "[agent_runner] Redis XADD failed (event not durable): %s", _xadd_err
+                            )
+
+                    # Log phase events to MongoDB (best-effort, non-blocking)
+                    await _log_phase_event(event)
+
+                    if event.get("type") == "done":
+                        _done_seen = True
+                        _success = bool(event.get("success", True))
+                # If the generator finished without emitting a "done" event, treat as success
+                if not _done_seen:
+                    _success = True
+            except Exception as _run_err:
+                import traceback
+                _error_msg = "Agent error: {}".format(_run_err)
+                sys.stderr.write("[agent_runner] Unhandled agent exception:\n")
+                traceback.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                _emit({"type": "error", "error": _error_msg})
+                _success = False
+            finally:
+                # Update session status in MongoDB
+                if session_id:
+                    if _success:
+                        await _update_session_status(session_id, "completed")
+                    else:
+                        await _update_session_status(session_id, "failed", error=_error_msg)
+                # Log phase completion event
+                if session_id:
+                    try:
+                        from server.agent.db.session_store import get_session_store
+                        store = await get_session_store()
+                        await store.save_event(session_id, "agent_run_complete", {
+                            "success": _success,
+                            "error": _error_msg,
+                        })
+                    except Exception:
+                        pass
+                # Cleanup E2B sandbox if it was created by this agent run
+                await _cleanup_e2b_sandbox()
 
         try:
             loop = asyncio.get_event_loop()
@@ -194,18 +341,14 @@ def main() -> None:
             asyncio.run(_run())
 
     except json.JSONDecodeError as e:
-        error_event = json.dumps({"type": "error", "error": "Invalid JSON input: {}".format(e)})
-        sys.stdout.write(error_event + "\n")
-        sys.stdout.flush()
-        done_event = json.dumps({"type": "done", "success": False})
-        sys.stdout.write(done_event + "\n")
-        sys.stdout.flush()
+        _emit({"type": "error", "error": "Invalid JSON input: {}".format(e)})
+        _emit({"type": "done", "success": False})
     except Exception as e:
         import traceback
-        error_event = json.dumps({"type": "error", "error": "Unexpected error: {}".format(e)})
-        sys.stdout.write(error_event + "\n")
-        sys.stdout.flush()
-        done_event = json.dumps({"type": "done", "success": False})
-        sys.stdout.write(done_event + "\n")
-        sys.stdout.flush()
+        _emit({"type": "error", "error": "Unexpected error: {}".format(e)})
+        _emit({"type": "done", "success": False})
         traceback.print_exc(file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

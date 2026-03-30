@@ -7,9 +7,9 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import multer from "multer";
-import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox } from "./e2b-desktop";
+import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox, getSessionBySandboxId } from "./e2b-desktop";
 import { requireAuth } from "./auth-routes";
-import { getCollection } from "./db/mongo";
+import { getCollection, getMongoDb } from "./db/mongo";
 import { redisXRead, redisXRange, redisSet, redisGet, redisDel, getRedisClient } from "./db/redis";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -597,7 +597,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const proc = spawn("python3", ["-u", "-m", "server.agent.agent_flow"], {
+    const proc = spawn("python3", ["-u", "-m", "server.agent.runner.agent_runner"], {
       stdio: ["pipe", "pipe", "pipe"],
       cwd: process.cwd(),
       env: {
@@ -607,6 +607,7 @@ export async function registerRoutes(app: any): Promise<Server> {
         PYTHONPATH: process.cwd(),
         PYTHONUNBUFFERED: "1",
         DZECK_SESSION_ID: sid,
+        DZECK_USER_ID: userId || "",
         E2B_API_KEY: e2bKey,
         ...(dzeckSandboxId ? { DZECK_E2B_SANDBOX_ID: dzeckSandboxId } : {}),
       },
@@ -694,6 +695,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       stderrBuffer: "",
     };
     (session as any)._sessionId = sid;
+    (session as any)._sandboxId = dzeckSandboxId || null;
     activeAgentSessions.set(sid, session);
 
     // Sync new session to MongoDB for persistent history
@@ -756,6 +758,10 @@ export async function registerRoutes(app: any): Promise<Server> {
           if (parsed.type === "vnc_stream_url" && parsed.vnc_url) {
             console.log(`[Agent] VNC stream URL received from Python sandbox: ${parsed.vnc_url}`);
             if (parsed.sandbox_id) {
+              // Bind sandbox to this session for safe takeover resolution
+              if (!(session as any)._sandboxId) {
+                (session as any)._sandboxId = parsed.sandbox_id;
+              }
               registerExternalE2BSandbox(parsed.sandbox_id, parsed.vnc_url)
                 .then((result) => {
                   console.log(`[Agent] Auto-registered agent sandbox as e2b-desktop session: ${result.sessionId}`);
@@ -1078,7 +1084,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       return res.status(403).json({ error: "Access denied" });
     }
     const key = `agent:${sid}:paused`;
-    const ok = await redisSet(key, "1", 3600);
+    const ok = await redisSet(key, "1", 600);
     console.log(`[Takeover] Session ${sid} paused (Redis ${ok ? "ok — agent will pause before next tool call" : "unavailable — pause may not propagate to Python agent"})`);
     (session as any)._paused = true;
     _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dijeda untuk takeover mode." })}\n\n`);
@@ -1103,6 +1109,204 @@ export async function registerRoutes(app: any): Promise<Server> {
     console.log(`[Takeover] Session ${sid} resumed`);
     _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dilanjutkan." })}\n\n`);
     res.json({ resumed: true, session_id: sid });
+  });
+
+  // ─── Pause/Resume aliases at /api/sessions/:sid/ (mirrors /api/agent/sessions/:sid/) ──
+  // TakeOverView.tsx and mobile frontend call these canonical paths.
+  app.post("/api/sessions/:sid/pause", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const owner: string = (session as any)._userId || "";
+    const requestingUser: string = req.user?.id || "";
+    if (owner && requestingUser !== owner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const key = `agent:${sid}:paused`;
+    const ok = await redisSet(key, "1", 600);
+    console.log(`[Takeover] Session ${sid} paused (Redis ${ok ? "ok" : "unavailable"})`);
+    (session as any)._paused = true;
+    _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dijeda untuk takeover mode." })}\n\n`);
+    res.json({ paused: true, session_id: sid });
+  });
+
+  app.post("/api/sessions/:sid/resume", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const owner: string = (session as any)._userId || "";
+    const requestingUser: string = req.user?.id || "";
+    if (owner && requestingUser !== owner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const key = `agent:${sid}:paused`;
+    await redisDel(key);
+    (session as any)._paused = false;
+    console.log(`[Takeover] Session ${sid} resumed`);
+    _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dilanjutkan." })}\n\n`);
+    res.json({ resumed: true, session_id: sid });
+  });
+
+  // ─── Stop agent via Redis stop signal (graceful stop via plan_act.py loop) ──
+  // POST /api/sessions/:id/stop → sets Redis key agent:{id}:stop = "1"
+  // plan_act.py checks this key in the execution loop and breaks cleanly.
+  app.post("/api/sessions/:sid/stop", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const requestingUser: string = req.user?.id || "";
+
+    const session = activeAgentSessions.get(sid);
+    if (session) {
+      const owner: string = (session as any)._userId || "";
+      if (owner && requestingUser !== owner) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    }
+
+    // Set Redis stop signal so plan_act.py loop breaks gracefully
+    const stopKey = `agent:${sid}:stop`;
+    await redisSet(stopKey, "1", 600);
+    console.log(`[Stop] Session ${sid} — Redis stop signal set.`);
+
+    if (session && !session.done) {
+      _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dihentikan oleh pengguna." })}\n\n`);
+    }
+
+    // Self-clean the stop key after 10 minutes (cleanup is also done in Python)
+    setTimeout(async () => {
+      try { await redisDel(stopKey); } catch {}
+    }, 600_000);
+
+    res.json({ stopped: true, session_id: sid });
+  });
+
+  // ─── Takeover: pause agent and return active VNC URL ─────────────────────
+  // POST /api/sessions/:id/takeover
+  // Sets Redis pause key, then returns the VNC stream URL so the client can connect.
+  app.post("/api/sessions/:sid/takeover", requireAuth, async (req: any, res: any) => {
+    const { sid } = req.params;
+    const requestingUser: string = req.user?.id || "";
+
+    const session = activeAgentSessions.get(sid);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    const owner: string = (session as any)._userId || "";
+    if (owner && requestingUser !== owner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    // Pause the agent
+    const pauseKey = `agent:${sid}:paused`;
+    await redisSet(pauseKey, "1", 600);
+    (session as any)._paused = true;
+    console.log(`[Takeover] Session ${sid} paused for takeover.`);
+    _broadcastToSession(session, `data: ${JSON.stringify({ type: "notify", content: "Agent dijeda untuk takeover mode." })}\n\n`);
+
+    // Resolve VNC URL and E2B desktop session ID from the per-session sandbox binding.
+    // ONLY use _sandboxId bound to this specific session — never fall back to a global
+    // active sandbox to prevent cross-session VNC exposure.
+    const agentSandboxId: string = (session as any)._sandboxId || "";
+    let vncUrl: string | null = null;
+    let e2bSessionId: string | null = null;
+    if (agentSandboxId) {
+      const e2bSess = getSessionBySandboxId(agentSandboxId);
+      vncUrl = e2bSess?.streamUrl || e2bSess?.vncUrl || null;
+      e2bSessionId = e2bSess?.id || null;
+    }
+
+    res.json({
+      paused: true,
+      session_id: sid,
+      vnc_url: vncUrl,
+      e2b_session_id: e2bSessionId,
+      sandbox_id: agentSandboxId || null,
+      message: "Agent paused. Connect to VNC to take over control.",
+    });
+  });
+
+  // ─── GridFS session files list ─────────────────────────────────────────────
+  // GET /api/sessions/:sessionId/gridfs-files → list GridFS files for session
+  app.get("/api/sessions/:sessionId/gridfs-files", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+
+    // Enforce session ownership — check both live map and MongoDB for inactive sessions
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const sessionOwner: string = (liveSession as any)._userId || "";
+      if (sessionOwner && requestingUserId !== sessionOwner) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    } else {
+      // Session not in memory — query MongoDB to verify ownership.
+      // Fail closed: if we cannot verify ownership, return 403.
+      try {
+        const db = await getMongoDb();
+        if (!db) {
+          return res.status(503).json({ error: "Database unavailable" });
+        }
+        const sessDoc = await db.collection("sessions").findOne(
+          { session_id: sessionId },
+          { projection: { user_id: 1 } }
+        );
+        if (!sessDoc) {
+          return res.status(404).json({ error: "Session not found" });
+        }
+        if (sessDoc.user_id && sessDoc.user_id !== requestingUserId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } catch {
+        // If MongoDB check throws unexpectedly, fail closed
+        return res.status(403).json({ error: "Unable to verify session ownership" });
+      }
+    }
+
+    try {
+      const result = await new Promise<{ ok: boolean; files?: any[]; error?: string }>((resolve) => {
+        const py = spawn("python3", ["-c", `
+import sys, json, asyncio, os
+session_id = sys.argv[1]
+async def main():
+    try:
+        from server.agent.db.gridfs import list_files
+        files = await list_files(session_id)
+        print(json.dumps({"ok": True, "files": [f.to_dict() for f in files]}))
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": str(e)}))
+asyncio.run(main())
+`, sessionId], {
+          env: { ...process.env },
+          cwd: process.cwd(),
+          timeout: 15000,
+        });
+        let out = "";
+        py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+        py.on("close", () => {
+          try {
+            const parsed = JSON.parse(out.trim());
+            resolve(parsed);
+          } catch {
+            resolve({ ok: false, error: "parse error" });
+          }
+        });
+        py.on("error", (err: Error) => resolve({ ok: false, error: err.message }));
+      });
+
+      if (!result.ok) {
+        return res.status(500).json({ error: result.error || "Failed to list GridFS files" });
+      }
+      const files = (result.files || []).map((f: any) => ({
+        ...f,
+        download_url: `/api/files/${f.file_id}`,
+      }));
+      res.json({ files });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to list session files" });
+    }
   });
 
   // ─── Todo list endpoint (read todo for a session) ─────────────────────────
@@ -1472,6 +1676,102 @@ except Exception as ex:
       res.json({ files });
     } catch {
       res.json({ files: [] });
+    }
+  });
+
+  // ─── GridFS file download by file_id ─────────────────────────────────────
+  // Registered AFTER /api/files/download and /api/files/list so that those
+  // specific paths are matched first, not captured by :fileId.
+  // GET /api/files/:fileId → stream file bytes from MongoDB GridFS
+  app.get("/api/files/:fileId", requireAuth, async (req: any, res: any) => {
+    const { fileId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    try {
+      const result = await new Promise<{
+        ok: boolean;
+        data?: Buffer;
+        mime?: string;
+        filename?: string;
+        owner_user_id?: string;
+        error?: string;
+      }>((resolve) => {
+        const py = spawn("python3", ["-c", `
+import sys, json, asyncio, os
+file_id = sys.argv[1]
+async def main():
+    try:
+        from server.agent.db.gridfs import download_file, get_file_metadata
+        meta = await get_file_metadata(file_id)
+        if meta is None:
+            print(json.dumps({"ok": False, "error": "not_found"}))
+            return
+        data = await download_file(file_id)
+        import base64
+        print(json.dumps({
+            "ok": True,
+            "data": base64.b64encode(data).decode(),
+            "mime": meta.mime_type,
+            "filename": meta.filename,
+            "owner_user_id": getattr(meta, "user_id", None),
+        }))
+    except FileNotFoundError:
+        print(json.dumps({"ok": False, "error": "not_found"}))
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": str(e)}))
+asyncio.run(main())
+`, fileId], {
+          env: { ...process.env },
+          cwd: process.cwd(),
+          timeout: 30000,
+        });
+        let out = "";
+        let errOut = "";
+        py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+        py.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+        py.on("close", (_code: number | null) => {
+          try {
+            const parsed = JSON.parse(out.trim());
+            if (parsed.ok && parsed.data) {
+              const buf = Buffer.from(parsed.data, "base64");
+              resolve({ ok: true, data: buf, mime: parsed.mime, filename: parsed.filename, owner_user_id: parsed.owner_user_id });
+            } else {
+              resolve({ ok: false, error: parsed.error || "unknown error" });
+            }
+          } catch {
+            resolve({ ok: false, error: errOut.trim() || "Failed to parse GridFS response" });
+          }
+        });
+        py.on("error", (err: Error) => resolve({ ok: false, error: err.message }));
+      });
+
+      if (!result.ok || !result.data) {
+        if (result.error === "not_found") {
+          return res.status(404).json({ error: "File not found" });
+        }
+        return res.status(502).json({ error: result.error || "Failed to retrieve file from GridFS" });
+      }
+
+      // Enforce ownership: owner must match the requesting user.
+      // Files without owner metadata (legacy or direct-uploaded) are also denied
+      // unless the requesting user is verified by the session store.
+      if (!result.owner_user_id) {
+        // No owner metadata — deny to prevent enumeration of unattributed files
+        return res.status(403).json({ error: "File owner could not be verified" });
+      }
+      if (requestingUserId !== result.owner_user_id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const mime = result.mime || "application/octet-stream";
+      const filename = result.filename || fileId;
+      res.setHeader("Content-Type", mime);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", result.data.length);
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(result.data);
+    } catch (err: any) {
+      console.warn("[GridFS] File download error:", err.message);
+      res.status(500).json({ error: "Internal error while retrieving file" });
     }
   });
 

@@ -137,6 +137,29 @@ def _is_session_paused(session_id: str) -> bool:
         return False
 
 
+def _is_session_stopped(session_id: str) -> bool:
+    """Check if the agent has received a stop signal from the user via Redis."""
+    if not session_id:
+        return False
+    try:
+        _redis_host = os.environ.get("REDIS_HOST", "")
+        if not _redis_host:
+            return False
+        import redis as _redis_lib
+        _rc = _redis_lib.Redis(
+            host=_redis_host,
+            port=int(os.environ.get("REDIS_PORT", "6379")),
+            password=os.environ.get("REDIS_PASSWORD") or os.environ.get("REDIS_PASS") or None,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        _val = _rc.get("agent:{}:stop".format(session_id))
+        _rc.close()
+        return bool(_val)
+    except Exception:
+        return False
+
+
 def _coerce_bool(value: Any, default: bool = True) -> bool:
     if isinstance(value, bool):
         return value
@@ -1013,6 +1036,9 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             _emitted = False
             _waited = 0
             while _is_session_paused(self.session_id):
+                # Also exit immediately if a stop signal was received while paused
+                if _is_session_stopped(self.session_id):
+                    return
                 if not _emitted:
                     _emitted = True
                     yield make_event("notify", content="[Takeover] Agent dijeda. Menunggu kontrol dikembalikan...")
@@ -1023,8 +1049,19 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
 
         for iteration in range(self.max_tool_iterations):
             try:
+                if self.session_id and _is_session_stopped(self.session_id):
+                    yield make_event("notify", content="Agent dihentikan oleh pengguna.")
+                    self.state = FlowState.COMPLETED
+                    break
+
                 async for _pev in _wait_if_paused():
                     yield _pev
+
+                # Re-check stop signal immediately after pause exits (stop during pause)
+                if self.session_id and _is_session_stopped(self.session_id):
+                    yield make_event("notify", content="Agent dihentikan oleh pengguna.")
+                    self.state = FlowState.COMPLETED
+                    break
 
                 if iteration % 3 == 0 and bool(os.environ.get("E2B_API_KEY", "")):
                     try:
@@ -1055,6 +1092,13 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     for tc_idx, tc in enumerate(tool_calls):
                         async for _pev2 in _wait_if_paused():
                             yield _pev2
+
+                        # Stop signal check after per-tool-call pause
+                        if self.session_id and _is_session_stopped(self.session_id):
+                            yield make_event("notify", content="Agent dihentikan oleh pengguna.")
+                            self.state = FlowState.COMPLETED
+                            step_done = True
+                            break
 
                         fn_name = tc.get("name", "")
                         fn_args = tc.get("arguments", {})

@@ -505,6 +505,128 @@ def file_find_by_name(
     )
 
 
+def file_upload_to_storage(
+    file: str,
+    filename: Optional[str] = None,
+    **kwargs,
+) -> ToolResult:
+    """Upload a file from E2B sandbox to persistent GridFS storage."""
+    session_id = os.environ.get("DZECK_SESSION_ID", "")
+    if not session_id:
+        return ToolResult(
+            success=False,
+            message="DZECK_SESSION_ID is not set. Cannot upload file to storage without a session.",
+            data={"error": "no_session_id"},
+        )
+    user_id = os.environ.get("DZECK_USER_ID", "")
+    try:
+        preflight_err = _preflight_e2b_sandbox()
+        if preflight_err:
+            return ToolResult(success=False, message=preflight_err, data={"error": "e2b_preflight_failed"})
+        from server.agent.tools.e2b_sandbox import read_file_bytes as e2b_read_bytes, _resolve_sandbox_path
+        sandbox_path = _resolve_sandbox_path(file)
+        raw_data = e2b_read_bytes(sandbox_path)
+        if raw_data is None:
+            return ToolResult(success=False, message=f"File not found in E2B sandbox: {file}", data={"error": "not_found"})
+    except Exception as exc:
+        return ToolResult(success=False, message=f"Failed to read file from E2B sandbox: {exc}", data={"error": str(exc)})
+
+    display_name = filename or os.path.basename(file)
+    ext = os.path.splitext(display_name)[1].lower()
+    mime_type = _MIME_MAP.get(ext, "application/octet-stream")
+
+    try:
+        import asyncio as _asyncio
+        from server.agent.db.gridfs import upload_file as _gridfs_upload
+
+        async def _do_upload() -> str:
+            return await _gridfs_upload(
+                session_id=session_id,
+                filename=display_name,
+                data_bytes=raw_data,
+                mime_type=mime_type,
+                user_id=user_id,
+            )
+
+        try:
+            _loop = _asyncio.get_event_loop()
+            if _loop.is_running():
+                import concurrent.futures as _cf
+                with _cf.ThreadPoolExecutor() as _pool:
+                    file_id = _pool.submit(_asyncio.run, _do_upload()).result()
+            else:
+                file_id = _loop.run_until_complete(_do_upload())
+        except RuntimeError:
+            file_id = _asyncio.run(_do_upload())
+
+        download_url = f"/api/files/{file_id}"
+        return ToolResult(
+            success=True,
+            message=f"File '{display_name}' uploaded to persistent storage ({len(raw_data)} bytes).\nDownload: {download_url}",
+            data={
+                "file_id": file_id,
+                "filename": display_name,
+                "size": len(raw_data),
+                "mime_type": mime_type,
+                "download_url": download_url,
+                "session_id": session_id,
+            },
+        )
+    except Exception as exc:
+        return ToolResult(
+            success=False,
+            message=f"Failed to upload file to GridFS storage: {exc}",
+            data={"error": str(exc), "file": file},
+        )
+
+
+def file_list_session_files(**kwargs) -> ToolResult:
+    """List all files uploaded to persistent GridFS storage for the current session."""
+    session_id = os.environ.get("DZECK_SESSION_ID", "")
+    if not session_id:
+        return ToolResult(
+            success=False,
+            message="DZECK_SESSION_ID is not set.",
+            data={"error": "no_session_id", "files": []},
+        )
+    try:
+        import asyncio as _asyncio
+        from server.agent.db.gridfs import list_files as _gridfs_list
+
+        async def _do_list():
+            return await _gridfs_list(session_id=session_id)
+
+        try:
+            _loop = _asyncio.get_event_loop()
+            if _loop.is_running():
+                import concurrent.futures as _cf
+                with _cf.ThreadPoolExecutor() as _pool:
+                    file_list = _pool.submit(_asyncio.run, _do_list()).result()
+            else:
+                file_list = _loop.run_until_complete(_do_list())
+        except RuntimeError:
+            file_list = _asyncio.run(_do_list())
+
+        files_data = [f.to_dict() for f in file_list]
+        for f in files_data:
+            f["download_url"] = f"/api/files/{f['file_id']}"
+        msg = f"Found {len(files_data)} file(s) in persistent storage for session {session_id}."
+        if files_data:
+            lines = [f"  - {f['filename']} ({f['size']} bytes) \u2192 {f['download_url']}" for f in files_data]
+            msg += "\n" + "\n".join(lines)
+        return ToolResult(
+            success=True,
+            message=msg,
+            data={"files": files_data, "count": len(files_data), "session_id": session_id},
+        )
+    except Exception as exc:
+        return ToolResult(
+            success=False,
+            message=f"Failed to list session files: {exc}",
+            data={"error": str(exc), "files": []},
+        )
+
+
 def image_view(image: str, **kwargs) -> ToolResult:
     """View an image file (returns base64 encoded content). Reads from E2B sandbox when available."""
     try:
@@ -628,3 +750,24 @@ class FileTool(BaseTool):
     )
     def _image_view(self, image: str) -> ToolResult:
         return image_view(image=image)
+
+    @tool(
+        name="file_upload_to_storage",
+        description="Upload a file from the E2B workspace to persistent GridFS storage so it can be downloaded later via /api/files/:fileId.",
+        parameters={
+            "file": {"type": "string", "description": "Absolute path of the file inside the E2B sandbox to upload"},
+            "filename": {"type": "string", "description": "(Optional) Override display filename"},
+        },
+        required=["file"],
+    )
+    def _file_upload_to_storage(self, file: str, filename: Optional[str] = None) -> ToolResult:
+        return file_upload_to_storage(file=file, filename=filename)
+
+    @tool(
+        name="file_list_session_files",
+        description="List all files that have been uploaded to persistent storage for the current session.",
+        parameters={},
+        required=[],
+    )
+    def _file_list_session_files(self) -> ToolResult:
+        return file_list_session_files()

@@ -30,25 +30,62 @@ interface TakeOverViewProps {
   onClose: () => void;
 }
 
-async function callPauseResume(agentSessionId: string, action: "pause" | "resume"): Promise<boolean> {
+interface TakeoverResult {
+  ok: boolean;
+  vnc_url?: string | null;
+  /** E2B desktop session ID (UUID) — use this as sessionId for VNCViewer */
+  e2b_session_id?: string | null;
+  sandbox_id?: string | null;
+}
+
+async function callTakeover(agentSessionId: string): Promise<TakeoverResult> {
+  if (!agentSessionId) return { ok: false };
+  try {
+    const baseUrl = getApiBaseUrl();
+    const token = getStoredToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const resp = await fetch(`${baseUrl}/api/sessions/${agentSessionId}/takeover`, {
+      method: "POST",
+      headers,
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(`[TakeOverView] takeover failed (${resp.status}): ${body}`);
+      return { ok: false };
+    }
+    const data = await resp.json();
+    return {
+      ok: true,
+      vnc_url: data.vnc_url ?? null,
+      e2b_session_id: data.e2b_session_id ?? null,
+      sandbox_id: data.sandbox_id ?? null,
+    };
+  } catch (err) {
+    console.warn("[TakeOverView] takeover call failed:", err);
+    return { ok: false };
+  }
+}
+
+async function callResume(agentSessionId: string): Promise<boolean> {
   if (!agentSessionId) return false;
   try {
     const baseUrl = getApiBaseUrl();
     const token = getStoredToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const resp = await fetch(`${baseUrl}/api/agent/sessions/${agentSessionId}/${action}`, {
+    const resp = await fetch(`${baseUrl}/api/sessions/${agentSessionId}/resume`, {
       method: "POST",
       headers,
     });
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      console.warn(`[TakeOverView] ${action} failed (${resp.status}): ${body}`);
+      console.warn(`[TakeOverView] resume failed (${resp.status}): ${body}`);
       return false;
     }
     return true;
   } catch (err) {
-    console.warn(`[TakeOverView] ${action} call failed:`, err);
+    console.warn("[TakeOverView] resume call failed:", err);
     return false;
   }
 }
@@ -60,10 +97,8 @@ export function TakeOverView({
   onClose,
 }: TakeOverViewProps) {
   const [vncConnected, setVncConnected] = useState(false);
+  const [resolvedVncSessionId, setResolvedVncSessionId] = useState<string>("");
   const pausedRef = useRef(false);
-
-  // The VNC viewer connects to the E2B desktop session (not the agent session)
-  const vncSessionId = e2bSessionId || agentSessionId;
 
   const handleVNCConnected = useCallback(() => {
     setVncConnected(true);
@@ -80,24 +115,38 @@ export function TakeOverView({
     console.log("[TakeOverView] VNC credentials required");
   }, []);
 
-  // Pause agent when takeover opens; resume when it closes
+  // Call takeover endpoint when overlay opens — pauses agent and resolves VNC session
   useEffect(() => {
     if (!agentSessionId) return;
     if (visible && !pausedRef.current) {
       pausedRef.current = true;
-      callPauseResume(agentSessionId, "pause");
+      callTakeover(agentSessionId).then((result) => {
+        // Use e2b_session_id (desktop session UUID) from takeover response for VNCViewer;
+        // fall back to props-provided e2bSessionId, then agentSessionId
+        const sessionToUse = result.e2b_session_id || e2bSessionId || agentSessionId;
+        setResolvedVncSessionId(sessionToUse);
+      });
     } else if (!visible && pausedRef.current) {
       pausedRef.current = false;
       setVncConnected(false);
-      callPauseResume(agentSessionId, "resume");
+      setResolvedVncSessionId("");
+      callResume(agentSessionId);
     }
-  }, [visible, agentSessionId]);
+  }, [visible, agentSessionId, e2bSessionId]);
+
+  // Set initial VNC session ID from props if takeover hasn't resolved yet
+  useEffect(() => {
+    if (visible && !resolvedVncSessionId) {
+      setResolvedVncSessionId(e2bSessionId || agentSessionId || "");
+    }
+  }, [visible, e2bSessionId, agentSessionId, resolvedVncSessionId]);
 
   const handleClose = useCallback(() => {
     if (agentSessionId && pausedRef.current) {
       pausedRef.current = false;
-      callPauseResume(agentSessionId, "resume");
+      callResume(agentSessionId);
     }
+    setResolvedVncSessionId("");
     onClose();
   }, [agentSessionId, onClose]);
 
@@ -108,7 +157,7 @@ export function TakeOverView({
       {/* VNC Viewer - full screen, interactive, connected via E2B session ID */}
       <View style={styles.vncContainer}>
         <VNCViewer
-          sessionId={vncSessionId}
+          sessionId={resolvedVncSessionId || e2bSessionId || agentSessionId}
           enabled={visible}
           viewOnly={false}
           onConnected={handleVNCConnected}

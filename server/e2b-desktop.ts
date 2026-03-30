@@ -571,6 +571,19 @@ export async function registerExternalE2BSandbox(
   return { sessionId, vncUrl: effectiveVncUrl };
 }
 
+/**
+ * Look up an E2B desktop session by sandbox ID.
+ * Used by the takeover endpoint to retrieve the VNC stream URL.
+ */
+export function getSessionBySandboxId(sandboxId: string): E2BDesktopSession | null {
+  for (const session of activeSessions.values()) {
+    if (session.sandboxId === sandboxId) {
+      return session;
+    }
+  }
+  return null;
+}
+
 // Route Registration
 
 export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {

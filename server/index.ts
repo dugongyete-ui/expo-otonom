@@ -5,6 +5,7 @@ import { registerE2BDesktopRoutes } from "./e2b-desktop";
 import { registerAuthRoutes } from "./auth-routes";
 import * as fs from "fs";
 import * as path from "path";
+import { execFile as _execFile } from "node:child_process";
 
 (function loadDotEnv() {
   const envPath = path.resolve(process.cwd(), ".env");
@@ -310,6 +311,32 @@ function setupErrorHandler(app: express.Application) {
     () => {
       log(`express server serving on port ${port}`);
       log(`[Dzeck AI] Server ready — E2B cloud sandbox mode`);
+
+      // Bootstrap MongoDB schema indexes at startup (best-effort, non-blocking)
+      if (process.env.MONGODB_URI) {
+        setTimeout(() => {
+          _execFile(
+            "python3",
+            ["-c", `
+import asyncio, sys
+sys.path.insert(0, '${process.cwd().replace(/\\/g, "/")}')
+async def main():
+    try:
+        from server.agent.db.schema import initialize_schema
+        ok = await initialize_schema()
+        print('[Schema]', 'initialized' if ok else 'skipped')
+    except Exception as e:
+        print('[Schema] warning:', e, file=sys.stderr)
+asyncio.run(main())
+`],
+            { env: process.env, cwd: process.cwd(), timeout: 30000 },
+            (_err: any, stdout: string, stderr: string) => {
+              if (stdout.trim()) log(stdout.trim());
+              if (stderr.trim()) console.warn("[Schema]", stderr.trim());
+            },
+          );
+        }, 2000);
+      }
 
       // Run tool health check at startup and log results
       setTimeout(async () => {
