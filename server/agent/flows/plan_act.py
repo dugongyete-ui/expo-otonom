@@ -818,6 +818,8 @@ class DzeckAgent:
                 if batch:
                     chunk = "\n".join(("[stderr] " if t == "stderr" else "") + l for t, l in batch)
                     yield make_event("tool_stream", tool_call_id=tool_call_id, chunk=chunk)
+                    yield make_event("shell_output", tool_call_id=tool_call_id, chunk=chunk,
+                                     lines=[{"type": t, "line": l} for t, l in batch])
 
             final_batch = []
             try:
@@ -831,6 +833,8 @@ class DzeckAgent:
             if final_batch:
                 chunk = "\n".join(("[stderr] " if t == "stderr" else "") + l for t, l in final_batch)
                 yield make_event("tool_stream", tool_call_id=tool_call_id, chunk=chunk)
+                yield make_event("shell_output", tool_call_id=tool_call_id, chunk=chunk,
+                                 lines=[{"type": t, "line": l} for t, l in final_batch])
 
             tool_result = await future
         else:
@@ -909,6 +913,51 @@ class DzeckAgent:
                     self._vnc_url_emitted = True
             except Exception:
                 pass
+
+        _tool_data = tool_result.data or {}
+        if resolved in ("browser_navigate", "browser_click", "browser_type", "browser_scroll",
+                        "browser_view", "browser_screenshot", "browser_fill", "browser_select",
+                        "browser_hover", "browser_back", "browser_forward", "browser_refresh"):
+            _scr = _tool_data.get("screenshot_b64", "")
+            if _scr:
+                yield make_event("browser_screenshot",
+                                 screenshot_b64=_scr,
+                                 url=_tool_data.get("url", ""),
+                                 title=_tool_data.get("title", ""),
+                                 tool_call_id=tool_call_id)
+
+        if resolved in ("desktop_screenshot", "desktop_click", "desktop_type", "desktop_move",
+                        "desktop_scroll", "desktop_key", "desktop_drag", "desktop_open_app",
+                        "computer_use", "computer_screenshot"):
+            _scr = _tool_data.get("screenshot_b64", "")
+            if _scr:
+                yield make_event("desktop_screenshot",
+                                 screenshot_b64=_scr,
+                                 tool_call_id=tool_call_id)
+
+        if resolved in ("web_search", "search", "search_web", "info_search_web"):
+            _results = _tool_data.get("results", [])
+            if _results:
+                yield make_event("search_results",
+                                 results=_results,
+                                 query=fn_args.get("query", ""),
+                                 tool_call_id=tool_call_id)
+
+        if resolved in ("todo_write", "todo_update", "todo_read"):
+            _todo_session = os.environ.get("DZECK_SESSION_ID", "")
+            if _todo_session:
+                yield make_event("todo_update",
+                                 session_id=_todo_session,
+                                 action=resolved,
+                                 data=_tool_data)
+
+        if resolved in ("task_create", "task_complete", "task_list"):
+            _task_session = os.environ.get("DZECK_SESSION_ID", "")
+            if _task_session:
+                yield make_event("task_update",
+                                 session_id=_task_session,
+                                 action=resolved,
+                                 data=_tool_data)
 
         yield make_event(
             "tool",

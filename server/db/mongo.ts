@@ -35,7 +35,7 @@ export async function getMongoDb(): Promise<Db | null> {
       connectTimeoutMS: 5000,
     });
     await _client.connect();
-    _db = _client.db("manus");
+    _db = _client.db(process.env.MONGO_DB_NAME || "manus");
     _connected = true;
     _lastFailedAt = 0;
     console.log("[MongoDB] Connected successfully.");

@@ -20,7 +20,16 @@ export interface VncInfo {
   e2bSessionId: string;
 }
 
-export function useChat(onVncUrl?: (info: VncInfo) => void) {
+export interface BrowserEventInfo {
+  screenshot_b64?: string;
+  url?: string;
+  title?: string;
+}
+
+export function useChat(
+  onVncUrl?: (info: VncInfo) => void,
+  onBrowserEvent?: (info: BrowserEventInfo) => void,
+) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isWaitingForUser, setIsWaitingForUser] = useState(false);
@@ -260,6 +269,14 @@ export function useChat(onVncUrl?: (info: VncInfo) => void) {
                 vncUrl: event.vnc_url,
                 sandboxId: event.sandbox_id || "",
                 e2bSessionId: event.e2b_session_id || "",
+              });
+            }
+          } else if (event.type === "browser_screenshot" || event.type === "desktop_screenshot") {
+            if (onBrowserEvent && event.screenshot_b64) {
+              onBrowserEvent({
+                screenshot_b64: event.screenshot_b64,
+                url: event.url || "",
+                title: event.title || "",
               });
             }
           } else if (event.type === "todo_update") {

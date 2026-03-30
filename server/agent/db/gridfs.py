@@ -33,7 +33,7 @@ def _get_uri() -> str:
 
 
 def _get_db_name() -> str:
-    return "manus"
+    return os.environ.get("MONGO_DB_NAME", "manus")
 
 
 _client: Any = None

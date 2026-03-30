@@ -46,3 +46,9 @@ numpy>=1.24.0
 # ── VNC / Display ────────────────────────────────────────────────────────────
 websockify>=0.10.0
 PyYAML>=6.0.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+# Note: bson is NOT listed — pymongo and motor bundle their own bson package.
+# Installing standalone bson would conflict with pymongo's bson.
+python-dotenv>=1.0.0
+typing-extensions>=4.0.0

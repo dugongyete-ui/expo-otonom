@@ -225,12 +225,12 @@ export function VNCViewer({
           }
           reconnectAttemptsRef.current = 0;
         }
-      } catch {
+      } catch (err: any) {
         if (active) {
           reconnectAttemptsRef.current += 1;
           if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
             setStatus("error");
-            setErrorMsg("Failed to connect to desktop");
+            setErrorMsg(err?.message || "Failed to connect to desktop");
           } else {
             setStatus("connecting");
           }
@@ -238,13 +238,26 @@ export function VNCViewer({
       }
     };
 
-    poll();
-    pollTimerRef.current = setInterval(poll, SCREENSHOT_POLL_INTERVAL_MS);
+    const scheduleNext = () => {
+      if (!active) return;
+      // Recompute delay after every attempt so backoff actually increases on errors
+      const delayMs = Math.min(
+        SCREENSHOT_POLL_INTERVAL_MS * Math.pow(1.5, Math.min(reconnectAttemptsRef.current, 4)),
+        10000,
+      );
+      pollTimerRef.current = setTimeout(async () => {
+        await poll();
+        scheduleNext();
+      }, delayMs) as unknown as ReturnType<typeof setInterval>;
+    };
+
+    // Kick off immediately then recurse
+    poll().then(scheduleNext);
 
     return () => {
       active = false;
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current as unknown as ReturnType<typeof setTimeout>);
         pollTimerRef.current = null;
       }
     };

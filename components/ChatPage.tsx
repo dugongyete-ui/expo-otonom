@@ -49,12 +49,19 @@ export interface VncSessionInfo {
   e2bSessionId?: string;
 }
 
+interface BrowserEventState {
+  url?: string;
+  screenshot_b64?: string;
+  title?: string;
+}
+
 interface ChatPageProps {
   sessionId?: string;
   isLeftPanelShow?: boolean;
   onToggleLeftPanel?: () => void;
   onToolsChange?: (tools: any[]) => void;
   onVncSessionChange?: (info: VncSessionInfo | null) => void;
+  onBrowserEventChange?: (event: BrowserEventState | null) => void;
 }
 
 export function ChatPage({
@@ -63,6 +70,7 @@ export function ChatPage({
   onToggleLeftPanel,
   onToolsChange,
   onVncSessionChange,
+  onBrowserEventChange,
 }: ChatPageProps = {}) {
   const { mode } = useLocalSearchParams<{ mode: string }>();
   const isAgentMode = mode === "agent";
@@ -89,6 +97,7 @@ export function ChatPage({
   const cancelRef = useRef<(() => void) | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
+  const [lastBrowserEvent, setLastBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -145,6 +154,11 @@ export function ChatPage({
   useEffect(() => {
     onToolsChange?.(tools);
   }, [tools, onToolsChange]);
+
+  // Propagate live browser screenshot events to parent layout (for BrowserPanel)
+  useEffect(() => {
+    onBrowserEventChange?.(lastBrowserEvent);
+  }, [lastBrowserEvent, onBrowserEventChange]);
 
   const handleEvent = useCallback((event: AgentEvent) => {
     const { type } = event;
@@ -441,6 +455,26 @@ export function ChatPage({
           files,
         };
         setMessages(prev => [...prev, fileMsg]);
+      }
+      return;
+    }
+
+    if (type === "browser_screenshot") {
+      const scr = event.screenshot_b64 || "";
+      if (scr) {
+        setLastBrowserEvent({
+          screenshot_b64: scr,
+          url: event.url || event.vnc_url || "",
+          title: event.title || "",
+        });
+      }
+      return;
+    }
+
+    if (type === "desktop_screenshot") {
+      const scr = event.screenshot_b64 || "";
+      if (scr) {
+        setLastBrowserEvent({ screenshot_b64: scr });
       }
       return;
     }

@@ -39,6 +39,10 @@ export interface AgentEvent {
   files?: Array<{ filename: string; download_url: string; mime?: string; sandbox_path?: string }>;
   text?: string;
   attachments?: Array<{ filename: string; download_url: string; sandbox_path?: string }>;
+  screenshot_b64?: string;
+  url?: string;
+  results?: Array<{ title: string; url: string; snippet?: string; content?: string }>;
+  query?: string;
 }
 
 export interface AgentRequest {

@@ -44,6 +44,7 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
   const [showTakeOver, setShowTakeOver] = useState(false);
   const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
+  const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
   const insets = useSafeAreaInsets();
 
   const toggleLeftPanel = useCallback(() => {
@@ -56,6 +57,14 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
 
   const handleToolsChange = useCallback((newTools: ToolItem[]) => {
     setTools(newTools);
+  }, []);
+
+  const handleBrowserEventChange = useCallback((event: { url?: string; screenshot_b64?: string; title?: string } | null) => {
+    if (event?.screenshot_b64) {
+      setLiveBrowserEvent(event);
+      setRightPanelMode("browser");
+      setIsToolPanelVisible(true);
+    }
   }, []);
 
   // Auto-switch to browser panel when a browser tool starts executing
@@ -74,13 +83,16 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
     prevToolsLenRef.current = tools.length;
   }, [tools]);
 
-  // Get latest browser event from tools for BrowserPanel
-  const lastBrowserEvent = tools
+  // Get latest browser event from tools for BrowserPanel (final tool_content on completion)
+  const toolBrowserEvent = tools
     .filter(t => {
       const fn = t.function_name || t.name;
       return getToolCategory(fn) === "browser" && t.tool_content?.type === "browser";
     })
     .pop()?.tool_content || null;
+
+  // Prefer live real-time browser screenshot (from browser_screenshot SSE event) over tool_content
+  const lastBrowserEvent = liveBrowserEvent ?? toolBrowserEvent;
 
   const handleSwitchToBrowser = useCallback(() => {
     setRightPanelMode("browser");
@@ -150,6 +162,7 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
             onToggleLeftPanel={toggleLeftPanel}
             onToolsChange={handleToolsChange}
             onVncSessionChange={handleVncSessionChange}
+            onBrowserEventChange={handleBrowserEventChange}
           />
         </View>
 

@@ -20,7 +20,11 @@ export interface AgentMessage {
     | "todo_update"
     | "task_update"
     | "waiting_for_user"
-    | "ask";
+    | "ask"
+    | "browser_screenshot"
+    | "desktop_screenshot"
+    | "search_results"
+    | "shell_output";
   content?: string;
   chunk?: string;
   title?: string;
@@ -47,6 +51,12 @@ export interface AgentMessage {
   e2b_session_id?: string;
   todo_items?: Array<{ text: string; completed: boolean }>;
   tasks?: Array<{ id: string; description: string; status: string; result?: string }>;
+  screenshot_b64?: string;
+  url?: string;
+  results?: Array<{ title: string; url: string; snippet?: string; content?: string }>;
+  query?: string;
+  lines?: Array<{ type: string; line: string }>;
+  action?: string;
 }
 
 export interface AgentRequest {

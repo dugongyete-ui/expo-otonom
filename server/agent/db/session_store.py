@@ -39,9 +39,9 @@ class SessionStore:
       - session_events: event log per session (rollback support)
     """
 
-    def __init__(self, uri: Optional[str] = None, db_name: str = "manus") -> None:
+    def __init__(self, uri: Optional[str] = None, db_name: str = "") -> None:
         self._uri = uri or os.environ.get("MONGODB_URI", "")
-        self._db_name = db_name
+        self._db_name = db_name or os.environ.get("MONGO_DB_NAME", "manus")
         self._client: Any = None
         self._db: Any = None
         self._sessions: Any = None

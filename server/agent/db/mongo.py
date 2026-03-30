@@ -41,7 +41,8 @@ def get_db():
             serverSelectionTimeoutMS=3000,
             connectTimeoutMS=3000,
         )
-        _db = _client["manus"]
+        _db_name = os.environ.get("MONGO_DB_NAME", "manus")
+        _db = _client[_db_name]
         _uri = current_uri
         logger.debug("[AgentMongo] Connected successfully.")
         return _db
