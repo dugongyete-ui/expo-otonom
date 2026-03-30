@@ -437,12 +437,20 @@ def info_search_web(
     num_results: int = 8,
 ) -> ToolResult:
     """Search the web.
-    Provider order: SEARCH_PROVIDER env → bing API (if key) → tavily (if key) → bing_web scraper → duckduckgo.
+
+    Provider selection order (configurable via SEARCH_PROVIDER env var):
+    1. google  — requires GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_ENGINE_ID
+    2. bing    — requires BING_SEARCH_API_KEY
+    3. tavily  — requires TAVILY_API_KEY
+    4. bing_web — no key required (scraper)
+    5. duckduckgo — no key required (fallback)
+
+    Set SEARCH_PROVIDER=google to use Google Custom Search API.
     """
     bing_key = os.environ.get("BING_SEARCH_API_KEY", "")
     tavily_key = os.environ.get("TAVILY_API_KEY", "")
     google_key = os.environ.get("GOOGLE_SEARCH_API_KEY", "")
-    google_engine_id = os.environ.get("GOOGLE_SEARCH_ENGINE_ID", "")
+    google_engine_id = os.environ.get("GOOGLE_SEARCH_ENGINE_ID", "") or os.environ.get("GOOGLE_CSE_ID", "")
 
     provider = _get_search_provider()
 

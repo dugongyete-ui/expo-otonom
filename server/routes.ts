@@ -72,10 +72,15 @@ export async function registerRoutes(app: any): Promise<Server> {
           if (doc.CEREBRAS_CHAT_MODEL) process.env.CEREBRAS_CHAT_MODEL = doc.CEREBRAS_CHAT_MODEL;
           if (doc.CEREBRAS_AGENT_MODEL) process.env.CEREBRAS_AGENT_MODEL = doc.CEREBRAS_AGENT_MODEL;
           if (doc.SEARCH_PROVIDER) process.env.SEARCH_PROVIDER = doc.SEARCH_PROVIDER;
+          if (doc.GOOGLE_SEARCH_API_KEY) process.env.GOOGLE_SEARCH_API_KEY = doc.GOOGLE_SEARCH_API_KEY;
+          if (doc.GOOGLE_SEARCH_ENGINE_ID) process.env.GOOGLE_SEARCH_ENGINE_ID = doc.GOOGLE_SEARCH_ENGINE_ID;
+          if (doc.GOOGLE_CSE_ID) process.env.GOOGLE_CSE_ID = doc.GOOGLE_CSE_ID;
+          if (doc.MODEL_PROVIDER) process.env.MODEL_PROVIDER = doc.MODEL_PROVIDER;
           console.log("[Config] Loaded persisted config from MongoDB:", {
             CEREBRAS_CHAT_MODEL: doc.CEREBRAS_CHAT_MODEL,
             CEREBRAS_AGENT_MODEL: doc.CEREBRAS_AGENT_MODEL,
             SEARCH_PROVIDER: doc.SEARCH_PROVIDER,
+            GOOGLE_SEARCH_CONFIGURED: !!(doc.GOOGLE_SEARCH_API_KEY && (doc.GOOGLE_SEARCH_ENGINE_ID || doc.GOOGLE_CSE_ID)),
           });
         }
       }
@@ -89,6 +94,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
       CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
       SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
+      GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
       AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
       E2B_ENABLED: isE2BEnabled(),
       authProvider: process.env.AUTH_PROVIDER || "none",
@@ -103,7 +109,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   app.put("/api/config", requireAuth, async (req: any, res: any) => {
-    const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON"];
+    const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
     const updates: Record<string, string> = {};
 
     for (const key of allowed) {

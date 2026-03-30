@@ -345,11 +345,17 @@ class E2BDesktopBrowserSession:
         return None
 
     def _cdp_evaluate(self, expression: str) -> Any:
-        """Evaluate JavaScript in the active Chrome tab via CDP REST API.
+        """Evaluate JavaScript in the active Chrome tab via CDP WebSocket.
+
+        Strategy:
+        1. Discover active tab via CDP HTTP REST GET /json (no WS needed for discovery).
+        2. Connect to the tab's webSocketDebuggerUrl using a minimal RFC-6455 WS client
+           embedded in a sandbox Python script (avoids shell quoting issues).
+        3. Send Runtime.evaluate and parse the JSON response.
 
         Returns the evaluated result value (Python object) or None on failure.
         """
-        # Get list of tabs from CDP /json endpoint
+        # Step 1: Get list of tabs from CDP /json endpoint (HTTP REST, no WS)
         list_result = self._run(
             "curl -s --max-time 3 http://localhost:{}/json 2>/dev/null".format(self._CDP_PORT),
             timeout=8
@@ -360,7 +366,6 @@ class E2BDesktopBrowserSession:
             tabs = json.loads(list_result["stdout"])
         except Exception:
             return None
-        # Find the first normal page tab
         page_tab = None
         for tab in tabs:
             if isinstance(tab, dict) and tab.get("type") == "page":
@@ -368,118 +373,122 @@ class E2BDesktopBrowserSession:
                 break
         if page_tab is None:
             return None
-        # Use /json/runtime/evaluate via the devtools protocol HTTP endpoint
-        # We call through a Python script in the sandbox to avoid shell escaping issues
+        ws_url = page_tab.get("webSocketDebuggerUrl", "")
+        if not ws_url:
+            return None
+
+        # Step 2: Write expression to a sandbox file to avoid all shell quoting issues.
+        # Step 3: Run a self-contained Python WS client in the sandbox that reads the
+        # expression from the file and evaluates it via Runtime.evaluate over CDP WS.
         eval_script = textwrap.dedent(r"""
-import sys, json, urllib.request, urllib.parse
+import sys, json, socket, base64, struct, urllib.parse as up
 
 ws_url = sys.argv[1]
-expression = sys.argv[2]
+expression = open('/tmp/_dzeck_cdp_expr.js').read()
 
-# CDP calls go to the /json/runtime/evaluate endpoint with a POST
-# Actually CDP is WebSocket-only; use a simple approach via puppeteer-less eval
-# by sending to the activate + evaluate via devtools protocol
-# We use the id-based REST path: POST /json/runtime/evaluate is not standard.
-# Instead, write to a temp file via CDP websocket using a minimal Python ws client.
-
-import socket, base64, hashlib, struct, threading, time
-
-def ws_handshake(host, port, path):
+def ws_connect(url):
+    parsed = up.urlparse(url)
+    host = parsed.hostname or 'localhost'
+    port = parsed.port or 9222
+    path = parsed.path or '/'
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(5)
+    s.settimeout(8)
     s.connect((host, port))
-    key = base64.b64encode(b"dzeckbrowserkey1").decode()
+    key = base64.b64encode(b'dzeckbrowser0001').decode()
     req = (
-        "GET {} HTTP/1.1\r\n"
-        "Host: {}:{}\r\n"
-        "Upgrade: websocket\r\n"
-        "Connection: Upgrade\r\n"
-        "Sec-WebSocket-Key: {}\r\n"
-        "Sec-WebSocket-Version: 13\r\n\r\n"
+        'GET {} HTTP/1.1\r\n'
+        'Host: {}:{}\r\n'
+        'Upgrade: websocket\r\n'
+        'Connection: Upgrade\r\n'
+        'Sec-WebSocket-Key: {}\r\n'
+        'Sec-WebSocket-Version: 13\r\n\r\n'
     ).format(path, host, port, key)
     s.sendall(req.encode())
-    resp = b""
-    while b"\r\n\r\n" not in resp:
-        resp += s.recv(1024)
+    resp = b''
+    while b'\r\n\r\n' not in resp:
+        chunk = s.recv(1024)
+        if not chunk:
+            break
+        resp += chunk
+    if b'101' not in resp:
+        raise RuntimeError('WS upgrade failed: ' + resp[:200].decode('utf-8', errors='replace'))
     return s
 
 def ws_send(s, msg):
-    data = msg.encode()
-    length = len(data)
-    header = bytearray([0x81])
-    if length < 126:
-        header.append(0x80 | length)
-    else:
-        header.append(0x80 | 126)
-        header += struct.pack("!H", length)
-    mask = b"\x00\x00\x00\x00"
-    header += mask
-    s.sendall(bytes(header) + data)
+    data = msg.encode('utf-8')
+    n = len(data)
+    hdr = bytearray([0x81, 0x80 | (n if n < 126 else 126)])
+    if n >= 126:
+        hdr += struct.pack('!H', n)
+    hdr += b'\x00\x00\x00\x00'
+    s.sendall(bytes(hdr) + data)
 
 def ws_recv(s):
-    raw = b""
-    s.settimeout(5)
-    try:
-        while True:
-            chunk = s.recv(4096)
-            if not chunk:
-                break
-            raw += chunk
-            if len(raw) > 2:
-                payload_len = raw[1] & 0x7F
-                header_len = 2
-                if payload_len == 126:
-                    header_len = 4
-                    payload_len = struct.unpack("!H", raw[2:4])[0]
-                elif payload_len == 127:
-                    header_len = 10
-                    payload_len = struct.unpack("!Q", raw[2:10])[0]
-                if len(raw) >= header_len + payload_len:
-                    return raw[header_len:header_len + payload_len].decode("utf-8", errors="replace")
-    except socket.timeout:
-        pass
-    return raw.decode("utf-8", errors="replace")
+    raw = b''
+    s.settimeout(8)
+    while True:
+        chunk = s.recv(8192)
+        if not chunk:
+            break
+        raw += chunk
+        if len(raw) < 2:
+            continue
+        fin_op = raw[0]
+        payload_len = raw[1] & 0x7F
+        hdr_len = 2
+        if payload_len == 126:
+            if len(raw) < 4:
+                continue
+            payload_len = struct.unpack('!H', raw[2:4])[0]
+            hdr_len = 4
+        elif payload_len == 127:
+            if len(raw) < 10:
+                continue
+            payload_len = struct.unpack('!Q', raw[2:10])[0]
+            hdr_len = 10
+        if len(raw) >= hdr_len + payload_len:
+            return raw[hdr_len:hdr_len + payload_len].decode('utf-8', errors='replace')
+
+REQ_ID = 42
 
 try:
-    import urllib.parse as up
-    parsed = up.urlparse(ws_url)
-    host = parsed.hostname or "localhost"
-    port = parsed.port or 9222
-    path = parsed.path
-    s = ws_handshake(host, port, path)
-    payload = json.dumps({"id": 1, "method": "Runtime.evaluate",
-                          "params": {"expression": expression, "returnByValue": True}})
+    s = ws_connect(ws_url)
+    payload = json.dumps({'id': REQ_ID, 'method': 'Runtime.evaluate',
+                          'params': {'expression': expression, 'returnByValue': True}})
     ws_send(s, payload)
-    resp_text = ws_recv(s)
+    # Read frames until we find the response matching our request id.
+    # This skips unsolicited CDP event frames (e.g. Page.loadEventFired) that Chrome
+    # may push before our Runtime.evaluate response arrives.
+    for _ in range(20):
+        resp_text = ws_recv(s)
+        if resp_text is None:
+            break
+        try:
+            msg = json.loads(resp_text)
+        except Exception:
+            continue
+        if msg.get('id') == REQ_ID:
+            s.close()
+            result = msg.get('result', {}).get('result', {})
+            val = result.get('value')
+            print(json.dumps({'ok': True, 'value': val}))
+            import sys; sys.exit(0)
     s.close()
-    resp = json.loads(resp_text)
-    result = resp.get("result", {}).get("result", {})
-    val = result.get("value")
-    print(json.dumps({"ok": True, "value": val}))
+    print(json.dumps({'ok': False, 'error': 'response id not matched after 20 frames'}))
 except Exception as e:
-    print(json.dumps({"ok": False, "error": str(e)}))
+    print(json.dumps({'ok': False, 'error': str(e)}))
 """)
-        # Write the eval script to sandbox
         from server.agent.tools.e2b_sandbox import get_sandbox
         sb = get_sandbox()
         if sb is None:
             return None
         try:
             sb.files.write("/tmp/_dzeck_cdp_eval.py", eval_script)
-            ws_url = page_tab.get("webSocketDebuggerUrl", "")
-            if not ws_url:
-                return None
-            # Escape for shell: write expression to a temp file to avoid quoting issues
             sb.files.write("/tmp/_dzeck_cdp_expr.js", expression)
-            read_expr_cmd = (
-                "python3 -c \"import sys; "
-                "expr = open('/tmp/_dzeck_cdp_expr.js').read(); "
-                "import subprocess; "
-                "r = subprocess.run(['python3', '/tmp/_dzeck_cdp_eval.py', "
-                "    '{}', expr], capture_output=True, text=True, timeout=8); "
-                "print(r.stdout)\"".format(ws_url)
+            res = self._run(
+                "python3 /tmp/_dzeck_cdp_eval.py '{}'".format(ws_url),
+                timeout=14,
             )
-            res = self._run(read_expr_cmd, timeout=12)
             if res["exit_code"] != 0 or not res["stdout"].strip():
                 return None
             out = json.loads(res["stdout"].strip())
@@ -717,9 +726,10 @@ sys.exit(1)
 
     def _take_screenshot(self, path: str = "/tmp/dzeck_screenshot.png") -> Optional[str]:
         """Take a screenshot of the desktop, compress to JPEG for small payload, return base64."""
+        display = self._detect_display()
         self._run(
-            "DISPLAY=:0 scrot -z '{0}' 2>/dev/null || "
-            "DISPLAY=:0 import -window root '{0}' 2>/dev/null || true".format(path),
+            "DISPLAY={d} scrot -z '{p}' 2>/dev/null || "
+            "DISPLAY={d} import -window root '{p}' 2>/dev/null || true".format(d=display, p=path),
             timeout=15
         )
         jpeg_path = path.replace(".png", "_thumb.jpg")
@@ -873,9 +883,55 @@ sys.exit(1)
                 return True
             except Exception as e:
                 logger.debug("[Browser] SDK left_click failed at (%d,%d): %s", x, y, e)
-        # Fallback to xdotool
-        res = self._run("DISPLAY=:0 xdotool mousemove {} {} click 1".format(x, y), timeout=10)
+        # Fallback to xdotool with dynamic display detection
+        display = self._detect_display()
+        res = self._run("DISPLAY={} xdotool mousemove {} {} click 1".format(display, x, y), timeout=10)
         return res["exit_code"] == 0
+
+    def _cdp_js_click(self, index: int) -> bool:
+        """Click element at index via CDP Runtime.evaluate JS injection.
+        Uses _cdp_evaluate() — tab list is fetched via HTTP REST /json endpoint,
+        then the JS expression is written to a sandbox file to avoid shell quoting
+        and executed via a lightweight WS client Python script already in _cdp_evaluate.
+        Returns True on success, False on failure."""
+        js = (
+            "(function(){{"
+            "  var els = document.querySelectorAll('a,button,input,select,textarea');"
+            "  if ({idx} >= els.length) return false;"
+            "  els[{idx}].focus();"
+            "  els[{idx}].click();"
+            "  return true;"
+            "}})()".format(idx=int(index))
+        )
+        result = self._cdp_evaluate(js)
+        return result is True or result == "true" or result is True
+
+    def _cdp_js_input(self, index: int, text: str) -> bool:
+        """Set text on element at index via CDP Runtime.evaluate JS injection.
+        Focuses element, sets value, dispatches input+change events.
+        Text is embedded as a JSON string literal (Python json.dumps) which
+        handles all escaping — no shell quoting issues.
+        Returns True on success, False on failure."""
+        # Embed text as a safe JSON string literal (handles \\, ", backtick, $, etc.)
+        text_json = json.dumps(text)  # produces a safely quoted JS string literal
+        js = (
+            "(function(){{"
+            "  var els = document.querySelectorAll('a,button,input,select,textarea');"
+            "  if ({idx} >= els.length) return false;"
+            "  var el = els[{idx}];"
+            "  var txt = {txt};"
+            "  el.focus();"
+            "  var desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value')"
+            "           || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');"
+            "  if (desc && desc.set) {{ desc.set.call(el, txt); }}"
+            "  else {{ el.value = txt; }}"
+            "  el.dispatchEvent(new Event('input', {{bubbles:true}}));"
+            "  el.dispatchEvent(new Event('change', {{bubbles:true}}));"
+            "  return true;"
+            "}})()".format(idx=int(index), txt=text_json)
+        )
+        result = self._cdp_evaluate(js)
+        return result is True or result == "true"
 
     def click(self, index: Optional[int] = None,
               coordinate_x: Optional[float] = None,
@@ -924,27 +980,57 @@ sys.exit(1)
                     message="Clicked element #{} at ({}, {}).".format(index, cx, cy),
                     data=result_data2,
                 )
-            # CDP not available — fall back to href navigation for links
+
+            # CDP rect not available — try JS injection click via CDP Runtime.evaluate
+            js_click_ok = self._cdp_js_click(index)
+            if js_click_ok:
+                time.sleep(0.5)
+                screenshot_data3 = self._take_screenshot()
+                result_data3: dict = {"index": index, "method": "cdp_js_click"}
+                if screenshot_data3:
+                    result_data3["screenshot_b64"] = screenshot_data3
+                return ToolResult(
+                    success=True,
+                    message="Clicked element #{} via JS injection.".format(index),
+                    data=result_data3,
+                )
+
+            # JS injection also failed — fall back to href navigation for links,
+            # then xdotool Tab-navigation for non-link elements.
             url = self.current_url or ""
             if url and url != "about:blank":
                 page = self._fetch_page_content(url)
                 elements = page.get("interactive_elements", [])
                 if 0 <= index < len(elements):
                     el_desc = elements[index]
-                    href_match = re.search(r"-> (https?://\S+|/\S*)", el_desc)
+                    href_match = re.search(r"-> (https?://\S+|/\S*|\.+/\S*)", el_desc)
                     if href_match:
                         href = href_match.group(1)
-                        if href.startswith("/"):
-                            from urllib.parse import urlparse as _up
-                            parsed_url = _up(url)
-                            href = "{}://{}{}".format(parsed_url.scheme, parsed_url.netloc, href)
+                        if not href.startswith("http"):
+                            from urllib.parse import urljoin as _urljoin
+                            href = _urljoin(url, href)
                         return self.navigate(href)
+                    # Non-link element — use xdotool Tab-navigation to focus then Enter/click
+                    display = self._detect_display()
+                    self._run(
+                        "DISPLAY={} xdotool search --onlyvisible --class Chromium windowfocus || "
+                        "DISPLAY={} xdotool search --onlyvisible --class Google-chrome windowfocus || true".format(
+                            display, display),
+                        timeout=5,
+                    )
+                    for _ in range(index + 1):
+                        self._run("DISPLAY={} xdotool key Tab".format(display), timeout=3)
+                    # Press Enter/Space to activate the focused element
+                    self._run("DISPLAY={} xdotool key Return".format(display), timeout=3)
+                    time.sleep(0.5)
+                    screenshot_tab = self._take_screenshot()
+                    result_tab: dict = {"index": index, "method": "xdotool_tab_click"}
+                    if screenshot_tab:
+                        result_tab["screenshot_b64"] = screenshot_tab
                     return ToolResult(
-                        success=False,
-                        message=(
-                            "Element #{} is not a link. CDP is unavailable; "
-                            "use coordinate_x/coordinate_y to click non-link elements.".format(index)
-                        ),
+                        success=True,
+                        message="Clicked element #{} via xdotool Tab-navigation (CDP unavailable).".format(index),
+                        data=result_tab,
                     )
                 return ToolResult(
                     success=False,
@@ -975,7 +1061,33 @@ sys.exit(1)
                 )
             time.sleep(0.3)
         elif index is not None:
-            # Use CDP to get element bounding rect, click center to focus, then type
+            # Try CDP JS injection first (most reliable — no coordinate needed)
+            js_input_ok = self._cdp_js_input(index, text)
+            if js_input_ok:
+                if press_enter:
+                    time.sleep(0.1)
+                    from server.agent.tools.e2b_sandbox import get_sandbox as _gs
+                    _sb2 = _gs()
+                    if _sb2 is not None:
+                        try:
+                            _sb2.press("Return")
+                        except Exception:
+                            display = self._detect_display()
+                            self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
+                    else:
+                        display = self._detect_display()
+                        self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
+                    time.sleep(1)
+                screenshot_data_js = self._take_screenshot()
+                result_js: dict = {"text": text, "url": self.current_url, "method": "cdp_js_input"}
+                if screenshot_data_js:
+                    result_js["screenshot_b64"] = screenshot_data_js
+                return ToolResult(
+                    success=True,
+                    message="Typed via JS injection: {}{}".format(repr(text), " (Enter pressed)" if press_enter else ""),
+                    data=result_js,
+                )
+            # JS injection failed — try CDP rect + SDK click to focus, then xdotool type
             rect = self._cdp_get_element_rect(index)
             if rect is not None:
                 cx, cy = int(rect["x"]), int(rect["y"])
@@ -987,29 +1099,64 @@ sys.exit(1)
                     )
                 time.sleep(0.3)
             else:
+                # Both JS injection and CDP rect failed.
+                # Final fallback: use xdotool Tab-navigation to reach the Nth focusable element,
+                # then type with xdotool. This is display-based and does not require CDP/WS.
+                display = self._detect_display()
+                # Focus the browser window first
+                self._run(
+                    "DISPLAY={} xdotool search --onlyvisible --class Chromium windowfocus || "
+                    "DISPLAY={} xdotool search --onlyvisible --class Google-chrome windowfocus || true".format(display, display),
+                    timeout=5,
+                )
+                # Tab forward to approximate the element position (1-indexed)
+                for _ in range(index + 1):
+                    self._run("DISPLAY={} xdotool key Tab".format(display), timeout=3)
+                # Attempt to type; if focus landed wrong, the agent will see it in the screenshot
+                safe_text = text.replace("'", "'\\''")
+                type_res = self._run(
+                    "DISPLAY={} xdotool type --clearmodifiers --delay 20 '{}'".format(display, safe_text),
+                    timeout=15,
+                )
+                if type_res["exit_code"] != 0:
+                    return ToolResult(
+                        success=False,
+                        message=(
+                            "Cannot input to element #{}: JS injection and CDP unavailable; "
+                            "xdotool Tab-navigation fallback also failed. "
+                            "Use coordinate_x/coordinate_y to focus and type.".format(index)
+                        ),
+                    )
+                # xdotool Tab fallback succeeded — take screenshot for visual confirmation
+                time.sleep(0.3)
+                screenshot_tab = self._take_screenshot()
+                result_tab: dict = {"text": text, "url": self.current_url, "method": "xdotool_tab_fallback", "index": index}
+                if screenshot_tab:
+                    result_tab["screenshot_b64"] = screenshot_tab
+                if press_enter:
+                    self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
+                    time.sleep(1)
                 return ToolResult(
-                    success=False,
-                    message=(
-                        "Index-based input requires CDP (Chrome remote debugging on port {}). "
-                        "CDP not available; use coordinate_x/coordinate_y instead.".format(self._CDP_PORT)
-                    ),
+                    success=True,
+                    message="Typed via xdotool Tab-navigation fallback for element #{}.".format(index),
+                    data=result_tab,
                 )
 
         # Type text using E2B SDK (most reliable) with xdotool fallback
         from server.agent.tools.e2b_sandbox import get_sandbox
         sb = get_sandbox()
         typed_ok = False
+        display = self._detect_display()
         if sb is not None:
             try:
-                # E2B SDK doesn't have a direct type method, use xdotool via shell for now
                 safe_text = text.replace("'", "'\\''")
-                res = self._run("DISPLAY=:0 xdotool type --clearmodifiers --delay 20 '{}'".format(safe_text), timeout=15)
+                res = self._run("DISPLAY={} xdotool type --clearmodifiers --delay 20 '{}'".format(display, safe_text), timeout=15)
                 typed_ok = res["exit_code"] == 0
             except Exception:
                 pass
         if not typed_ok:
             safe_text = text.replace("'", "'\\''")
-            res = self._run("DISPLAY=:0 xdotool type --clearmodifiers '{}'".format(safe_text), timeout=15)
+            res = self._run("DISPLAY={} xdotool type --clearmodifiers '{}'".format(display, safe_text), timeout=15)
             if res["exit_code"] != 0:
                 return ToolResult(
                     success=False,
@@ -1022,9 +1169,9 @@ sys.exit(1)
                 try:
                     sb.press("Return")
                 except Exception:
-                    self._run("DISPLAY=:0 xdotool key Return", timeout=5)
+                    self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
             else:
-                self._run("DISPLAY=:0 xdotool key Return", timeout=5)
+                self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
             time.sleep(1)
 
         # Take screenshot for visual feedback after input (Manus.im pattern)
@@ -1052,7 +1199,8 @@ sys.exit(1)
                 )
             except Exception:
                 pass
-        res = self._run("DISPLAY=:0 xdotool mousemove {} {}".format(int(coordinate_x), int(coordinate_y)), timeout=5)
+        display = self._detect_display()
+        res = self._run("DISPLAY={} xdotool mousemove {} {}".format(display, int(coordinate_x), int(coordinate_y)), timeout=5)
         if res["exit_code"] != 0:
             return ToolResult(
                 success=False,
@@ -1089,7 +1237,8 @@ sys.exit(1)
         # Fallback to xdotool
         xdo_key = key_map.get(key, key)
         xdo_key = xdo_key.replace("Control+", "ctrl+").replace("Shift+", "shift+").replace("Alt+", "alt+")
-        res = self._run("DISPLAY=:0 xdotool key --clearmodifiers '{}'".format(xdo_key), timeout=5)
+        display = self._detect_display()
+        res = self._run("DISPLAY={} xdotool key --clearmodifiers '{}'".format(display, xdo_key), timeout=5)
         if res["exit_code"] != 0:
             return ToolResult(
                 success=False,
@@ -1104,14 +1253,15 @@ sys.exit(1)
         # Select option requires the dropdown to already be in focus.
         # Since element index does not map to GUI focus order, this is coordinate-dependent.
         # We open dropdown with Alt+Down (works if correct element has focus) and arrow to option.
-        self._run("DISPLAY=:0 xdotool key alt+Down", timeout=5)
+        display = self._detect_display()
+        self._run("DISPLAY={} xdotool key alt+Down".format(display), timeout=5)
         time.sleep(0.2)
         for _ in range(int(option)):
-            res = self._run("DISPLAY=:0 xdotool key Down", timeout=3)
+            res = self._run("DISPLAY={} xdotool key Down".format(display), timeout=3)
             if res["exit_code"] != 0:
                 break
             time.sleep(0.1)
-        enter_res = self._run("DISPLAY=:0 xdotool key Return", timeout=5)
+        enter_res = self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
         return ToolResult(
             success=enter_res["exit_code"] == 0,
             message="Option {} selected from dropdown {}.".format(option, index) if enter_res["exit_code"] == 0
@@ -1123,23 +1273,24 @@ sys.exit(1)
         """Scroll up. Uses E2B SDK scroll() when available, xdotool fallback."""
         from server.agent.tools.e2b_sandbox import get_sandbox
         sb = get_sandbox()
+        display = self._detect_display()
         if to_top:
             # Jump to top via Ctrl+Home (xdotool/SDK press)
             if sb is not None:
                 try:
                     sb.press("ctrl+Home")
                 except Exception:
-                    self._run("DISPLAY=:0 xdotool key ctrl+Home", timeout=5)
+                    self._run("DISPLAY={} xdotool key ctrl+Home".format(display), timeout=5)
             else:
-                self._run("DISPLAY=:0 xdotool key ctrl+Home", timeout=5)
+                self._run("DISPLAY={} xdotool key ctrl+Home".format(display), timeout=5)
         else:
             if sb is not None:
                 try:
                     sb.scroll("up", 5)
                 except Exception:
-                    self._run("DISPLAY=:0 xdotool key Prior", timeout=5)
+                    self._run("DISPLAY={} xdotool key Prior".format(display), timeout=5)
             else:
-                self._run("DISPLAY=:0 xdotool key Prior", timeout=5)
+                self._run("DISPLAY={} xdotool key Prior".format(display), timeout=5)
         time.sleep(0.3)
         screenshot_data = self._take_screenshot()
         result_data: dict = {"direction": "up", "to_top": to_top, "url": self.current_url}
@@ -1155,22 +1306,23 @@ sys.exit(1)
         """Scroll down. Uses E2B SDK scroll() when available, xdotool fallback."""
         from server.agent.tools.e2b_sandbox import get_sandbox
         sb = get_sandbox()
+        display = self._detect_display()
         if to_bottom:
             if sb is not None:
                 try:
                     sb.press("ctrl+End")
                 except Exception:
-                    self._run("DISPLAY=:0 xdotool key ctrl+End", timeout=5)
+                    self._run("DISPLAY={} xdotool key ctrl+End".format(display), timeout=5)
             else:
-                self._run("DISPLAY=:0 xdotool key ctrl+End", timeout=5)
+                self._run("DISPLAY={} xdotool key ctrl+End".format(display), timeout=5)
         else:
             if sb is not None:
                 try:
                     sb.scroll("down", 5)
                 except Exception:
-                    self._run("DISPLAY=:0 xdotool key Next", timeout=5)
+                    self._run("DISPLAY={} xdotool key Next".format(display), timeout=5)
             else:
-                self._run("DISPLAY=:0 xdotool key Next", timeout=5)
+                self._run("DISPLAY={} xdotool key Next".format(display), timeout=5)
         time.sleep(0.3)
         screenshot_data = self._take_screenshot()
         result_data2: dict = {"direction": "down", "to_bottom": to_bottom, "url": self.current_url}
@@ -1184,7 +1336,8 @@ sys.exit(1)
 
     def console_exec(self, javascript: str) -> ToolResult:
         # Open Chrome DevTools console and execute JS via Ctrl+Shift+J
-        open_res = self._run("DISPLAY=:0 xdotool key ctrl+shift+j", timeout=5)
+        display = self._detect_display()
+        open_res = self._run("DISPLAY={} xdotool key ctrl+shift+j".format(display), timeout=5)
         if open_res["exit_code"] != 0:
             return ToolResult(
                 success=False,
@@ -1192,13 +1345,13 @@ sys.exit(1)
             )
         time.sleep(0.5)
         safe_js = javascript.replace("'", "'\\''")
-        type_res = self._run("DISPLAY=:0 xdotool type --clearmodifiers '{}'".format(safe_js), timeout=10)
+        type_res = self._run("DISPLAY={} xdotool type --clearmodifiers '{}'".format(display, safe_js), timeout=10)
         if type_res["exit_code"] != 0:
             return ToolResult(
                 success=False,
                 message="Failed to type JavaScript: {}".format(type_res["stderr"]),
             )
-        self._run("DISPLAY=:0 xdotool key Return", timeout=5)
+        self._run("DISPLAY={} xdotool key Return".format(display), timeout=5)
         time.sleep(0.5)
         return ToolResult(
             success=True,
@@ -1218,9 +1371,10 @@ sys.exit(1)
             return ToolResult(success=False, message="Sandbox not available for screenshot.")
 
         # Take screenshot inside sandbox
+        display = self._detect_display()
         res = self._run(
-            "DISPLAY=:0 scrot -z '{}' 2>/dev/null || "
-            "DISPLAY=:0 import -window root '{}' 2>/dev/null".format(path, path),
+            "DISPLAY={d} scrot -z '{p}' 2>/dev/null || "
+            "DISPLAY={d} import -window root '{p}' 2>/dev/null".format(d=display, p=path),
             timeout=15
         )
         if res["exit_code"] == 0:
@@ -1233,8 +1387,9 @@ sys.exit(1)
 
     def restart(self, url: str = "") -> ToolResult:
         """Close and reopen Chrome at given URL."""
+        display = self._detect_display()
         self._run(
-            "DISPLAY=:0 pkill -f 'google-chrome\\|chromium' 2>/dev/null || true",
+            "DISPLAY={} pkill -f 'google-chrome\\|chromium' 2>/dev/null || true".format(display),
             timeout=5
         )
         time.sleep(1)
@@ -1920,19 +2075,28 @@ def browser_file_upload(
 
 
 def image_view(path: str) -> ToolResult:
-    """View an image file."""
+    """View an image file from the E2B sandbox filesystem."""
     try:
-        import base64
-        if not os.path.exists(path):
-            return ToolResult(success=False, message="Image not found: {}".format(path))
-        with open(path, "rb") as f:
-            data = f.read()
+        import base64 as _b64
+        from server.agent.tools.e2b_sandbox import read_file_bytes, _resolve_sandbox_path
+        # Resolve path relative to sandbox home (handles ~/ and relative paths)
+        abs_path = _resolve_sandbox_path(path)
+        data = read_file_bytes(abs_path)
+        if data is None or len(data) == 0:
+            # Also try the original path as given (may already be absolute)
+            if abs_path != path:
+                data = read_file_bytes(path)
+        if data is None or len(data) == 0:
+            return ToolResult(success=False, message="Image not found in sandbox: {}".format(path))
         ext = os.path.splitext(path)[1].lower().lstrip(".")
-        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/png")
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/png")
+        b64 = _b64.b64encode(data).decode()
         return ToolResult(
             success=True,
-            message="Image loaded: {} ({} bytes)".format(path, len(data)),
-            data={"path": path, "size": len(data), "mime": mime},
+            message="Image loaded from sandbox: {} ({} bytes)".format(path, len(data)),
+            data={"path": path, "size": len(data), "mime": mime,
+                  "image_b64": "data:{};base64,{}".format(mime, b64)},
         )
     except Exception as e:
         return ToolResult(success=False, message="Failed to view image: {}".format(e))

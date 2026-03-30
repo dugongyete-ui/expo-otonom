@@ -643,11 +643,21 @@ def image_view(image: str, **kwargs) -> ToolResult:
                 from server.agent.tools.e2b_sandbox import read_file_bytes as e2b_read_bytes, _resolve_sandbox_path
                 sandbox_path = _resolve_sandbox_path(image)
                 raw_data = e2b_read_bytes(sandbox_path)
-            except Exception:
-                pass
+            except Exception as _e2b_err:
+                return ToolResult(
+                    success=False,
+                    message=f"Image not found in sandbox: {image} ({_e2b_err})",
+                    data={"error": "sandbox_read_failed", "image": image, "detail": str(_e2b_err)},
+                )
+        else:
+            return ToolResult(
+                success=False,
+                message=f"image_view requires E2B sandbox (E2B_API_KEY not set): {image}",
+                data={"error": "sandbox_unavailable", "image": image},
+            )
 
         if raw_data is None:
-            return ToolResult(success=False, message=f"Image not found: {image}", data={"error": "not_found", "image": image})
+            return ToolResult(success=False, message=f"Image not found in sandbox: {image}", data={"error": "not_found", "image": image})
 
         chunk = raw_data[:102400]
         b64 = base64.b64encode(chunk).decode()

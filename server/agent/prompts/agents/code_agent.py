@@ -100,6 +100,7 @@ CODE_AGENT_TOOLS = [
     "shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process",
     "file_read", "file_write", "file_str_replace", "file_find_by_name", "file_find_in_content",
     "image_view",
+    "desktop_open_app", "desktop_app_type", "desktop_app_screenshot",
     "mcp_call_tool", "mcp_list_tools",
     "todo_write", "todo_update", "todo_read",
     "task_create", "task_complete", "task_list",

@@ -305,6 +305,18 @@ def _connect_existing_sandbox(sandbox_id: str, max_retries: int = 3) -> Optional
                 )
                 _vnc_stream_url = fallback_url
                 logger.info("[E2B] Using constructed VNC URL for connected sandbox: %s", fallback_url)
+
+            # Push config files in background — same as _create_sandbox does.
+            # Replay file cache so any files written before connect are available.
+            _replay_file_cache(sb)
+            def _bg_push_connected():
+                try:
+                    _push_sandbox_configs(sb)
+                except Exception as _bg_exc:
+                    logger.warning("[E2B] Background config push error (connected sandbox): %s", _bg_exc)
+            threading.Thread(target=_bg_push_connected, daemon=True).start()
+            logger.info("[E2B] Config push started in background for connected sandbox %s.", sandbox_id)
+
             return sb
         except Exception as e:
             logger.error("[E2B] Failed to connect to existing sandbox %s (attempt %d): %s", sandbox_id, attempt, e)
@@ -388,12 +400,24 @@ def get_sandbox() -> Optional[Any]:
     return _sandbox
 
 
+_configs_pushed_sandboxes: set = set()
+
+
 def _push_sandbox_configs(sb: Any) -> None:
     """Push all config files from server/agent/config_manus_sandbox/ into the E2B sandbox.
-    This applies Manus-standard skills, Chromium policies, and other configs."""
+    This applies Manus-standard skills, Chromium policies, and other configs.
+    Idempotent: skips push if already done for this sandbox instance."""
     import hashlib as _hashlib
     import pathlib
     import shlex as _shlex
+
+    # Idempotency guard: skip if already successfully pushed for this sandbox.
+    # Note: the sandbox ID is only added to the set AFTER a successful push
+    # (see end of function), so failed/partial pushes will be retried.
+    sb_id = getattr(sb, "sandbox_id", None) or id(sb)
+    if sb_id in _configs_pushed_sandboxes:
+        logger.debug("[E2B] Config push already done for sandbox %s, skipping.", sb_id)
+        return
 
     config_root = pathlib.Path(__file__).parent.parent / "config_manus_sandbox"
     if not config_root.exists():
@@ -479,6 +503,11 @@ def _push_sandbox_configs(sb: Any) -> None:
         )
     except Exception:
         pass
+
+    # Mark idempotency only when all files pushed with zero failures.
+    # Partial failures allow the next call to retry the full push.
+    if failed == 0:
+        _configs_pushed_sandboxes.add(sb_id)
 
 
 # VNC stream URL storage — set after sandbox creation with desktop streaming

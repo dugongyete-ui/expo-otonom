@@ -59,6 +59,7 @@ from server.agent.domain.cerebras import (
     _TOOLS_SUPPORTED,
 )
 from server.agent.domain.events import make_event, build_tool_content, _make_e2b_proxy_url
+from server.agent.services import memory_service as _memory_service
 
 
 class FlowState(str, Enum):
@@ -523,8 +524,19 @@ class DzeckAgent:
             f"Gunakan '{_planner_sandbox_home}' atau ~ untuk semua path. "
             f"JANGAN hardcode path home lainnya dalam rencana."
         )
+
+        # Inject cross-session memories into planner context (best-effort)
+        _memory_ctx = ""
+        try:
+            _user_id = os.environ.get("DZECK_USER_ID", "") or "auto-user"
+            _memories = await _memory_service.load_memories(user_id=_user_id)
+            if _memories:
+                _memory_ctx = "\n\n" + _memory_service.format_memories_for_prompt(_memories)
+        except Exception:
+            pass
+
         messages = [
-            {"role": "system", "content": PLANNER_SYSTEM_PROMPT + json_instruction + _sandbox_ctx},
+            {"role": "system", "content": PLANNER_SYSTEM_PROMPT + json_instruction + _sandbox_ctx + _memory_ctx},
             {"role": "user", "content": prompt},
         ]
 
@@ -1866,6 +1878,22 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
 
                 if step.status == ExecutionStatus.COMPLETED:
                     yield make_event("notify", text=f"✓ {step.description}")
+                    # Persist step completion as a cross-session memory fact (best-effort)
+                    if self.session_id and step.result:
+                        try:
+                            _uid = os.environ.get("DZECK_USER_ID", "") or "auto-user"
+                            await _memory_service.save_memory(
+                                content="Completed: {} — {}".format(
+                                    step.description[:120],
+                                    str(step.result)[:200],
+                                ),
+                                session_id=self.session_id,
+                                user_id=_uid,
+                                tags=["step_completed", step.agent_type or "general"],
+                                importance=2,
+                            )
+                        except Exception:
+                            pass
 
                 next_step = self.plan.get_next_step()
                 if next_step:
@@ -1912,6 +1940,16 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
 
             if self.session_id and svc:
                 await svc.complete_session(self.session_id, success=True)
+
+            # Extract and save any learnable insights from this session (best-effort)
+            if self.session_id and self.chat_history:
+                try:
+                    _uid = os.environ.get("DZECK_USER_ID", "") or "auto-user"
+                    await _memory_service.extract_and_save_insights(
+                        self.chat_history, self.session_id, user_id=_uid
+                    )
+                except Exception:
+                    pass
 
             if self._created_files:
                 yield make_event("files", files=self._created_files)
