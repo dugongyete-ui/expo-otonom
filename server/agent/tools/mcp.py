@@ -63,7 +63,7 @@ class MCPClientManager:
             return MCP_AUTH_TOKEN
         return ""
 
-    def _call_http_mcp(self, server_url: str, tool_name: str, arguments: Dict[str, Any]) -> ToolResult:
+    def _call_http_mcp(self, server_url: str, tool_name: str, arguments: Dict[str, Any], auth_token: str = "") -> ToolResult:
         """Call an HTTP/SSE MCP server endpoint."""
         body = json.dumps({
             "jsonrpc": "2.0",
@@ -77,9 +77,10 @@ class MCPClientManager:
             "Accept": "application/json, text/event-stream",
             "User-Agent": "DzeckAI/2.0",
         }
-        auth_token = self._get_auth_token(server_url)
-        if auth_token:
-            headers["Authorization"] = f"Bearer {auth_token}"
+        # Prefer caller-supplied token, then global env token
+        effective_token = auth_token or self._get_auth_token(server_url)
+        if effective_token:
+            headers["Authorization"] = f"Bearer {effective_token}"
 
         req = urllib.request.Request(server_url, data=body, headers=headers, method="POST")
         try:
@@ -136,8 +137,30 @@ class MCPClientManager:
         except Exception as e:
             return ToolResult(success=False, message=f"Failed to list MCP tools: {str(e)}", data={"error": str(e)})
 
+    def _get_servers_from_mongo(self) -> List[Dict[str, Any]]:
+        """Load MCP server configs from MongoDB at call time (authoritative source)."""
+        try:
+            import pymongo  # type: ignore
+            mongo_uri = os.environ.get("MONGODB_URI", "")
+            if not mongo_uri:
+                return []
+            client = pymongo.MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+            db = client.get_default_database()
+            servers = list(db["mcp_configs"].find({}, {"_id": 0}))
+            client.close()
+            return servers
+        except Exception as exc:
+            logger.debug("[MCP] Could not load servers from MongoDB: %s", exc)
+            return []
+
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> ToolResult:
-        """Execute an MCP tool by name."""
+        """Execute an MCP tool by name.
+        
+        Resolution order:
+        1. Locally registered tools (in-memory via register_tool/register_server)
+        2. MCP servers from MongoDB (mcp_configs collection) — authoritative, no restart needed
+        3. MCP_SERVER_URL env var (legacy fallback)
+        """
         with self._lock:
             tool_info = self._registered_tools.get(tool_name)
 
@@ -149,7 +172,26 @@ class MCPClientManager:
             if server_url:
                 return self._call_http_mcp(server_url, tool_name, arguments)
 
-        # Fallback to MCP_SERVER_URL
+        # Check MongoDB for dynamically configured MCP servers
+        mongo_servers = self._get_servers_from_mongo()
+        if mongo_servers:
+            # Try each server — call first one that responds
+            for server in mongo_servers:
+                url = server.get("url", "")
+                auth_token = server.get("auth_token", "")
+                if not url:
+                    continue
+                result = self._call_http_mcp(url, tool_name, arguments, auth_token=auth_token)
+                if result.success:
+                    return result
+            # If no server succeeded, return the last error
+            if mongo_servers:
+                url = mongo_servers[0].get("url", "")
+                auth_token = mongo_servers[0].get("auth_token", "")
+                if url:
+                    return self._call_http_mcp(url, tool_name, arguments, auth_token=auth_token)
+
+        # Fallback to MCP_SERVER_URL env var
         if MCP_SERVER_URL:
             return self._call_http_mcp(MCP_SERVER_URL, tool_name, arguments)
 
@@ -164,17 +206,52 @@ class MCPClientManager:
         )
 
     def list_remote_tools(self) -> ToolResult:
-        """Fetch available tools from the configured MCP server."""
-        if MCP_SERVER_URL:
+        """Fetch available tools from all configured MCP servers.
+        
+        Checks MongoDB for dynamically configured servers, then falls back to
+        MCP_SERVER_URL env var. Returns merged tool list from all sources.
+        """
+        all_tools: List[Dict[str, Any]] = []
+
+        # Load from MongoDB (authoritative — includes tools added via REST API)
+        mongo_servers = self._get_servers_from_mongo()
+        for server in mongo_servers:
+            url = server.get("url", "")
+            auth_token = server.get("auth_token", "")
+            if not url:
+                continue
+            try:
+                body = json.dumps({
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "tools/list", "params": {},
+                }).encode("utf-8")
+                headers: Dict[str, str] = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                }
+                effective_token = auth_token or self._get_auth_token(url)
+                if effective_token:
+                    headers["Authorization"] = f"Bearer {effective_token}"
+                req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+                with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=10) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                tools = result.get("result", {}).get("tools", [])
+                all_tools.extend(tools)
+            except Exception as exc:
+                logger.debug("[MCP] Could not list tools from %s: %s", url, exc)
+
+        if not all_tools and MCP_SERVER_URL:
             return self._list_http_tools(MCP_SERVER_URL)
 
         local_tools = self.get_all_tools()
-        if not local_tools:
+        all_tools.extend(local_tools)
+
+        if not all_tools:
             return ToolResult(
                 success=True,
                 message=(
-                    "No MCP server configured (set MCP_SERVER_URL in environment). "
-                    "No local MCP tools registered. "
+                    "No MCP server configured (set MCP_SERVER_URL in environment or use "
+                    "POST /api/mcp/config to register servers). "
                     "MCP allows connecting to external services via Model Context Protocol."
                 ),
                 data={"tools": [], "count": 0, "configured": False},
@@ -182,8 +259,8 @@ class MCPClientManager:
 
         return ToolResult(
             success=True,
-            message=f"Registered local MCP tools ({len(local_tools)}):\n{json.dumps(local_tools, indent=2)[:3000]}",
-            data={"tools": local_tools, "count": len(local_tools), "configured": False},
+            message=f"Available MCP tools ({len(all_tools)}):\n{json.dumps(all_tools, indent=2)[:3000]}",
+            data={"tools": all_tools, "count": len(all_tools), "configured": True},
         )
 
     def cleanup(self) -> None:

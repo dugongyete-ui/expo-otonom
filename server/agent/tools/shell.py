@@ -8,7 +8,6 @@ Provides: ShellTool class + backward-compatible functions.
 import os
 import queue
 import shlex
-import subprocess
 import time
 import threading
 from typing import Optional, Dict, Any, Callable
@@ -24,8 +23,147 @@ def _is_e2b_enabled() -> bool:
     """Dynamic E2B check — re-reads env each call so late-set secrets are picked up."""
     return bool(os.environ.get("E2B_API_KEY", "") or _E2B_API_KEY_AT_IMPORT)
 
-_shell_sessions: Dict[str, Dict[str, Any]] = {}
+
+# ─── Redis-backed shell session store ────────────────────────────────────────
+# Primary store: Redis (hash per session, TTL 24 h).
+# Fallback: in-memory dict when Redis is unavailable.
+# Keyed as: shell:session:<sid>
+import json as _json
+import logging as _logging
+
+# Process-local active session state.
+# Shell sessions contain non-serializable objects (threading.Lock, subprocess handles,
+# E2B stream references) that cannot be stored externally. This dict holds the LIVE
+# state for sessions active in the current process. Serializable fields are also
+# mirrored to Redis for cross-process visibility and durability.
+_active_shell_sessions: Dict[str, Dict[str, Any]] = {}
 _sessions_lock = threading.Lock()
+_session_logger = _logging.getLogger(__name__)
+
+_SESSION_TTL = 86400  # 24 hours
+
+
+def _redis_session_key(sid: str) -> str:
+    return f"shell:session:{sid}"
+
+
+_redis_client_cache: Optional[Any] = None
+_redis_client_lock = threading.Lock()
+
+
+_redis_connect_failed = False  # If True, stop retrying until process restart
+
+
+def _get_redis_client():
+    """Get a cached synchronous Redis client. Returns None if unavailable."""
+    global _redis_client_cache, _redis_connect_failed
+    if _redis_connect_failed:
+        return None
+    with _redis_client_lock:
+        if _redis_client_cache is not None:
+            return _redis_client_cache
+        try:
+            import redis as _redis_lib  # type: ignore
+            host = os.environ.get("REDIS_HOST", "")
+            if not host:
+                return None
+            port = int(os.environ.get("REDIS_PORT", "6379"))
+            password = os.environ.get("REDIS_PASSWORD", "") or None
+            client = _redis_lib.Redis(
+                host=host, port=port, password=password,
+                socket_connect_timeout=1, socket_timeout=1,
+                decode_responses=True,
+            )
+            client.ping()
+            _redis_client_cache = client
+            _session_logger.debug("[Shell] Redis session store connected to %s:%s", host, port)
+            return client
+        except Exception as exc:
+            _session_logger.debug("[Shell] Redis session store unavailable (%s) — using in-memory fallback.", exc)
+            _redis_connect_failed = True
+            return None
+
+
+def _session_set(sid: str, data: Dict[str, Any]) -> None:
+    """Persist session state to Redis (JSON), fall back to in-memory."""
+    with _sessions_lock:
+        _active_shell_sessions[sid] = data
+    try:
+        rc = _get_redis_client()
+        if rc:
+            rc.setex(_redis_session_key(sid), _SESSION_TTL, _json.dumps({
+                k: v for k, v in data.items()
+                if k != "lock" and not callable(v)
+            }, default=str))
+    except Exception as exc:
+        _session_logger.debug("[Shell] Redis session write failed: %s", exc)
+
+
+def _session_get(sid: str) -> Optional[Dict[str, Any]]:
+    """Read session state from Redis (JSON), fall back to in-memory."""
+    with _sessions_lock:
+        if sid in _active_shell_sessions:
+            return _active_shell_sessions[sid]
+    try:
+        rc = _get_redis_client()
+        if rc:
+            raw = rc.get(_redis_session_key(sid))
+            if raw:
+                data = _json.loads(raw)
+                data.setdefault("lock", threading.Lock())
+                with _sessions_lock:
+                    _active_shell_sessions[sid] = data
+                return data
+    except Exception as exc:
+        _session_logger.debug("[Shell] Redis session read failed: %s", exc)
+    return None
+
+
+def _session_list() -> list:
+    """List all known session IDs (in-memory + Redis if reachable)."""
+    with _sessions_lock:
+        local_keys = set(_active_shell_sessions.keys())
+    try:
+        rc = _get_redis_client()
+        if rc:
+            pattern = "shell:session:*"
+            redis_keys = {k.replace("shell:session:", "") for k in (rc.keys(pattern) or [])}
+            return list(local_keys | redis_keys)
+    except Exception:
+        pass
+    return list(local_keys)
+
+
+def _session_del(sid: str) -> Optional[Dict[str, Any]]:
+    """Remove a session from both in-memory and Redis."""
+    with _sessions_lock:
+        session = _active_shell_sessions.pop(sid, None)
+    try:
+        rc = _get_redis_client()
+        if rc:
+            rc.delete(_redis_session_key(sid))
+    except Exception as exc:
+        _session_logger.debug("[Shell] Redis session delete failed: %s", exc)
+    return session
+
+
+def _get_or_create_session(sid: str) -> Dict[str, Any]:
+    existing = _session_get(sid)
+    if existing is not None:
+        return existing
+    data: Dict[str, Any] = {
+        "output": "",
+        "command": "",
+        "return_code": None,
+        "lock": threading.Lock(),
+    }
+    _session_set(sid, data)
+    return data
+
+
+def _get_session(sid: str) -> Optional[Dict[str, Any]]:
+    return _session_get(sid)
+
 
 _stream_local = threading.local()
 
@@ -36,24 +174,6 @@ def set_stream_queue(q: Optional[queue.Queue]) -> None:
 def get_stream_queue() -> Optional[queue.Queue]:
     """Get the streaming output queue for the current thread."""
     return getattr(_stream_local, "queue", None)
-
-
-def _get_or_create_session(sid: str) -> Dict[str, Any]:
-    with _sessions_lock:
-        if sid not in _shell_sessions:
-            _shell_sessions[sid] = {
-                "popen": None,
-                "output": "",
-                "command": "",
-                "return_code": None,
-                "lock": threading.Lock(),
-            }
-        return _shell_sessions[sid]
-
-
-def _get_session(sid: str) -> Optional[Dict[str, Any]]:
-    with _sessions_lock:
-        return _shell_sessions.get(sid)
 
 
 def _shell_quote(s: str) -> str:
@@ -717,6 +837,7 @@ def shell_exec(command: str, exec_dir: str = "", id: str = "default") -> ToolRes
     sess["output"] = combined
     sess["return_code"] = exit_code
     sess["command"] = command
+    _session_set(id, sess)
 
     backend = "E2B"
 
@@ -767,11 +888,11 @@ def shell_view(id: str = "default") -> ToolResult:
     session = _get_session(id)
     fallback_warning = ""
     if not session:
-        with _sessions_lock:
-            available = list(_shell_sessions.keys())
-            if len(available) == 1:
-                fallback_id = available[0]
-                session = _shell_sessions[fallback_id]
+        available = _session_list()
+        if len(available) == 1:
+            fallback_id = available[0]
+            session = _get_session(fallback_id)
+            if session:
                 fallback_warning = "[Peringatan] Session '{}' tidak ditemukan, menampilkan session '{}' yang tersedia. ".format(id, fallback_id)
                 id = fallback_id
         if not session:
@@ -811,11 +932,11 @@ def shell_write_to_process(id: str, input: str, press_enter: bool = True) -> Too
     session = _get_session(id)
     fallback_warning = ""
     if not session:
-        with _sessions_lock:
-            available = list(_shell_sessions.keys())
-            if len(available) == 1:
-                fallback_id = available[0]
-                session = _shell_sessions[fallback_id]
+        available = _session_list()
+        if len(available) == 1:
+            fallback_id = available[0]
+            session = _get_session(fallback_id)
+            if session:
                 fallback_warning = "[Peringatan] Session '{}' tidak ditemukan, menggunakan session '{}' yang tersedia. ".format(id, fallback_id)
                 id = fallback_id
         if not session:
@@ -848,6 +969,7 @@ def shell_write_to_process(id: str, input: str, press_enter: bool = True) -> Too
         res = _run_e2b(combined_cmd)
         out = (res.get("stdout") or "") + (res.get("stderr") or "")
         session["output"] = out
+        _session_set(id, session)
         return ToolResult(
             success=res.get("success", False),
             message="{}Input '{}' dikirim. Output: {}".format(fallback_warning, input, out[:500]),
@@ -862,8 +984,7 @@ def shell_write_to_process(id: str, input: str, press_enter: bool = True) -> Too
 
 def shell_kill_process(id: str = "default") -> ToolResult:
     """Remove/terminate a shell session."""
-    with _sessions_lock:
-        session = _shell_sessions.pop(id, None)
+    session = _session_del(id)
     if not session:
         return ToolResult(
             success=True,

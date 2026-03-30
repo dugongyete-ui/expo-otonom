@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import multer from "multer";
 import { getActiveE2BSandboxId, createAndRegisterE2BSandbox, registerExternalE2BSandbox, getSessionBySandboxId } from "./e2b-desktop";
-import { requireAuth } from "./auth-routes";
+import { requireAuth, requireAdmin } from "./auth-routes";
 import { getCollection, getMongoDb } from "./db/mongo";
 import { redisXRead, redisXRange, redisSet, redisGet, redisDel, getRedisClient } from "./db/redis";
 
@@ -84,18 +84,26 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
   })();
 
-  app.get("/api/config", requireAuth, (_req: any, res: any) => {
+  app.get("/api/config", (_req: any, res: any) => {
     res.json({
       CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
       CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
       SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
       AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
       E2B_ENABLED: isE2BEnabled(),
+      authProvider: process.env.AUTH_PROVIDER || "none",
+      modelName: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+      modelProvider: process.env.MODEL_PROVIDER || "cerebras",
+      searchProvider: process.env.SEARCH_PROVIDER || "bing_web",
+      showGithubButton: process.env.SHOW_GITHUB_BUTTON === "true",
+      MCP_SERVER_URL: process.env.MCP_SERVER_URL || "",
+      MCP_AUTH_TOKEN: process.env.MCP_AUTH_TOKEN ? "***" : "",
+      EMAIL_ENABLED: !!(process.env.EMAIL_HOST),
     });
   });
 
   app.put("/api/config", requireAuth, async (req: any, res: any) => {
-    const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER"];
+    const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON"];
     const updates: Record<string, string> = {};
 
     for (const key of allowed) {
@@ -130,8 +138,115 @@ export async function registerRoutes(app: any): Promise<Server> {
         CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
         CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
         SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
+        MODEL_PROVIDER: process.env.MODEL_PROVIDER || "cerebras",
+        SHOW_GITHUB_BUTTON: process.env.SHOW_GITHUB_BUTTON || "false",
       },
     });
+  });
+
+  // ─── MCP Config Management API ────────────────────────────────────────────
+  // GET  /api/mcp/config  — list all configured MCP servers
+  // POST /api/mcp/config  — add or update an MCP server
+  // PUT  /api/mcp/config/:name — update a specific MCP server
+  // DELETE /api/mcp/config/:name — remove an MCP server
+
+  // MCP config is read from MongoDB directly by the Python MCP manager at tool call time.
+  // No runtime reload is needed — changes are reflected immediately on next tool invocation.
+  function _reloadMcpServers(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  app.get("/api/mcp/config", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const col = await getCollection("mcp_configs");
+      if (!col) {
+        return res.json({ servers: [] });
+      }
+      const servers = await (col as any).find({}, { projection: { _id: 0 } }).toArray();
+      const masked = servers.map((s: any) => ({
+        ...s,
+        auth_token: s.auth_token ? "***" : "",
+      }));
+      res.json({ servers: masked });
+    } catch (err: any) {
+      console.warn("[MCP Config] Failed to list MCP servers:", err.message);
+      res.status(500).json({ error: "Failed to list MCP servers" });
+    }
+  });
+
+  app.post("/api/mcp/config", requireAdmin, async (req: any, res: any) => {
+    const { name, url, auth_token, description } = req.body || {};
+    if (!name || !url) {
+      return res.status(400).json({ error: "name and url are required" });
+    }
+    try {
+      const col = await getCollection("mcp_configs");
+      if (!col) {
+        return res.status(503).json({ error: "Database unavailable" });
+      }
+      const doc = {
+        name: String(name).trim(),
+        url: String(url).trim(),
+        auth_token: auth_token ? String(auth_token).trim() : "",
+        description: description ? String(description).trim() : "",
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+      await (col as any).updateOne(
+        { name: doc.name },
+        { $set: doc },
+        { upsert: true },
+      );
+      console.log(`[MCP Config] Registered MCP server: ${doc.name} → ${doc.url}`);
+      _reloadMcpServers().catch(() => {});
+      res.status(201).json({ ok: true, server: { ...doc, auth_token: doc.auth_token ? "***" : "" } });
+    } catch (err: any) {
+      console.warn("[MCP Config] Failed to register MCP server:", err.message);
+      res.status(500).json({ error: "Failed to register MCP server" });
+    }
+  });
+
+  app.put("/api/mcp/config/:name", requireAdmin, async (req: any, res: any) => {
+    const { name } = req.params;
+    const { url, auth_token, description } = req.body || {};
+    try {
+      const col = await getCollection("mcp_configs");
+      if (!col) {
+        return res.status(503).json({ error: "Database unavailable" });
+      }
+      const updates: Record<string, any> = { updated_at: new Date() };
+      if (url) updates.url = String(url).trim();
+      if (auth_token !== undefined) updates.auth_token = String(auth_token).trim();
+      if (description !== undefined) updates.description = String(description).trim();
+
+      const result = await (col as any).updateOne({ name }, { $set: updates });
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ error: `MCP server '${name}' not found` });
+      }
+      _reloadMcpServers().catch(() => {});
+      res.json({ ok: true, updated: name });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to update MCP server" });
+    }
+  });
+
+  app.delete("/api/mcp/config/:name", requireAdmin, async (req: any, res: any) => {
+    const { name } = req.params;
+    try {
+      const col = await getCollection("mcp_configs");
+      if (!col) {
+        return res.status(503).json({ error: "Database unavailable" });
+      }
+      const result = await (col as any).deleteOne({ name });
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ error: `MCP server '${name}' not found` });
+      }
+      console.log(`[MCP Config] Removed MCP server: ${name}`);
+      _reloadMcpServers().catch(() => {});
+      res.json({ ok: true, deleted: name });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to delete MCP server" });
+    }
   });
 
   // ─── Chat endpoint (Streaming) ───────────────────────────────────────────
@@ -436,6 +551,67 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
 
     return res.status(404).json({ error: "Session not found" });
+  });
+
+  // ─── Public shared session endpoint ──────────────────────────────────────
+  // GET /api/shared/:shareToken — fetch a shared session by its share token (public, no auth).
+  // shareToken is the sessionId when the session has is_shared=true.
+  app.get("/api/shared/:shareToken", async (req: any, res: any) => {
+    const { shareToken } = req.params;
+    if (!shareToken) return res.status(400).json({ error: "shareToken is required" });
+
+    // Verify the session is actually shared
+    const isShared = sharedSessions.get(shareToken) || false;
+    if (!isShared) {
+      // Check MongoDB in case the in-memory map is stale (e.g., server restart)
+      try {
+        const col = await getCollection("shared_sessions");
+        if (col) {
+          const doc = await (col as any).findOne({ session_id: shareToken, is_shared: true });
+          if (!doc) return res.status(404).json({ error: "Shared session not found" });
+        } else {
+          return res.status(404).json({ error: "Shared session not found" });
+        }
+      } catch {
+        return res.status(404).json({ error: "Shared session not found" });
+      }
+    }
+
+    // Return session events (same logic as /api/sessions/:sessionId/events)
+    const session = activeAgentSessions.get(shareToken);
+    if (session) {
+      return res.json({ session_id: shareToken, events: (session as any).eventQueue || [], done: (session as any).done || false });
+    }
+
+    try {
+      const col = await getCollection("session_events");
+      if (col) {
+        const docs = await (col as any)
+          .find({ session_id: shareToken }, { projection: { _id: 0 }, sort: { timestamp: 1 } })
+          .toArray();
+        if (docs.length > 0) {
+          const events = docs.map((d: any) => d.raw_line || `data: ${JSON.stringify(d.data)}\n\n`);
+          return res.json({ session_id: shareToken, events, done: true });
+        }
+      }
+    } catch (err: any) {
+      console.warn("[shared] MongoDB fetch failed:", err.message);
+    }
+
+    try {
+      const streamEntries = await redisXRange(`stream:session:${shareToken}`);
+      if (streamEntries.length > 0) {
+        const events = streamEntries.map((entry) => {
+          const raw = entry.fields.data || "";
+          return `data: ${raw}\n\n`;
+        });
+        return res.json({ session_id: shareToken, events, done: true });
+      }
+    } catch (err: any) {
+      console.warn("[shared] Redis fallback failed:", err.message);
+    }
+
+    return res.status(404).json({ error: "Shared session not found" });
   });
 
   // ─── Session files endpoint (files tracked in MongoDB session_files) ─────

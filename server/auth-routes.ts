@@ -5,13 +5,48 @@
  * Security:
  * - JWT_SECRET must be set in env for non-none modes; fails fast if missing
  * - Passwords hashed with bcrypt (12 rounds) with per-user salt
- * - Tokens revoked on logout (in-memory revocation list; restart clears it)
+ * - Tokens revoked on logout (stored in Redis with TTL; survives restarts)
  * - "password" mode stores users in MongoDB `users` collection via MongoUserRepository
  */
 import { randomUUID } from "node:crypto";
 import * as crypto from "node:crypto";
 import * as bcrypt from "bcryptjs";
 import { getCollection } from "./db/mongo";
+import { redisSet, redisGet } from "./db/redis";
+
+async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
+  const host = process.env.EMAIL_HOST;
+  if (!host) {
+    console.warn(`[auth/reset] EMAIL_HOST not configured — password reset email not sent to ${to}`);
+    return;
+  }
+  try {
+    const nodemailer = await import("nodemailer");
+    const port = parseInt(process.env.EMAIL_PORT || "587", 10);
+    const secure = (process.env.EMAIL_USE_TLS || "").toLowerCase() === "ssl";
+    const user = process.env.EMAIL_USER || process.env.EMAIL_USERNAME || "";
+    const pass = process.env.EMAIL_PASSWORD || "";
+    const from = process.env.EMAIL_FROM || user || `noreply@${host}`;
+
+    const transporter = nodemailer.default.createTransport({
+      host,
+      port,
+      secure,
+      auth: user && pass ? { user, pass } : undefined,
+    });
+
+    await transporter.sendMail({
+      from,
+      to,
+      subject: "Reset your password",
+      text: `To reset your password, click this link: ${resetUrl}\n\nThis link expires in 15 minutes.`,
+      html: `<p>To reset your password, click <a href="${resetUrl}">here</a>.</p><p>This link expires in 15 minutes.</p>`,
+    });
+    console.log(`[auth/reset] Password reset email sent to ${to}`);
+  } catch (err: any) {
+    console.warn(`[auth/reset] Failed to send password reset email to ${to}: ${err.message}`);
+  }
+}
 
 interface User {
   id: string;
@@ -26,7 +61,7 @@ interface TokenPayload {
   userId: string;
   email: string;
   role: string;
-  type: "access" | "refresh";
+  type: "access" | "refresh" | "password_reset";
   exp: number;
 }
 
@@ -53,7 +88,27 @@ const ACCESS_TOKEN_EXPIRE_MINUTES = 60;
 const REFRESH_TOKEN_EXPIRE_DAYS = 30;
 const BCRYPT_ROUNDS = 12;
 
-const revokedTokens = new Set<string>();
+async function isTokenRevoked(token: string): Promise<boolean> {
+  try {
+    const val = await redisGet(`revoked_token:${token}`);
+    return val === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function revokeToken(token: string, ttlSeconds?: number): Promise<boolean> {
+  try {
+    const ok = await redisSet(`revoked_token:${token}`, "1", ttlSeconds || 86400 * 31);
+    if (!ok) {
+      console.warn("[auth] WARNING: Redis unavailable — token revocation could not be persisted. Token may remain valid until expiry.");
+    }
+    return ok;
+  } catch (err: any) {
+    console.warn("[auth] WARNING: Token revocation failed (Redis error):", err.message, "— Token may remain valid until expiry.");
+    return false;
+  }
+}
 
 function hmacSha256(data: string, key: string): string {
   return crypto.createHmac("sha256", key).update(data).digest("base64url");
@@ -72,7 +127,7 @@ function createJwt(payload: Omit<TokenPayload, "exp">, expiresInSeconds: number)
   return `${header}.${body}.${sig}`;
 }
 
-function verifyJwt(token: string): TokenPayload | null {
+function verifyJwtSync(token: string): TokenPayload | null {
   try {
     const secret = getJwtSecret();
     const parts = token.split(".");
@@ -82,11 +137,22 @@ function verifyJwt(token: string): TokenPayload | null {
     if (sig !== expectedSig) return null;
     const payload: TokenPayload = JSON.parse(Buffer.from(body, "base64url").toString());
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
-    if (revokedTokens.has(token)) return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+async function verifyJwtAsync(token: string): Promise<TokenPayload | null> {
+  const payload = verifyJwtSync(token);
+  if (!payload) return null;
+  const revoked = await isTokenRevoked(token);
+  if (revoked) return null;
+  return payload;
+}
+
+function verifyJwt(token: string): TokenPayload | null {
+  return verifyJwtSync(token);
 }
 
 async function hashPassword(password: string): Promise<string> {
@@ -122,7 +188,7 @@ async function mongoCreateUser(user: User & { passwordHash: string }): Promise<v
 // ─── Token → User resolution ─────────────────────────────────────────────────
 
 async function getUserFromTokenAsync(token: string): Promise<User | null> {
-  const payload = verifyJwt(token);
+  const payload = await verifyJwtAsync(token);
   if (!payload || payload.type !== "access") return null;
 
   const mode = getAuthMode();
@@ -227,13 +293,32 @@ export function requireAuth(req: any, res: any, next: any) {
     return res.status(401).json({ error: "Authentication required" });
   }
 
-  const user = getUserFromToken(token);
-  if (!user) {
+  verifyJwtAsync(token).then((payload) => {
+    if (!payload) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    // Reject password_reset tokens from being used for API authentication
+    if (payload.type === "password_reset") {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    const user = getUserFromToken(token);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    req.user = user;
+    next();
+  }).catch(() => {
     return res.status(401).json({ error: "Invalid or expired token" });
-  }
+  });
+}
 
-  req.user = user;
-  next();
+export function requireAdmin(req: any, res: any, next: any) {
+  requireAuth(req, res, () => {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    next();
+  });
 }
 
 export function registerAuthRoutes(app: any) {
@@ -359,11 +444,13 @@ export function registerAuthRoutes(app: any) {
     }
   });
 
-  app.post("/api/auth/logout", (req: any, res: any) => {
+  app.post("/api/auth/logout", async (req: any, res: any) => {
     const authHeader = req.headers["authorization"] || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
     if (token) {
-      revokedTokens.add(token);
+      const payload = verifyJwtSync(token);
+      const ttl = payload ? Math.max(0, payload.exp - Math.floor(Date.now() / 1000)) : 86400;
+      await revokeToken(token, ttl || 86400);
     }
     res.json({ message: "Logged out" });
   });
@@ -372,7 +459,7 @@ export function registerAuthRoutes(app: any) {
     const { refresh_token } = req.body || {};
     if (!refresh_token) return res.status(400).json({ error: "refresh_token is required" });
 
-    const payload = verifyJwt(refresh_token);
+    const payload = await verifyJwtAsync(refresh_token);
     if (!payload || payload.type !== "refresh") {
       return res.status(401).json({ error: "Invalid or expired refresh token" });
     }
@@ -396,7 +483,8 @@ export function registerAuthRoutes(app: any) {
 
     if (!outUser) return res.status(401).json({ error: "User not found or inactive" });
 
-    revokedTokens.add(refresh_token);
+    const oldTtl = Math.max(0, payload.exp - Math.floor(Date.now() / 1000));
+    await revokeToken(refresh_token, oldTtl || 86400);
     const { accessToken, refreshToken: newRefresh } = createTokensForUser(outUser);
     return res.json({ access_token: accessToken, refresh_token: newRefresh, token_type: "bearer" });
   });
@@ -416,6 +504,89 @@ export function registerAuthRoutes(app: any) {
     }
   });
 
+  // ─── Password Reset Request (sends email with token) ─────────────────────
+  app.post("/api/auth/request-password-reset", async (req: any, res: any) => {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: "email is required" });
+
+    const mode = getAuthMode();
+    if (mode !== "password") {
+      return res.json({ message: "If this email exists, a reset link has been sent." });
+    }
+
+    try {
+      const user = await mongoFindUserByEmail(email);
+      if (!user || !user.active) {
+        // Always respond the same to prevent email enumeration
+        return res.json({ message: "If this email exists, a reset link has been sent." });
+      }
+
+      // Generate a short-lived reset token (15 min) — distinct type so it can't be used as an access token
+      const resetToken = createJwt({ userId: user.id, email: user.email, role: user.role, type: "password_reset" }, 15 * 60);
+      const resetKey = `password_reset:${user.id}`;
+      await redisSet(resetKey, resetToken, 15 * 60);
+
+      // Send email if configured
+      const appDomain = process.env.APP_DOMAIN || process.env.REPLIT_DEV_DOMAIN || "localhost:5000";
+      const resetUrl = `https://${appDomain}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+      await sendPasswordResetEmail(email, resetUrl);
+
+      return res.json({ message: "If this email exists, a reset link has been sent." });
+    } catch (err: any) {
+      console.error("[auth/reset] Error:", err.message);
+      return res.status(503).json({ error: "Password reset service unavailable" });
+    }
+  });
+
+  // ─── Password Reset Confirm (validates token, sets new password) ──────────
+  app.post("/api/auth/confirm-password-reset", async (req: any, res: any) => {
+    const { token, new_password } = req.body || {};
+    if (!token || !new_password) {
+      return res.status(400).json({ error: "token and new_password are required" });
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const payload = verifyJwtSync(token);
+    if (!payload || payload.type !== "password_reset") {
+      return res.status(401).json({ error: "Invalid or expired reset token" });
+    }
+
+    // Validate the token matches what we stored in Redis
+    const resetKey = `password_reset:${payload.userId}`;
+    let storedToken: string | null = null;
+    try {
+      storedToken = await redisGet(resetKey);
+    } catch {}
+
+    if (!storedToken || storedToken !== token) {
+      return res.status(401).json({ error: "Invalid or expired reset token" });
+    }
+
+    try {
+      const col = await getCollection("users");
+      if (!col) return res.status(503).json({ error: "Database unavailable" });
+
+      const passwordHash = await hashPassword(new_password);
+      await (col as any).updateOne(
+        { id: payload.userId },
+        { $set: { passwordHash, updated_at: new Date() } }
+      );
+
+      // Revoke the used reset token
+      try { await redisSet(resetKey, "", 1); } catch {}
+      await revokeToken(token, 1);
+
+      return res.json({ message: "Password updated successfully" });
+    } catch (err: any) {
+      console.error("[auth/confirm-reset] Error:", err.message);
+      return res.status(503).json({ error: "Password reset failed. Please try again." });
+    }
+  });
+
+  // ─── Legacy reset endpoint (backward compat) ──────────────────────────────
   app.post("/api/auth/reset-password", (req: any, res: any) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: "email is required" });

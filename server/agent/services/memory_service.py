@@ -27,22 +27,14 @@ _MAX_MEMORIES_IN_PROMPT = 10
 
 
 async def _get_col() -> Optional[Any]:
-    """Get MongoDB collection, returns None if unavailable."""
+    """Get MongoDB collection via session_store, returns None if unavailable."""
     try:
         from server.agent.db.session_store import get_session_store
         store = await get_session_store()
         if store and hasattr(store, "_db") and store._db:
             return store._db[_COLLECTION_NAME]
-    except Exception:
-        pass
-    try:
-        import sys
-        sys.path.insert(0, os.getcwd())
-        from server.db.mongo import getCollection  # type: ignore
-        col = await getCollection(_COLLECTION_NAME)
-        return col
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("[MemoryService] session_store unavailable: %s", exc)
     return None
 
 
