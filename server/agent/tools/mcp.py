@@ -301,13 +301,20 @@ class MCPClientManager:
         all_tools.extend(local_tools)
 
         if not all_tools:
+            if MCP_CONFIG_PATH:
+                hint = (
+                    "MCP_CONFIG_PATH='{}' disetel tetapi tidak ada tools yang ditemukan. "
+                    "Periksa file konfigurasi dan koneksi server.".format(MCP_CONFIG_PATH)
+                )
+            else:
+                hint = (
+                    "Set MCP_CONFIG_PATH ke path file JSON berisi daftar server MCP, "
+                    "atau set MCP_SERVER_URL untuk server tunggal, "
+                    "atau gunakan POST /api/mcp/config untuk mendaftarkan server secara dinamis."
+                )
             return ToolResult(
-                success=True,
-                message=(
-                    "No MCP server configured (set MCP_SERVER_URL in environment or use "
-                    "POST /api/mcp/config to register servers). "
-                    "MCP allows connecting to external services via Model Context Protocol."
-                ),
+                success=False,
+                message="Tidak ada MCP server yang dikonfigurasi. " + hint,
                 data={"tools": [], "count": 0, "configured": False},
             )
 

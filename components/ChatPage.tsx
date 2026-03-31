@@ -45,6 +45,11 @@ interface ChatMessage {
   attachments?: any[];
   files?: CreatedFile[];
   screenshotB64?: string;
+  todoItems?: Array<{ id: string; text: string; status: string; [key: string]: any }>;
+  taskUpdate?: { id?: string; title?: string; status?: string; description?: string; [key: string]: any };
+  searchResults?: Array<{ title: string; url: string; snippet?: string; [key: string]: any }>;
+  searchQuery?: string;
+  shellOutput?: string;
 }
 
 export interface VncSessionInfo {
@@ -584,6 +589,71 @@ export function ChatPage({
         };
         setMessages(prev => [...prev, errMsg]);
         setIsLoading(false);
+        return;
+      }
+
+      case "todo_update": {
+        if (ev.items && ev.items.length > 0) {
+          const todoMsg: ChatMessage = {
+            id: `msg_${Date.now()}_todo`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            todoItems: ev.items,
+          };
+          setMessages(prev => {
+            const existing = prev.findIndex(m => m.todoItems !== undefined);
+            if (existing >= 0) {
+              const updated = [...prev];
+              updated[existing] = { ...updated[existing], todoItems: ev.items };
+              return updated;
+            }
+            return [...prev, todoMsg];
+          });
+        }
+        return;
+      }
+
+      case "task_update": {
+        if (ev.task) {
+          const taskMsg: ChatMessage = {
+            id: `msg_${Date.now()}_task`,
+            role: "assistant",
+            content: ev.task.description || ev.task.title || "",
+            timestamp: Date.now(),
+            taskUpdate: ev.task,
+          };
+          setMessages(prev => [...prev, taskMsg]);
+        }
+        return;
+      }
+
+      case "search_results": {
+        if (ev.results && ev.results.length > 0) {
+          const searchMsg: ChatMessage = {
+            id: `msg_${Date.now()}_search`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            searchResults: ev.results,
+            searchQuery: ev.query,
+          };
+          setMessages(prev => [...prev, searchMsg]);
+        }
+        return;
+      }
+
+      case "shell_output": {
+        if (ev.output) {
+          const shellMsg: ChatMessage = {
+            id: `msg_${Date.now()}_shell`,
+            role: "assistant",
+            content: ev.output,
+            timestamp: Date.now(),
+            shellOutput: ev.output,
+          };
+          setMessages(prev => [...prev, shellMsg]);
+        }
         return;
       }
 
