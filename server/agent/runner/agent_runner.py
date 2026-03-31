@@ -261,10 +261,11 @@ def main() -> None:
             # long-running tasks don't lose their sandbox mid-execution.
             _keepalive_task: Optional[asyncio.Task] = None
             if os.environ.get("E2B_API_KEY", ""):
+                _keepalive_interval = int(os.environ.get("E2B_KEEPALIVE_SECONDS", str(30 * 60)))
                 async def _e2b_keepalive_loop() -> None:
                     try:
                         while True:
-                            await asyncio.sleep(30 * 60)
+                            await asyncio.sleep(_keepalive_interval)
                             try:
                                 from server.agent.tools.e2b_sandbox import keepalive as _ka
                                 _loop = asyncio.get_running_loop()

@@ -1720,7 +1720,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             # Use preloaded waiting_state from resume_data (passed by agent_runner)
             # as the primary source — saves a DB round-trip on continuation.
             _preloaded = getattr(self, "_preloaded_waiting_state", None)
-            if _preloaded:
+            if _preloaded is not None:
                 waiting_state = _preloaded
             elif self.session_id and svc:
                 waiting_state = await svc.load_waiting_state(self.session_id)
