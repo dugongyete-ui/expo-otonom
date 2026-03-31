@@ -1133,6 +1133,34 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
     }
 
+    // ── Task 4: Continuation — load waiting_state so Python can resume from the right step ──
+    // When is_continuation=true, load waiting_state from MongoDB and pass it to Python.
+    // Python also loads this itself, but providing it in resume_data reduces DB round-trips
+    // and ensures the state is consistent even if Redis cache has expired.
+    if (is_continuation && sid) {
+      try {
+        const sessionsCol = await getCollection("sessions");
+        if (sessionsCol) {
+          const sessDoc = await (sessionsCol as any).findOne(
+            { session_id: sid, user_id: userId },
+            { projection: { waiting_state: 1, chat_history: 1, _id: 0 } },
+          );
+          if (sessDoc) {
+            if (!resumeData) resumeData = {};
+            if (sessDoc.waiting_state) {
+              resumeData.waiting_state = sessDoc.waiting_state;
+            }
+            if (sessDoc.chat_history && !resumeData.chat_history) {
+              resumeData.chat_history = sessDoc.chat_history;
+            }
+            console.log(`[Agent] Loaded waiting_state for continuation session ${sid}: waiting=${!!sessDoc.waiting_state}`);
+          }
+        }
+      } catch (contErr: any) {
+        console.warn(`[Agent] Failed to load waiting_state for continuation ${sid}:`, contErr.message);
+      }
+    }
+
     // Only pass resume_from_session to Python if ownership was verified in Node.js.
     // If resumeData is null (session not found for this user), suppress the session ID
     // to prevent Python's SessionService.resume_session() from loading another user's state.

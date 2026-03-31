@@ -141,7 +141,7 @@ async def _cleanup_e2b_sandbox() -> None:
         sb = get_sandbox()
         if sb is not None:
             try:
-                await asyncio.get_event_loop().run_in_executor(None, sb.kill)
+                await asyncio.get_running_loop().run_in_executor(None, sb.kill)
                 sys.stderr.write("[agent_runner] E2B sandbox killed: {}\n".format(sandbox_id))
             except Exception as _ke:
                 sys.stderr.write("[agent_runner] E2B sandbox kill warning: {}\n".format(_ke))
@@ -253,6 +253,26 @@ def main() -> None:
                     sys.stderr.write("[agent_runner] Schema init warning: {}\n".format(_schema_err))
                     sys.stderr.flush()
 
+            # E2B sandbox keepalive: extend sandbox timeout every 30 minutes so
+            # long-running tasks don't lose their sandbox mid-execution.
+            _keepalive_task: Optional[asyncio.Task] = None
+            if os.environ.get("E2B_API_KEY", ""):
+                async def _e2b_keepalive_loop() -> None:
+                    try:
+                        while True:
+                            await asyncio.sleep(30 * 60)
+                            try:
+                                from server.agent.tools.e2b_sandbox import keepalive as _ka
+                                result = _ka()
+                                sys.stderr.write("[agent_runner] E2B keepalive sent, alive={}\n".format(result))
+                                sys.stderr.flush()
+                            except Exception as _kae:
+                                sys.stderr.write("[agent_runner] E2B keepalive error: {}\n".format(_kae))
+                                sys.stderr.flush()
+                    except asyncio.CancelledError:
+                        pass
+                _keepalive_task = asyncio.create_task(_e2b_keepalive_loop())
+
             _stream_q = None
             if session_id:
                 try:
@@ -345,6 +365,13 @@ def main() -> None:
                 _emit({"type": "error", "error": _error_msg})
                 _success = False
             finally:
+                # Cancel E2B keepalive task
+                if _keepalive_task is not None and not _keepalive_task.done():
+                    _keepalive_task.cancel()
+                    try:
+                        await _keepalive_task
+                    except asyncio.CancelledError:
+                        pass
                 # Update session status in MongoDB
                 if session_id:
                     if _success:

@@ -340,7 +340,7 @@ class DzeckAgent:
             "content": "Permintaan user: \"{}\"".format(user_message),
         })
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             body = _build_request_body(messages, stream=False)
             body["max_tokens"] = 200
             req = _make_cerebras_request(CEREBRAS_API_URL, body)
@@ -374,13 +374,16 @@ class DzeckAgent:
         if not self.session_id:
             return
         try:
-            svc = await self._get_session_service()
-            if svc:
-                store = await svc._get_session_store()
-                if store:
-                    await store.save_event(self.session_id, event_type, data)
-        except Exception:
-            pass
+            from server.agent.db.session_store import get_session_store as _get_store
+            store = await _get_store()
+            if store:
+                await store.save_event(self.session_id, event_type, data)
+        except Exception as _pe:
+            import logging as _pelog
+            _pelog.getLogger(__name__).debug(
+                "[agent_flow] _persist_event failed (session=%s type=%s): %s",
+                self.session_id, event_type, _pe,
+            )
 
     def _parse_response(self, text: str) -> Dict[str, Any]:
         result, _ = self.parser.parse(text)
@@ -413,7 +416,7 @@ class DzeckAgent:
             {"role": "user", "content": "Task: {}".format(user_message[:600])},
         ]
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             body = _build_request_body(messages, stream=False)
             body["max_tokens"] = 60
             req = _make_cerebras_request(CEREBRAS_API_URL, body)
@@ -625,7 +628,7 @@ class DzeckAgent:
             {"role": "user", "content": prompt},
         ]
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response_text = await loop.run_in_executor(
             None, lambda: call_text_with_retry(messages)
         )
@@ -730,7 +733,7 @@ class DzeckAgent:
                 yield make_event("notify", text=text, attachments=attachment_urls if attachment_urls else None)
             _res = resolved
             _args = dict(fn_args)
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, lambda: execute_tool(_res, _args))
             yield {"type": "__result__", "value": text or "Done"}
             return
@@ -765,7 +768,7 @@ class DzeckAgent:
             tool_call_id=tool_call_id,
         )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         _res = resolved
         _args = dict(fn_args)
 
@@ -1178,7 +1181,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             {"role": "user", "content": prompt},
         ]
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         from server.agent.domain.cerebras import _TOOLS_SUPPORTED as _ts_init
         _prev_tools_supported = _ts_init
 
@@ -1464,7 +1467,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             {"role": "user", "content": prompt},
         ]
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             response_text = await loop.run_in_executor(
                 None, lambda: call_text_with_retry(messages)
@@ -1951,7 +1954,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                         sb = get_sandbox()
                         if sb is not None and not _detected_home:
                             _detect_sandbox_home(sb)
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, _eager_detect_home)
                 except Exception:
                     pass
@@ -1988,11 +1991,12 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             yield make_event("title", title=self.plan.title)
 
             # Persist title to MongoDB so session list can display it
-            if self.session_id and svc and self.plan.title:
+            if self.session_id and self.plan.title:
                 try:
-                    store = await svc._get_session_store()
-                    if store:
-                        await store.update_session(self.session_id, {"title": self.plan.title})
+                    from server.agent.db.session_store import get_session_store as _gss_title
+                    _title_store = await _gss_title()
+                    if _title_store:
+                        await _title_store.update_session(self.session_id, {"title": self.plan.title})
                 except Exception:
                     pass
 

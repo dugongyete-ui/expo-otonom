@@ -163,7 +163,7 @@ def call_cerebras_streaming(messages: list) -> str:
 async def call_cerebras_streaming_realtime(
     messages: list,
 ) -> AsyncGenerator[str, None]:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
     def _stream_worker() -> None:
