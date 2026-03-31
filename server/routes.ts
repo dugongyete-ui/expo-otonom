@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import * as https from "node:https";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import multer from "multer";
@@ -15,6 +15,12 @@ import { redisXRead, redisXRange, redisSet, redisGet, redisDel, getRedisClient }
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const _require = createRequire(import.meta.url);
+
+// Shared secret for internal Python→Node calls (e.g. one-time-token exchange).
+// Generated once per process start; set as DZECK_INTERNAL_SECRET env var so the
+// Python subprocess (spawned after this) can read it.
+const INTERNAL_AGENT_SECRET: string = process.env.DZECK_INTERNAL_SECRET || randomUUID();
+process.env.DZECK_INTERNAL_SECRET = INTERNAL_AGENT_SECRET;
 
 // ─── Multer Upload Config (memory storage — files pushed directly to E2B) ────
 const upload = multer({
@@ -731,11 +737,10 @@ export async function registerRoutes(app: any): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
     } else {
-      // Historical session — check primary 'sessions' collection first, then legacy
-      // 'agent_sessions' collection. Fail-closed on any error or missing user_id.
+      // Historical session — check 'sessions' collection (unified, sole source of truth).
+      // Fail-closed on any error or missing user_id.
       let ownerVerified = false;
       try {
-        // Primary: sessions collection (current write path)
         const sc = await getCollection("sessions");
         if (sc) {
           const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
@@ -747,27 +752,12 @@ export async function registerRoutes(app: any): Promise<Server> {
             ownerVerified = true;
           }
         }
-
-        // Fallback: agent_sessions collection (legacy write path, same pattern as nearby endpoints)
-        if (!ownerVerified) {
-          const asc = await getCollection("agent_sessions");
-          if (asc) {
-            const asd = await (asc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
-            if (asd) {
-              const owner: string = asd.user_id || "";
-              if (!owner || requestingUserId !== owner) {
-                return res.status(403).json({ error: "Access denied" });
-              }
-              ownerVerified = true;
-            }
-          }
-        }
       } catch (err: any) {
         console.warn("[session_messages] Ownership check failed:", err.message);
         return res.status(403).json({ error: "Access denied" });
       }
       if (!ownerVerified) {
-        // Session not found in any store — deny to prevent enumeration
+        // Session not found — deny to prevent enumeration
         return res.status(403).json({ error: "Access denied" });
       }
     }
@@ -870,11 +860,9 @@ export async function registerRoutes(app: any): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
     } else {
-      // Session not in memory — look up ownership in MongoDB.
-      // Check unified 'sessions' collection first (primary), then legacy 'agent_sessions'.
+      // Session not in memory — look up ownership in 'sessions' (unified, sole source of truth).
       let ownerVerified = false;
       try {
-        // Primary: sessions collection (unified write path)
         const sessionCol = await getCollection("sessions");
         let sessionDoc: any = null;
         if (sessionCol) {
@@ -883,20 +871,10 @@ export async function registerRoutes(app: any): Promise<Server> {
             { projection: { user_id: 1 } },
           );
         }
-        // Fallback: agent_sessions collection (legacy write path)
-        if (!sessionDoc) {
-          const agentSessionCol = await getCollection("agent_sessions");
-          if (agentSessionCol) {
-            sessionDoc = await (agentSessionCol as any).findOne(
-              { session_id: sessionId },
-              { projection: { user_id: 1 } },
-            );
-          }
-        }
         if (sessionDoc) {
           const owner: string = sessionDoc.user_id || "";
           if (!owner) {
-            // Session record exists but has no user_id (legacy record) — deny access
+            // Session record exists but has no user_id — deny access
             return res.status(403).json({ error: "Access denied" });
           }
           if (requestingUserId !== owner) {
@@ -1072,26 +1050,6 @@ export async function registerRoutes(app: any): Promise<Server> {
             );
           }
         }
-        // ── Fallback: agent_sessions (legacy collection used in older write paths) ──
-        if (!resumeData) {
-          const agentSessCol = await getCollection("agent_sessions");
-          if (agentSessCol) {
-            const legacyDoc = await (agentSessCol as any).findOne(
-              { session_id: resume_from_session, user_id: userId },
-              { projection: { _id: 0 } },
-            );
-            if (legacyDoc) {
-              resumeData = {
-                chat_history: legacyDoc.chat_history || [],
-                plan: legacyDoc.plan || null,
-                user_message: legacyDoc.user_message || "",
-              };
-              console.log(
-                `[Agent] Loaded resume_data from agent_sessions (legacy) for ${resume_from_session} (user ${userId})`,
-              );
-            }
-          }
-        }
         if (!resumeData) {
           console.warn(
             `[Agent] resume_from_session ${resume_from_session} not found for user ${userId} — ignoring resume`,
@@ -1132,6 +1090,29 @@ export async function registerRoutes(app: any): Promise<Server> {
     (session as any)._sessionId = sid;
     (session as any)._sandboxId = dzeckSandboxId || null;
     activeAgentSessions.set(sid, session);
+
+    // Activity-based inactivity watchdog: force-close if no SSE events are emitted
+    // for more than 10 minutes (inactivity, not wall-clock session age).
+    const INACTIVITY_MS = 10 * 60 * 1000;
+    let _lastActivityAt = Date.now();
+    let _sessionTimeoutHandle: ReturnType<typeof setTimeout>;
+    const _resetInactivityTimer = () => {
+      _lastActivityAt = Date.now();
+      clearTimeout(_sessionTimeoutHandle);
+      _sessionTimeoutHandle = setTimeout(() => {
+        const s = activeAgentSessions.get(sid);
+        if (s && !s.done) {
+          const inactiveSec = Math.round((Date.now() - _lastActivityAt) / 1000);
+          console.warn(`[Agent] Session ${sid} inactive for ${inactiveSec}s — forcing done event.`);
+          s.done = true;
+          _broadcastToSession(s, `data: ${JSON.stringify({ type: "error", error: "Sesi agen tidak aktif selama 10 menit dan dihentikan otomatis." })}\n\n`);
+          _broadcastToSession(s, "data: [DONE]\n\n");
+          for (const client of s.clients) { try { client.end(); } catch {} }
+          try { s.proc.kill("SIGTERM"); } catch {}
+        }
+      }, INACTIVITY_MS);
+    };
+    _resetInactivityTimer();
 
     // Sync new session to MongoDB sessions collection (unified)
     const sessionUserId: string = req.user?.id || "unknown";
@@ -1190,6 +1171,8 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     function _processAgentLine(line: string) {
       if (!line.trim()) return;
+      // Reset inactivity watchdog on every event received from the Python process
+      _resetInactivityTimer();
       try {
         const parsed = JSON.parse(line);
         if (parsed.type === "done") {
@@ -1253,6 +1236,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     });
 
     proc.on("error", (err: Error) => {
+      clearTimeout(_sessionTimeoutHandle);
       console.error("[Agent] Failed to spawn Python agent:", err.message);
       session.done = true;
       const errLine = `data: ${JSON.stringify({ type: "error", error: "Python agent tidak tersedia. Pastikan Python terinstall." })}\n\n`;
@@ -1272,6 +1256,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       /\[RedisStreamQueue\]/i, /Rate limited.*retrying/i];
 
     proc.on("close", (code: number | null) => {
+      clearTimeout(_sessionTimeoutHandle);
       if (!session.done) {
         if (code !== 0 && session.stderrBuffer) {
           const hasRealError = !BENIGN.some(p => p.test(session.stderrBuffer));
@@ -1525,14 +1510,26 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Stop an active agent session ─────────────────────────────────────────
-  app.post("/api/agent/stop/:sid", requireAuth, (req: any, res: any) => {
+  app.post("/api/agent/stop/:sid", requireAuth, async (req: any, res: any) => {
     const { sid } = req.params;
     const session = activeAgentSessions.get(sid);
     if (!session) {
       return res.json({ stopped: false, reason: "not_found" });
     }
+    // Enforce ownership: only the session owner may stop it
+    const requestingUserId: string = req.user?.id || "";
+    const sessionOwner: string = (session as any)._userId || "";
+    if (sessionOwner && requestingUserId && requestingUserId !== sessionOwner) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    // Set Redis stop signal so plan_act.py _is_session_stopped() breaks gracefully
+    const stopKey = `agent:${sid}:stop`;
+    try { await redisSet(stopKey, "1", 60); } catch {}
     if (!session.done) {
-      try { session.proc.kill("SIGTERM"); } catch {}
+      // Give Python 2s to stop gracefully via Redis key, then SIGTERM
+      setTimeout(() => {
+        try { session.proc.kill("SIGTERM"); } catch {}
+      }, 2000);
       session.done = true;
       _broadcastToSession(session, `data: ${JSON.stringify({ type: "error", error: "Agen dihentikan oleh pengguna." })}\n\n`);
       _broadcastToSession(session, "data: [DONE]\n\n");
@@ -1855,7 +1852,22 @@ asyncio.run(main())
     }
   }, 10 * 60 * 1000);
 
-  app.post("/api/files/one-time-token", requireAuth, (req: any, res: any) => {
+  app.post("/api/files/one-time-token", (req: any, res: any, next: any) => {
+    // Allow internal Python agent calls authenticated with the shared process secret.
+    // The secret is a per-process UUID set in DZECK_INTERNAL_SECRET at startup and
+    // inherited by all Python subprocesses — it is never exposed to external callers.
+    const agentSecret = req.headers["x-internal-secret"] as string | undefined;
+    if (agentSecret && agentSecret.length === INTERNAL_AGENT_SECRET.length) {
+      try {
+        const a = Buffer.from(agentSecret, "utf8");
+        const b = Buffer.from(INTERNAL_AGENT_SECRET, "utf8");
+        if (a.length === b.length && timingSafeEqual(a, b)) {
+          return next();
+        }
+      } catch {}
+    }
+    return requireAuth(req, res, next);
+  }, (req: any, res: any) => {
     const { download_url } = req.body || {};
     if (!download_url || typeof download_url !== "string") {
       return res.status(400).json({ error: "download_url is required" });
@@ -2053,10 +2065,13 @@ except Exception as ex:
               // in memory momentarily while decoding then they are GC'd).
               const b64 = Buffer.concat(b64Chunks).toString("ascii");
               const rawBuf = Buffer.from(b64, "base64");
+              const _safeFileName = fileName.replace(/[^\x20-\x7E]/g, "_");
+              const _encFileName = encodeURIComponent(fileName);
               res.setHeader("Content-Type", mimeType);
-              res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+              res.setHeader("Content-Disposition", `attachment; filename="${_safeFileName}"; filename*=UTF-8''${_encFileName}`);
               res.setHeader("Content-Length", rawBuf.length);
               res.setHeader("Cache-Control", "no-cache");
+              res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
               res.end(rawBuf);
               resolve(true);
             } else {
@@ -2235,9 +2250,10 @@ except Exception as ex:
           return res.status(403).json({ error: "Access denied" });
         }
       } else {
+        // Session not in memory — check 'sessions' collection (unified, sole source of truth).
         let ownerVerified = false;
         try {
-          const sessionCol = await getCollection("agent_sessions");
+          const sessionCol = await getCollection("sessions");
           if (sessionCol) {
             const sessionDoc = await (sessionCol as any).findOne(
               { session_id: sessionId },

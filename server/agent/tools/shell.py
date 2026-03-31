@@ -64,19 +64,27 @@ def _get_redis_client():
             return _redis_client_cache
         try:
             import redis as _redis_lib  # type: ignore
+            redis_url = os.environ.get("REDIS_URL", "")
             host = os.environ.get("REDIS_HOST", "")
-            if not host:
+            if not redis_url and not host:
                 return None
-            port = int(os.environ.get("REDIS_PORT", "6379"))
-            password = os.environ.get("REDIS_PASSWORD", "") or None
-            client = _redis_lib.Redis(
-                host=host, port=port, password=password,
-                socket_connect_timeout=1, socket_timeout=1,
-                decode_responses=True,
-            )
+            if redis_url:
+                client = _redis_lib.from_url(
+                    redis_url,
+                    socket_connect_timeout=1, socket_timeout=1,
+                    decode_responses=True,
+                )
+            else:
+                port = int(os.environ.get("REDIS_PORT", "6379"))
+                password = os.environ.get("REDIS_PASSWORD", "") or None
+                client = _redis_lib.Redis(
+                    host=host, port=port, password=password,
+                    socket_connect_timeout=1, socket_timeout=1,
+                    decode_responses=True,
+                )
             client.ping()
             _redis_client_cache = client
-            _session_logger.debug("[Shell] Redis session store connected to %s:%s", host, port)
+            _session_logger.debug("[Shell] Redis session store connected")
             return client
         except Exception as exc:
             _session_logger.debug("[Shell] Redis session store unavailable (%s) — using in-memory fallback.", exc)

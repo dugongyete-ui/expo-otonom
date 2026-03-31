@@ -7,6 +7,7 @@ subprocess stdio bridge (`main`) that the Node.js backend calls.
 import os
 import sys
 import json
+import signal
 import asyncio
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -154,6 +155,33 @@ def main() -> None:
     Synchronous entry point for Node.js subprocess bridge.
     Reads JSON from stdin, runs async agent, writes events to stdout.
     """
+    # ── SIGTERM handler: emit done event and exit cleanly ─────────────────────
+    _sigterm_received = [False]
+
+    def _handle_sigterm(signum: int, frame: Any) -> None:
+        if _sigterm_received[0]:
+            return
+        _sigterm_received[0] = True
+        try:
+            sys.stderr.write("[agent_runner] SIGTERM received — emitting done and exiting.\n")
+            sys.stderr.flush()
+            _emit({"type": "error", "error": "Agent process terminated by signal."})
+            _emit({"type": "done", "success": False})
+            sys.stdout.flush()
+        except Exception:
+            pass
+        finally:
+            # Run E2B cleanup synchronously in a new event loop if possible
+            try:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(_cleanup_e2b_sandbox())
+                loop.close()
+            except Exception:
+                pass
+            sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
     # ── Preflight: validate required environment variables ────────────────────
     # Only CEREBRAS_API_KEY is strictly required for basic chat/agent function.
     # E2B_API_KEY and MONGODB_URI are optional (agent will run without them,

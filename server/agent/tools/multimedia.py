@@ -1,15 +1,15 @@
 """
 Multimedia tools for Dzeck AI Agent.
-Wrappers for manus-* CLI binaries available in the E2B sandbox:
-  - manus-md-to-pdf      -> export_pdf
-  - manus-render-diagram -> render_diagram
-  - manus-speech-to-text -> speech_to_text
-  - manus-export-slides  -> export_slides
-  - manus-upload-file    -> upload_file
-
-All operations run inside the E2B sandbox via shell_exec.
+All operations run inside the E2B sandbox via shell commands.
+Replaces manus-* CLI binaries with portable alternatives:
+  - export_pdf     -> pandoc (md -> pdf via wkhtmltopdf or weasyprint) or python-pdfkit
+  - render_diagram -> mermaid-js CLI (mmdc) or graphviz dot
+  - speech_to_text -> openai-whisper or faster-whisper (runs in E2B sandbox)
+  - export_slides  -> pandoc (md/html -> pdf/pptx)
+  - upload_file    -> multipart HTTP POST to /api/files endpoint or base64 embed
 """
 import logging
+import shlex
 from typing import Optional
 
 from server.agent.models.tool_result import ToolResult
@@ -35,13 +35,19 @@ def _shell_run(command: str, timeout: int = 120) -> dict:
         return {"exit_code": -1, "stdout": "", "stderr": str(e)}
 
 
+def _file_exists(path: str) -> bool:
+    r = _shell_run(f"test -f {path} && echo 'exists'", timeout=10)
+    return "exists" in r["stdout"]
+
+
 class MultimediaTool(BaseTool):
     """Multimedia processing tools (PDF, diagram, speech, slides, upload)."""
 
     @tool(
         name="export_pdf",
         description=(
-            "Convert a Markdown file to PDF using manus-md-to-pdf. "
+            "Convert a Markdown or HTML file to PDF inside the E2B sandbox. "
+            "Uses pandoc with wkhtmltopdf or weasyprint as the PDF engine. "
             "The input file must exist in the E2B sandbox. "
             "If output_path is not provided, it defaults to the same name as input with .pdf extension. "
             "Returns the path of the generated PDF."
@@ -49,7 +55,7 @@ class MultimediaTool(BaseTool):
         parameters={
             "input_path": {
                 "type": "string",
-                "description": "Absolute path to the Markdown (.md) file inside the sandbox",
+                "description": "Absolute path to the Markdown (.md) or HTML file inside the sandbox",
             },
             "output_path": {
                 "type": "string",
@@ -62,37 +68,54 @@ class MultimediaTool(BaseTool):
         if not output_path:
             output_path = input_path.rsplit(".", 1)[0] + ".pdf" if "." in input_path else input_path + ".pdf"
 
-        cmd = f"manus-md-to-pdf {input_path} {output_path} 2>&1"
+        # Ensure pandoc is available, install if needed
+        check = _shell_run("which pandoc 2>/dev/null && echo ok", timeout=10)
+        if "ok" not in check["stdout"]:
+            _shell_run(
+                "pip install --break-system-packages weasyprint 2>/dev/null; "
+                "apt-get install -y -q pandoc 2>/dev/null || true",
+                timeout=120,
+            )
+
+        parent_dir = "/".join(output_path.split("/")[:-1])
+        if parent_dir:
+            _shell_run(f"mkdir -p {shlex.quote(parent_dir)}", timeout=10)
+
+        inp_q = shlex.quote(input_path)
+        out_q = shlex.quote(output_path)
+        # Try pandoc with weasyprint engine first (no X11 needed)
+        cmd = (
+            f"pandoc {inp_q} -o {out_q} "
+            f"--pdf-engine=weasyprint 2>&1 || "
+            f"pandoc {inp_q} -o {out_q} "
+            f"--pdf-engine=wkhtmltopdf 2>&1 || "
+            f"pandoc {inp_q} -o {out_q} 2>&1"
+        )
         result = _shell_run(cmd, timeout=120)
 
-        if result["exit_code"] == 0:
-            verify = _shell_run(f"test -f {output_path} && echo 'exists'", timeout=10)
-            if "exists" in verify["stdout"]:
-                return ToolResult(
-                    success=True,
-                    message=f"PDF generated successfully: {output_path}",
-                    data={"output_path": output_path, "input_path": input_path},
-                )
+        if _file_exists(output_path):
             return ToolResult(
-                success=False,
-                message=f"manus-md-to-pdf ran but output file not found at {output_path}",
+                success=True,
+                message=f"PDF generated successfully: {output_path}",
+                data={"output_path": output_path, "input_path": input_path},
             )
         return ToolResult(
             success=False,
-            message=f"PDF conversion failed (exit {result['exit_code']}): {result['stderr'] or result['stdout']}",
+            message=f"PDF conversion failed: {result['stderr'] or result['stdout']}",
         )
 
     @tool(
         name="render_diagram",
         description=(
-            "Render a diagram file to PNG using manus-render-diagram. "
-            "Supports Mermaid (.mmd), D2 (.d2), PlantUML (.puml), and Markdown with diagram fences (.md). "
+            "Render a diagram file to PNG inside the E2B sandbox. "
+            "Supports Mermaid (.mmd) using mmdc (mermaid-js CLI) and "
+            "GraphViz dot (.dot/.gv) using the graphviz package. "
             "Returns the path of the generated PNG image."
         ),
         parameters={
             "input_path": {
                 "type": "string",
-                "description": "Absolute path to the diagram file (.mmd, .d2, .puml, or .md)",
+                "description": "Absolute path to the diagram file (.mmd, .dot, .gv) inside the sandbox",
             },
             "output_path": {
                 "type": "string",
@@ -105,30 +128,50 @@ class MultimediaTool(BaseTool):
         if not output_path:
             output_path = input_path.rsplit(".", 1)[0] + ".png" if "." in input_path else input_path + ".png"
 
-        cmd = f"manus-render-diagram {input_path} {output_path} 2>&1"
-        result = _shell_run(cmd, timeout=120)
+        parent_dir = "/".join(output_path.split("/")[:-1])
+        if parent_dir:
+            _shell_run(f"mkdir -p {shlex.quote(parent_dir)}", timeout=10)
 
-        if result["exit_code"] == 0:
-            verify = _shell_run(f"test -f {output_path} && echo 'exists'", timeout=10)
-            if "exists" in verify["stdout"]:
-                return ToolResult(
-                    success=True,
-                    message=f"Diagram rendered successfully: {output_path}",
-                    data={"output_path": output_path, "input_path": input_path},
+        ext = input_path.rsplit(".", 1)[-1].lower() if "." in input_path else ""
+        inp_q = shlex.quote(input_path)
+        out_q = shlex.quote(output_path)
+
+        if ext == "mmd":
+            # Try mmdc (mermaid CLI) — install via npm if missing
+            check = _shell_run("which mmdc 2>/dev/null && echo ok", timeout=10)
+            if "ok" not in check["stdout"]:
+                _shell_run(
+                    "npm install -g @mermaid-js/mermaid-cli 2>/dev/null || "
+                    "npx @mermaid-js/mermaid-cli --help 2>/dev/null || true",
+                    timeout=120,
                 )
+            result = _shell_run(
+                f"mmdc -i {inp_q} -o {out_q} --puppeteerConfig '{{\"args\":[\"--no-sandbox\"]}}' 2>&1 || "
+                f"npx mmdc -i {inp_q} -o {out_q} 2>&1",
+                timeout=120,
+            )
+        else:
+            # GraphViz dot for .dot/.gv and fallback
+            check = _shell_run("which dot 2>/dev/null && echo ok", timeout=10)
+            if "ok" not in check["stdout"]:
+                _shell_run("apt-get install -y -q graphviz 2>/dev/null || true", timeout=120)
+            result = _shell_run(f"dot -Tpng {inp_q} -o {out_q} 2>&1", timeout=120)
+
+        if _file_exists(output_path):
             return ToolResult(
-                success=False,
-                message=f"manus-render-diagram ran but output not found at {output_path}",
+                success=True,
+                message=f"Diagram rendered successfully: {output_path}",
+                data={"output_path": output_path, "input_path": input_path},
             )
         return ToolResult(
             success=False,
-            message=f"Diagram rendering failed (exit {result['exit_code']}): {result['stderr'] or result['stdout']}",
+            message=f"Diagram rendering failed: {result['stderr'] or result['stdout']}",
         )
 
     @tool(
         name="speech_to_text",
         description=(
-            "Transcribe an audio/speech file to text using manus-speech-to-text. "
+            "Transcribe an audio file to text inside the E2B sandbox using openai-whisper. "
             "Supports common audio formats (MP3, WAV, OGG, M4A, FLAC). "
             "Returns the transcribed text."
         ),
@@ -141,8 +184,26 @@ class MultimediaTool(BaseTool):
         required=["input_path"],
     )
     def speech_to_text(self, input_path: str) -> ToolResult:
-        cmd = f"manus-speech-to-text {input_path} 2>&1"
-        result = _shell_run(cmd, timeout=300)
+        # Check if whisper is available, install if not
+        check = _shell_run("python3 -c 'import whisper; print(\"ok\")' 2>/dev/null", timeout=15)
+        if "ok" not in check["stdout"]:
+            inst = _shell_run(
+                "pip install --break-system-packages openai-whisper 2>&1 | tail -5",
+                timeout=300,
+            )
+            if inst["exit_code"] != 0:
+                return ToolResult(
+                    success=False,
+                    message=f"Could not install whisper: {inst['stderr'] or inst['stdout']}",
+                )
+
+        script = (
+            "import whisper, json, sys; "
+            "model = whisper.load_model('base'); "
+            "result = model.transcribe(sys.argv[1]); "
+            "print(result['text'])"
+        )
+        result = _shell_run(f"python3 -c \"{script}\" {shlex.quote(input_path)} 2>&1", timeout=300)
 
         if result["exit_code"] == 0:
             transcript = result["stdout"].strip()
@@ -154,7 +215,7 @@ class MultimediaTool(BaseTool):
                 )
             return ToolResult(
                 success=False,
-                message="manus-speech-to-text returned empty transcript",
+                message="Whisper returned empty transcript",
             )
         return ToolResult(
             success=False,
@@ -164,8 +225,8 @@ class MultimediaTool(BaseTool):
     @tool(
         name="export_slides",
         description=(
-            "Export a presentation file to slides format using manus-export-slides. "
-            "Supports converting Markdown or HTML presentations to PDF or PPTX. "
+            "Export a Markdown or HTML presentation to PDF or PPTX inside the E2B sandbox. "
+            "Uses pandoc for conversion. "
             "Returns the path of the exported file."
         ),
         parameters={
@@ -193,31 +254,50 @@ class MultimediaTool(BaseTool):
         if not output_path:
             output_path = input_path.rsplit(".", 1)[0] + f".{fmt}" if "." in input_path else input_path + f".{fmt}"
 
-        cmd = f"manus-export-slides {input_path} {output_path} 2>&1"
+        # Ensure pandoc is available (same guard as export_pdf)
+        check = _shell_run("which pandoc 2>/dev/null && echo ok", timeout=10)
+        if "ok" not in check["stdout"]:
+            _shell_run(
+                "pip install --break-system-packages weasyprint 2>/dev/null; "
+                "apt-get install -y -q pandoc 2>/dev/null || true",
+                timeout=120,
+            )
+
+        parent_dir = "/".join(output_path.split("/")[:-1])
+        if parent_dir:
+            _shell_run(f"mkdir -p {shlex.quote(parent_dir)}", timeout=10)
+
+        inp_q = shlex.quote(input_path)
+        out_q = shlex.quote(output_path)
+        if fmt == "pdf":
+            cmd = (
+                f"pandoc {inp_q} -o {out_q} "
+                f"--pdf-engine=weasyprint 2>&1 || "
+                f"pandoc {inp_q} -o {out_q} "
+                f"--pdf-engine=wkhtmltopdf 2>&1 || "
+                f"pandoc {inp_q} -o {out_q} 2>&1"
+            )
+        else:
+            cmd = f"pandoc {inp_q} -o {out_q} 2>&1"
+
         result = _shell_run(cmd, timeout=180)
 
-        if result["exit_code"] == 0:
-            verify = _shell_run(f"test -f {output_path} && echo 'exists'", timeout=10)
-            if "exists" in verify["stdout"]:
-                return ToolResult(
-                    success=True,
-                    message=f"Slides exported successfully: {output_path}",
-                    data={"output_path": output_path, "input_path": input_path, "format": fmt},
-                )
+        if _file_exists(output_path):
             return ToolResult(
-                success=False,
-                message=f"manus-export-slides ran but output not found at {output_path}",
+                success=True,
+                message=f"Slides exported successfully: {output_path}",
+                data={"output_path": output_path, "input_path": input_path, "format": fmt},
             )
         return ToolResult(
             success=False,
-            message=f"Slides export failed (exit {result['exit_code']}): {result['stderr'] or result['stdout']}",
+            message=f"Slides export failed: {result['stderr'] or result['stdout']}",
         )
 
     @tool(
         name="upload_file",
         description=(
-            "Upload a file from the E2B sandbox to public storage using manus-upload-file. "
-            "Returns the public URL of the uploaded file."
+            "Make a file from the E2B sandbox available for download by generating a proxy download URL. "
+            "Returns the download URL that can be used to retrieve the file."
         ),
         parameters={
             "input_path": {
@@ -228,24 +308,87 @@ class MultimediaTool(BaseTool):
         required=["input_path"],
     )
     def upload_file(self, input_path: str) -> ToolResult:
-        cmd = f"manus-upload-file {input_path} 2>&1"
-        result = _shell_run(cmd, timeout=120)
+        import os
+        import urllib.parse
+        import urllib.request
+        import json as _json
+        from server.agent.tools.e2b_sandbox import get_sandbox
 
-        if result["exit_code"] == 0:
-            url = result["stdout"].strip()
-            if url.startswith("http"):
-                return ToolResult(
-                    success=True,
-                    message=f"File uploaded successfully: {url}",
-                    data={"url": url, "input_path": input_path},
-                )
-            return ToolResult(
-                success=False,
-                message=f"Upload completed but no URL returned: {url}",
+        sb = get_sandbox()
+        if sb is None:
+            return ToolResult(success=False, message="E2B sandbox not available")
+
+        sandbox_id = getattr(sb, "sandbox_id", "") or os.environ.get("DZECK_E2B_SANDBOX_ID", "")
+        if not sandbox_id:
+            return ToolResult(success=False, message="Cannot determine sandbox ID for download URL")
+
+        # Verify file exists in sandbox
+        if not _file_exists(input_path):
+            return ToolResult(success=False, message=f"File not found in sandbox: {input_path}")
+
+        filename = os.path.basename(input_path)
+        encoded_sandbox_id = urllib.parse.quote(sandbox_id, safe="")
+        encoded_path = urllib.parse.quote(input_path, safe="")
+        encoded_name = urllib.parse.quote(filename, safe="")
+        raw_download_url = (
+            f"/api/files/download?sandbox_id={encoded_sandbox_id}"
+            f"&path={encoded_path}&name={encoded_name}"
+        )
+
+        # Attempt to exchange for a one-time token via internal API (no auth required —
+        # the internal call goes to localhost and the token endpoint generates a TTL token
+        # so mobile clients (Expo Go) can use Linking.openURL without Bearer headers).
+        # We use localhost for the token exchange HTTP call, but return only the *relative*
+        # /api/files/download?...&token=... path — the client prepends its own origin.
+        one_time_url = raw_download_url
+        one_time_token: Optional[str] = None
+        try:
+            backend_port = os.environ.get("PORT", "5000")
+            token_endpoint = f"http://localhost:{backend_port}/api/files/one-time-token"
+            # Internal absolute URL used only for token exchange — not exposed to clients
+            abs_download_url = (
+                f"http://localhost:{backend_port}/api/files/download"
+                f"?sandbox_id={encoded_sandbox_id}&path={encoded_path}&name={encoded_name}"
             )
+            internal_secret = os.environ.get("DZECK_INTERNAL_SECRET", "")
+            payload = _json.dumps({"download_url": abs_download_url}).encode("utf-8")
+            req = urllib.request.Request(
+                token_endpoint,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-Secret": internal_secret,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                resp_data = _json.loads(resp.read().decode("utf-8"))
+                tok = resp_data.get("token", "")
+                if tok:
+                    one_time_token = tok
+                    # Build a relative URL so the client appends its own origin
+                    one_time_url = (
+                        f"/api/files/download?sandbox_id={encoded_sandbox_id}"
+                        f"&path={encoded_path}&name={encoded_name}&token={urllib.parse.quote(tok, safe='')}"
+                    )
+        except Exception as _tok_err:
+            # Token exchange failed — log as warning (not silent debug) so ops can diagnose
+            logger.warning(
+                "[MultimediaTool] One-time token exchange failed (%s) — "
+                "returning raw download URL; mobile clients will need Bearer authorization header.",
+                _tok_err,
+            )
+
         return ToolResult(
-            success=False,
-            message=f"File upload failed (exit {result['exit_code']}): {result['stderr'] or result['stdout']}",
+            success=True,
+            message=f"File ready for download: {one_time_url}",
+            data={
+                "url": one_time_url,
+                "download_url": one_time_url,
+                "token": one_time_token,
+                "input_path": input_path,
+                "filename": filename,
+            },
         )
 
 

@@ -176,6 +176,7 @@ class MCPClientManager:
         mongo_servers = self._get_servers_from_mongo()
         if mongo_servers:
             # Try each server — call first one that responds
+            last_result = None
             for server in mongo_servers:
                 url = server.get("url", "")
                 auth_token = server.get("auth_token", "")
@@ -184,12 +185,10 @@ class MCPClientManager:
                 result = self._call_http_mcp(url, tool_name, arguments, auth_token=auth_token)
                 if result.success:
                     return result
-            # If no server succeeded, return the last error
-            if mongo_servers:
-                url = mongo_servers[0].get("url", "")
-                auth_token = mongo_servers[0].get("auth_token", "")
-                if url:
-                    return self._call_http_mcp(url, tool_name, arguments, auth_token=auth_token)
+                last_result = result
+            # Return the last error result instead of retrying the first server
+            if last_result is not None:
+                return last_result
 
         # Fallback to MCP_SERVER_URL env var
         if MCP_SERVER_URL:

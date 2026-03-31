@@ -24,6 +24,7 @@ from server.agent.tools.registry import (
     execute_tool,
     get_all_tool_schemas,
 )
+from server.agent.tools.executor import ToolCallParser as _ToolCallParser
 
 from server.agent.models.plan import Plan, Step, ExecutionStatus
 from server.agent.models.event import PlanStatus, StepStatus, ToolStatus
@@ -932,6 +933,10 @@ class DzeckAgent:
                 pass
 
         _tool_data = tool_result.data or {}
+        # Fix #9: browser screenshot streaming — emit browser_screenshot SSE event
+        # whenever a browser tool returns screenshot_b64. browser.py._take_screenshot()
+        # populates this field for all browser actions. Frontend handles it in
+        # agent-event-processor.ts BROWSER_SCREENSHOT → ChatPage.tsx / MainLayout.tsx.
         if resolved in ("browser_navigate", "browser_click", "browser_type", "browser_scroll",
                         "browser_view", "browser_screenshot", "browser_fill", "browser_select",
                         "browser_hover", "browser_back", "browser_forward", "browser_refresh"):
@@ -1283,6 +1288,46 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                         if len(exec_messages) > 12:
                             exec_messages = _compact_exec_messages(exec_messages)
                         continue
+
+                    # Try XML-format tool calls: <invoke name="tool">...</invoke>
+                    if text and "<invoke" in text:
+                        xml_tool_calls = _ToolCallParser.extract_tool_calls(text)
+                        if xml_tool_calls:
+                            step_done = False
+                            for xml_tc_idx, xml_tc in enumerate(xml_tool_calls):
+                                resolved_xml = resolve_tool_name(xml_tc.name)
+                                if resolved_xml is None:
+                                    exec_messages.append({"role": "assistant", "content": text})
+                                    exec_messages.append({
+                                        "role": "user",
+                                        "content": "Unknown tool '{}'. Available: {}. Try again.".format(
+                                            xml_tc.name, ", ".join(TOOLS.keys()))
+                                    })
+                                    continue
+                                tc_id_xml = "tc_{}_{}_xml_{}".format(step.id, iteration, xml_tc_idx)
+                                result_str_xml = "Done"
+                                async for ev in self._run_tool_streaming(resolved_xml, xml_tc.parameters, tc_id_xml, step):
+                                    if ev.get("type") == "__step_done__":
+                                        step_done = True
+                                        break
+                                    elif ev.get("type") == "__result__":
+                                        result_str_xml = ev.get("value", "Done")
+                                    else:
+                                        yield ev
+                                if step_done:
+                                    break
+                                exec_messages.append({
+                                    "role": "user",
+                                    "content": "Result of {}: {}\n\nContinue. Use another tool or call idle when step is fully done.".format(
+                                        resolved_xml, result_str_xml),
+                                })
+                            if step_done:
+                                return
+                            if iteration > 0 and iteration % 5 == 0:
+                                self.memory.compact()
+                            if len(exec_messages) > 12:
+                                exec_messages = _compact_exec_messages(exec_messages)
+                            continue
 
                 if text:
                     yield make_event("notify", message=text[:500])
