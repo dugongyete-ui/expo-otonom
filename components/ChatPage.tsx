@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal } from "react-native";
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
@@ -43,6 +43,7 @@ interface ChatMessage {
   error?: string;
   attachments?: any[];
   files?: CreatedFile[];
+  screenshotB64?: string;
 }
 
 export interface VncSessionInfo {
@@ -320,6 +321,20 @@ export function ChatPage({
           }
           return prev;
         });
+        // If tool result includes a screenshot, show it inline in chat
+        const toolScr: string = (event.tool_content && typeof event.tool_content["screenshot_b64"] === "string")
+          ? event.tool_content["screenshot_b64"]
+          : "";
+        if (toolScr) {
+          const scrMsg: ChatMessage = {
+            id: `scr_${Date.now()}_tool_${callId}`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            screenshotB64: toolScr.startsWith("data:") ? toolScr : `data:image/png;base64,${toolScr}`,
+          };
+          setMessages(prev => [...prev, scrMsg]);
+        }
       } else if (status === "error") {
         setTools(prev => {
           const idx = prev.findIndex(t => t.tool_call_id === callId);
@@ -499,6 +514,14 @@ export function ChatPage({
           url: event.url || event.vnc_url || "",
           title: event.title || "",
         });
+        const scrMsg: ChatMessage = {
+          id: `scr_${Date.now()}_browser`,
+          role: "assistant",
+          content: "",
+          timestamp: Date.now(),
+          screenshotB64: scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`,
+        };
+        setMessages(prev => [...prev, scrMsg]);
       }
       return;
     }
@@ -507,6 +530,14 @@ export function ChatPage({
       const scr = event.screenshot_b64 || "";
       if (scr) {
         setLastBrowserEvent({ screenshot_b64: scr });
+        const scrMsg: ChatMessage = {
+          id: `scr_${Date.now()}_desktop`,
+          role: "assistant",
+          content: "",
+          timestamp: Date.now(),
+          screenshotB64: scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`,
+        };
+        setMessages(prev => [...prev, scrMsg]);
       }
       return;
     }
@@ -803,6 +834,18 @@ export function ChatPage({
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
+          // Screenshot message — display inline image
+          if (item.screenshotB64) {
+            return (
+              <View style={styles.screenshotContainer}>
+                <Image
+                  source={{ uri: item.screenshotB64 }}
+                  style={styles.screenshotImage}
+                  resizeMode="contain"
+                />
+              </View>
+            );
+          }
           if (item.files && item.files.length > 0) {
             const base = getApiBaseUrl();
             return (
@@ -816,9 +859,33 @@ export function ChatPage({
                     key={i}
                     style={styles.fileCard}
                     activeOpacity={0.7}
-                    onPress={() => {
-                      const url = f.download_url.startsWith("http") ? f.download_url : `${base}${f.download_url}`;
-                      Linking.openURL(url).catch(() => {});
+                    onPress={async () => {
+                      try {
+                        const token = getStoredToken();
+                        const downloadUrl = f.download_url.startsWith("http")
+                          ? f.download_url
+                          : `${base}${f.download_url}`;
+                        // Request a one-time token so Linking.openURL works without auth headers
+                        const tokenRes = await fetch(`${base}/api/files/one-time-token`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                          },
+                          body: JSON.stringify({ download_url: f.download_url }),
+                        });
+                        if (tokenRes.ok) {
+                          const { url } = await tokenRes.json();
+                          Linking.openURL(url).catch(() => {});
+                        } else {
+                          // Fallback: open with regular URL (web only)
+                          Linking.openURL(downloadUrl).catch(() => {});
+                        }
+                      } catch {
+                        const base2 = getApiBaseUrl();
+                        const url = f.download_url.startsWith("http") ? f.download_url : `${base2}${f.download_url}`;
+                        Linking.openURL(url).catch(() => {});
+                      }
                     }}
                   >
                     <Ionicons name="download-outline" size={16} color="#1a73e8" />
@@ -1028,5 +1095,19 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: "#1a73e8",
     fontWeight: "600",
+  },
+  screenshotContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    alignItems: "flex-start",
+  },
+  screenshotImage: {
+    width: "100%",
+    maxWidth: 480,
+    aspectRatio: 16 / 10,
+    borderRadius: 10,
+    backgroundColor: "#f0efea",
+    borderWidth: 1,
+    borderColor: "#ddd9d0",
   },
 });

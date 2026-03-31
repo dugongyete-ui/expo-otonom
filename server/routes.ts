@@ -1697,10 +1697,114 @@ asyncio.run(main())
     });
   });
 
+  // ─── One-time download tokens (TTL = 5 min, in-memory) ──────────────────────
+  // Allows file downloads without Bearer headers (e.g. Linking.openURL in APK).
+  // POST /api/files/one-time-token  { download_url } → { token, url }
+  // GET  /api/files/download?token=xxx  — no auth header required
+
+  interface OneTimeToken {
+    /** Canonical file path in the sandbox (decoded) */
+    filePath: string;
+    /** Sandbox ID (may be empty string) */
+    sandboxId: string;
+    /** Filename for Content-Disposition */
+    fileName: string;
+    expiresAt: number;
+  }
+  const _oneTimeTokens = new Map<string, OneTimeToken>();
+
+  // Cleanup expired tokens every 10 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [tok, val] of _oneTimeTokens.entries()) {
+      if (val.expiresAt < now) _oneTimeTokens.delete(tok);
+    }
+  }, 10 * 60 * 1000);
+
+  app.post("/api/files/one-time-token", requireAuth, (req: any, res: any) => {
+    const { download_url } = req.body || {};
+    if (!download_url || typeof download_url !== "string") {
+      return res.status(400).json({ error: "download_url is required" });
+    }
+    // Parse the download_url to extract path, sandbox_id, and name/filename
+    // so the token is scoped to the exact resource being requested.
+    const base = `${req.protocol}://${req.get("host")}`;
+    let parsed: URL;
+    try {
+      parsed = new URL(download_url, base);
+    } catch {
+      return res.status(400).json({ error: "download_url is invalid" });
+    }
+    const rawFilePath = parsed.searchParams.get("path") || "";
+    if (!rawFilePath) {
+      return res.status(400).json({ error: "download_url must include a path parameter" });
+    }
+    let filePath: string;
+    try {
+      filePath = decodeURIComponent(rawFilePath);
+    } catch {
+      return res.status(400).json({ error: "invalid path encoding in download_url" });
+    }
+    if (filePath.includes("..")) {
+      return res.status(400).json({ error: "path not allowed" });
+    }
+    const sandboxId = parsed.searchParams.get("sandbox_id") || "";
+    const rawName = parsed.searchParams.get("name") || parsed.searchParams.get("filename") || "";
+    let fileName = path.basename(filePath);
+    if (rawName) {
+      try { fileName = decodeURIComponent(rawName); } catch { /* keep basename fallback */ }
+    }
+
+    const token = randomUUID();
+    _oneTimeTokens.set(token, {
+      filePath,
+      sandboxId,
+      fileName,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+
+    // Build the tokenized URL pointing to /api/files/download with resource params
+    const targetUrl = new URL("/api/files/download", base);
+    targetUrl.searchParams.set("path", rawFilePath);
+    if (sandboxId) targetUrl.searchParams.set("sandbox_id", sandboxId);
+    if (rawName) targetUrl.searchParams.set("name", rawName);
+    targetUrl.searchParams.set("token", token);
+
+    res.json({ token, url: targetUrl.href });
+  });
+
   // ─── File Download endpoint ─────────────────────────────────────────────────
   // Proxies file directly from E2B sandbox — no local disk copy.
   // Required: ?sandbox_id=xxx OR an active sandbox; ?path=/home/user/...&name=file.ext
-  app.get("/api/files/download", requireAuth, async (req: any, res: any) => {
+  // Also accepts ?token=xxx for one-time token-based downloads (no Bearer header needed).
+  //
+  // Auth gate middleware: passes through if ?token= is valid, otherwise delegates
+  // to standard requireAuth (Bearer token). This separates auth from business logic.
+  const _fileDownloadAuthGate = (req: any, res: any, next: any) => {
+    const otToken = req.query.token as string | undefined;
+    if (!otToken) {
+      // No one-time token — use standard Bearer auth
+      return requireAuth(req, res, next);
+    }
+    // One-time token path: validate + bind to resource, consume on success
+    const entry = _oneTimeTokens.get(otToken);
+    if (!entry || entry.expiresAt < Date.now()) {
+      _oneTimeTokens.delete(otToken);
+      return res.status(401).json({ error: "Token tidak valid atau sudah kadaluarsa" });
+    }
+    let reqFilePath = "";
+    try { reqFilePath = decodeURIComponent((req.query.path as string) || ""); } catch {}
+    const reqSandboxId = (req.query.sandbox_id as string) || "";
+    if (reqFilePath !== entry.filePath || reqSandboxId !== entry.sandboxId) {
+      // Do NOT consume — caller gets a clear error, token remains intact for inspection
+      return res.status(403).json({ error: "Token tidak cocok dengan resource yang diminta" });
+    }
+    // Valid and matching — consume (one-time use) then proceed
+    _oneTimeTokens.delete(otToken);
+    next();
+  };
+
+  app.get("/api/files/download", _fileDownloadAuthGate, async (req: any, res: any) => {
     const rawPath = req.query.path as string;
     const rawName = req.query.name as string;
     const rawSandboxId = req.query.sandbox_id as string | undefined;
@@ -1854,12 +1958,14 @@ except Exception as ex:
   // ─── /api/sandbox/download — manus.im parity endpoint ───────────────────
   // Same implementation as /api/files/download but also accepts `filename` param
   // (in addition to `name`) for full contract compatibility.
-  app.get("/api/sandbox/download", requireAuth, (req: any, res: any) => {
+  // Supports one-time token auth (token= query param) in addition to Bearer auth.
+  app.get("/api/sandbox/download", (req: any, res: any) => {
     // Normalize `filename` → `name` so the /api/files/download handler accepts it
     if (req.query.filename && !req.query.name) {
       req.query.name = req.query.filename;
     }
     const qs = new URLSearchParams(req.query as Record<string, string>).toString();
+    // Use 307 (Temporary Redirect) to preserve query params (including token)
     res.redirect(307, `/api/files/download?${qs}`);
   });
 
