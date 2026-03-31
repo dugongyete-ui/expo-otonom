@@ -95,6 +95,8 @@ export function FilePanel({
         sandboxRes.status === "fulfilled" && sandboxRes.value.ok
           ? ((await sandboxRes.value.json()).files || [])
           : [];
+      // GridFS download URL: /api/files/:fileId → GET /api/files/:fileId in routes.ts
+      // getDownloadUrl() below prepends getApiBaseUrl() to make it absolute.
       const gridfsFiles: SessionFile[] =
         gridfsRes.status === "fulfilled" && gridfsRes.value.ok
           ? ((await gridfsRes.value.json()).files || []).map((f: any) => ({

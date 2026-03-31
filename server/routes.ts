@@ -564,38 +564,31 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({ sessions: [...activeSessions, ...historySessions] });
   });
 
-  // ─── Session sharing (persisted in MongoDB) ────────────────────────────────
-  const sharedSessions = new Map<string, boolean>();
+  // ─── Session sharing (persisted in MongoDB — no in-memory map) ──────────────
 
-  // Load persisted share state from MongoDB on startup
+  // Startup: verify Redis key format constants match their Python counterparts
   (async () => {
-    try {
-      const col = await getCollection("shared_sessions");
-      if (col) {
-        const docs = await (col as any).find({}, { projection: { _id: 0 } }).toArray();
-        for (const doc of docs) {
-          if (doc.session_id && typeof doc.is_shared === "boolean") {
-            sharedSessions.set(doc.session_id, doc.is_shared);
-          }
-        }
-        console.log(`[share] Loaded ${docs.length} shared sessions from MongoDB.`);
-        // Runtime assertion: verify Redis key format constants match their Python counterparts
-        // Python redis_stream_queue._stream_key(): f"stream:session:{session_id}"
-        // Python plan_act._is_session_stopped(): "agent:{}:stop".format(session_id)
-        const _testId = "test";
-        const _streamKey = `stream:session:${_testId}`;
-        const _stopKey = `agent:${_testId}:stop`;
-        if (_streamKey !== "stream:session:test" || _stopKey !== "agent:test:stop") {
-          throw new Error(`[BUG] Redis key format mismatch! stream=${_streamKey} stop=${_stopKey}`);
-        }
-        console.log(`[stream] Redis key formats verified: ${_streamKey.replace(_testId, "<sid>")}, ${_stopKey.replace(_testId, "<sid>")}`);
-      }
-    } catch (err: any) {
-      console.warn("[share] Failed to load share state from MongoDB:", err.message);
+    const _testId = "test";
+    const _streamKey = `stream:session:${_testId}`;
+    const _stopKey = `agent:${_testId}:stop`;
+    if (_streamKey !== "stream:session:test" || _stopKey !== "agent:test:stop") {
+      throw new Error(`[BUG] Redis key format mismatch! stream=${_streamKey} stop=${_stopKey}`);
     }
+    console.log(`[stream] Redis key formats verified: ${_streamKey.replace(_testId, "<sid>")}, ${_stopKey.replace(_testId, "<sid>")}`);
   })();
 
-  async function persistShareState(sessionId: string, isShared: boolean): Promise<void> {
+  async function getIsShared(sessionId: string): Promise<boolean> {
+    try {
+      const col = await getCollection("shared_sessions");
+      if (!col) return false;
+      const doc = await (col as any).findOne({ session_id: sessionId, is_shared: true });
+      return !!doc;
+    } catch {
+      return false;
+    }
+  }
+
+  async function setIsShared(sessionId: string, isShared: boolean): Promise<void> {
     try {
       const col = await getCollection("shared_sessions");
       if (col) {
@@ -606,23 +599,22 @@ export async function registerRoutes(app: any): Promise<Server> {
         );
       }
     } catch (err: any) {
-      console.warn("[share] Failed to persist share state to MongoDB:", err.message);
+      console.warn("[share] Failed to persist share state:", err.message);
     }
   }
 
   app.post("/api/sessions/:sessionId/share", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const { is_shared } = req.body || {};
-    sharedSessions.set(sessionId, !!is_shared);
-    await persistShareState(sessionId, !!is_shared);
+    await setIsShared(sessionId, !!is_shared);
     const shareUrl = `${req.protocol}://${req.get("host")}/share/${sessionId}`;
     res.json({ session_id: sessionId, is_shared: !!is_shared, share_url: !!is_shared ? shareUrl : null });
   });
 
-  app.get("/api/sessions/:sessionId/share", requireAuth, (req: any, res: any) => {
+  app.get("/api/sessions/:sessionId/share", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
+    const isShared = await getIsShared(sessionId);
     const session = activeAgentSessions.get(sessionId);
-    const isShared = sharedSessions.get(sessionId) || false;
     if (!session && !isShared) {
       return res.status(404).json({ error: "Session not found" });
     }
@@ -632,7 +624,7 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.get("/api/sessions/:sessionId/events", async (req: any, res: any) => {
     const { sessionId } = req.params;
-    const isShared = sharedSessions.get(sessionId) || false;
+    const isShared = await getIsShared(sessionId);
     if (!isShared) return res.status(403).json({ error: "Session is not shared" });
 
     // Serve from in-memory if session is still active
@@ -681,22 +673,8 @@ export async function registerRoutes(app: any): Promise<Server> {
     const { shareToken } = req.params;
     if (!shareToken) return res.status(400).json({ error: "shareToken is required" });
 
-    // Verify the session is actually shared
-    const isShared = sharedSessions.get(shareToken) || false;
-    if (!isShared) {
-      // Check MongoDB in case the in-memory map is stale (e.g., server restart)
-      try {
-        const col = await getCollection("shared_sessions");
-        if (col) {
-          const doc = await (col as any).findOne({ session_id: shareToken, is_shared: true });
-          if (!doc) return res.status(404).json({ error: "Shared session not found" });
-        } else {
-          return res.status(404).json({ error: "Shared session not found" });
-        }
-      } catch {
-        return res.status(404).json({ error: "Shared session not found" });
-      }
-    }
+    const isShared = await getIsShared(shareToken);
+    if (!isShared) return res.status(404).json({ error: "Shared session not found" });
 
     // Return session events (same logic as /api/sessions/:sessionId/events)
     const session = activeAgentSessions.get(shareToken);

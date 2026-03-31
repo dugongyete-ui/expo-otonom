@@ -176,6 +176,200 @@ export type NormalizedEvent =
   | NormalizedDoneEvent
   | NormalizedUnknownEvent;
 
+// ─── Flat message model (shared by useChat and any flat-chat consumers) ─────
+
+export interface FlatMessage {
+  id: string;
+  type: "user" | "assistant" | "tool" | "step" | "thinking" | "title";
+  content: string;
+  timestamp: Date;
+  toolName?: string;
+  toolArgs?: Record<string, any>;
+  toolCallId?: string;
+  toolStatus?: "calling" | "called" | "error";
+  isLoading?: boolean;
+}
+
+export interface FlatChatReducerCallbacks {
+  onSessionId?: (id: string) => void;
+  onPlan?: (plan: any, status?: string) => void;
+  onVncUrl?: (vncUrl: string, sandboxId: string, e2bSessionId: string) => void;
+  onScreenshot?: (screenshotB64: string, url?: string, title?: string) => void;
+  onFiles?: (files: Array<{ filename: string; download_url: string; mime?: string; sandbox_path?: string }>) => void;
+  onError?: (message: string) => void;
+  onWaitingForUser?: () => void;
+  onDone?: () => void;
+}
+
+/**
+ * Pure reducer: apply one NormalizedEvent to a FlatMessage[] array.
+ * Returns the new array (or the same reference if unchanged).
+ * Side-effects (session id, plan, vnc, files, errors) are routed via callbacks.
+ *
+ * Used by useChat.ts so the flat-message state-update logic lives here —
+ * not duplicated in each consumer.
+ */
+export function applyEventToFlatMessages(
+  prev: FlatMessage[],
+  ev: NormalizedEvent,
+  streamingIdRef: { current: string | null },
+  getToolLabel: (functionName: string) => string,
+  callbacks: FlatChatReducerCallbacks = {},
+): FlatMessage[] {
+  switch (ev.kind) {
+    case "session": {
+      callbacks.onSessionId?.(ev.sessionId);
+      return prev;
+    }
+
+    case "done": {
+      callbacks.onDone?.();
+      return prev;
+    }
+
+    case "waiting_for_user": {
+      callbacks.onWaitingForUser?.();
+      return prev;
+    }
+
+    case "message_start": {
+      const id = `msg-${Date.now()}`;
+      streamingIdRef.current = id;
+      return [...prev, { id, type: "assistant", content: ev.content, timestamp: new Date(), isLoading: true }];
+    }
+
+    case "message": {
+      return [...prev, { id: `msg-${Date.now()}`, type: "assistant", content: ev.content, timestamp: new Date(), isLoading: false }];
+    }
+
+    case "message_chunk": {
+      if (!ev.chunk) return prev;
+      const sid = streamingIdRef.current;
+      const idx = sid ? prev.findIndex(m => m.id === sid) : -1;
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], content: updated[idx].content + ev.chunk, isLoading: true };
+        return updated;
+      }
+      const lastIdx = prev.length - 1;
+      if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
+        const updated = [...prev];
+        updated[lastIdx] = { ...updated[lastIdx], content: updated[lastIdx].content + ev.chunk, isLoading: true };
+        return updated;
+      }
+      return prev;
+    }
+
+    case "message_end": {
+      const sid = streamingIdRef.current;
+      streamingIdRef.current = null;
+      const idx = sid ? prev.findIndex(m => m.id === sid) : -1;
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], isLoading: false };
+        return updated;
+      }
+      const lastIdx = prev.length - 1;
+      if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
+        const updated = [...prev];
+        updated[lastIdx] = { ...updated[lastIdx], isLoading: false };
+        return updated;
+      }
+      return prev;
+    }
+
+    case "message_correct": {
+      if (!ev.text) return prev;
+      const lastAssistantIdx = [...prev].reverse().findIndex(m => m.type === "assistant");
+      if (lastAssistantIdx < 0) return prev;
+      const idx = prev.length - 1 - lastAssistantIdx;
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], content: ev.text, isLoading: false };
+      return updated;
+    }
+
+    case "tool": {
+      const label = getToolLabel(ev.functionName);
+      const toolMsg: FlatMessage = {
+        id: ev.callId,
+        type: "tool",
+        content: label,
+        timestamp: new Date(),
+        toolName: ev.functionName,
+        toolArgs: ev.args,
+        toolCallId: ev.callId,
+        toolStatus: ev.status,
+        isLoading: ev.status === "calling",
+      };
+      const existingIdx = prev.findIndex(m => m.id === ev.callId);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = { ...updated[existingIdx], ...toolMsg };
+        return updated;
+      }
+      return [...prev, toolMsg];
+    }
+
+    case "tool_stream": {
+      if (!ev.callId) return prev;
+      const idx = prev.findIndex(m => m.id === ev.callId);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], content: updated[idx].content + ev.chunk, isLoading: true };
+        return updated;
+      }
+      return prev;
+    }
+
+    case "step": {
+      const stepContent = ev.step?.description || ev.step?.title || "Processing...";
+      return [...prev, { id: `msg-${Date.now()}`, type: "step", content: stepContent, timestamp: new Date(), isLoading: true }];
+    }
+
+    case "thinking": {
+      return [...prev, { id: `msg-thinking-${Date.now()}`, type: "thinking", content: ev.text, timestamp: new Date(), isLoading: true }];
+    }
+
+    case "title": {
+      if (!ev.title) return prev;
+      return [...prev, { id: `msg-title-${Date.now()}`, type: "title", content: ev.title, timestamp: new Date() }];
+    }
+
+    case "notify": {
+      return [...prev, { id: `msg-notify-${Date.now()}`, type: "assistant", content: ev.text, timestamp: new Date() }];
+    }
+
+    case "plan": {
+      callbacks.onPlan?.(ev.plan, ev.status);
+      return prev;
+    }
+
+    case "vnc_stream_url": {
+      callbacks.onVncUrl?.(ev.vncUrl, ev.sandboxId, ev.e2bSessionId);
+      return prev;
+    }
+
+    case "screenshot": {
+      callbacks.onScreenshot?.(ev.screenshotB64, ev.url, ev.title);
+      return prev;
+    }
+
+    case "files": {
+      callbacks.onFiles?.(ev.files);
+      return prev;
+    }
+
+    case "error": {
+      callbacks.onError?.(ev.message);
+      return prev;
+    }
+
+    case "unknown":
+    default:
+      return prev;
+  }
+}
+
 // ─── Core parser — single source of truth ───────────────────────────────────
 
 /**
