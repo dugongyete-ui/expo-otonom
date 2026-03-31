@@ -392,6 +392,64 @@ export function applyEventToFlatMessages(
       return prev;
     }
 
+    case "todo_update": {
+      if (ev.items && ev.items.length > 0) {
+        const summary = ev.items
+          .map((item: any) => `• [${item.status || "?"}] ${item.text}`)
+          .join("\n");
+        return [...prev, {
+          id: `msg-todo-${Date.now()}`,
+          type: "assistant" as const,
+          content: `Todo list updated:\n${summary}`,
+          timestamp: new Date(),
+        }];
+      }
+      return prev;
+    }
+
+    case "task_update": {
+      if (ev.task) {
+        const label = ev.task.title || ev.task.description || "";
+        const status = ev.task.status ? ` [${ev.task.status}]` : "";
+        return [...prev, {
+          id: `msg-task-${Date.now()}`,
+          type: "assistant" as const,
+          content: label ? `Task${status}: ${label}` : `Task updated${status}`,
+          timestamp: new Date(),
+        }];
+      }
+      return prev;
+    }
+
+    case "search_results": {
+      if (ev.results && ev.results.length > 0) {
+        const lines = ev.results.map((r: any) => `• [${r.title}](${r.url})`).join("\n");
+        const queryLabel = ev.query ? `Results for "${ev.query}":\n` : "Search results:\n";
+        return [...prev, {
+          id: `msg-search-${Date.now()}`,
+          type: "assistant" as const,
+          content: queryLabel + lines,
+          timestamp: new Date(),
+        }];
+      }
+      return prev;
+    }
+
+    case "shell_output": {
+      if (ev.output) {
+        return [...prev, {
+          id: `msg-shell-${ev.callId || Date.now()}`,
+          type: "tool" as const,
+          content: ev.output,
+          timestamp: new Date(),
+          toolName: "shell",
+          toolCallId: ev.callId,
+          toolStatus: "called" as const,
+        }];
+      }
+      return prev;
+    }
+
     case "unknown":
     default:
       return prev;

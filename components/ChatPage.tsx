@@ -594,10 +594,13 @@ export function ChatPage({
 
       case "todo_update": {
         if (ev.items && ev.items.length > 0) {
+          const summary = ev.items
+            .map((item: any) => `• [${item.status || "?"}] ${item.text}`)
+            .join("\n");
           const todoMsg: ChatMessage = {
             id: `msg_${Date.now()}_todo`,
             role: "assistant",
-            content: "",
+            content: `Todo list updated:\n${summary}`,
             timestamp: Date.now(),
             todoItems: ev.items,
           };
@@ -605,7 +608,7 @@ export function ChatPage({
             const existing = prev.findIndex(m => m.todoItems !== undefined);
             if (existing >= 0) {
               const updated = [...prev];
-              updated[existing] = { ...updated[existing], todoItems: ev.items };
+              updated[existing] = { ...updated[existing], todoItems: ev.items, content: `Todo list updated:\n${summary}` };
               return updated;
             }
             return [...prev, todoMsg];
@@ -616,10 +619,12 @@ export function ChatPage({
 
       case "task_update": {
         if (ev.task) {
+          const label = ev.task.title || ev.task.description || "";
+          const status = ev.task.status ? ` [${ev.task.status}]` : "";
           const taskMsg: ChatMessage = {
             id: `msg_${Date.now()}_task`,
             role: "assistant",
-            content: ev.task.description || ev.task.title || "",
+            content: label ? `Task${status}: ${label}` : `Task updated${status}`,
             timestamp: Date.now(),
             taskUpdate: ev.task,
           };
@@ -630,10 +635,12 @@ export function ChatPage({
 
       case "search_results": {
         if (ev.results && ev.results.length > 0) {
+          const lines = ev.results.map((r: any) => `• ${r.title} — ${r.url}`).join("\n");
+          const queryLabel = ev.query ? `Hasil pencarian "${ev.query}":\n` : "Hasil pencarian:\n";
           const searchMsg: ChatMessage = {
             id: `msg_${Date.now()}_search`,
             role: "assistant",
-            content: "",
+            content: queryLabel + lines,
             timestamp: Date.now(),
             searchResults: ev.results,
             searchQuery: ev.query,
