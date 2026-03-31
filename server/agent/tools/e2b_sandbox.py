@@ -713,8 +713,13 @@ def reset_sandbox() -> Optional[Any]:
 
 
 def keepalive() -> bool:
-    """Send a keepalive ping to the sandbox to extend its lifetime."""
-    sb = get_sandbox()
+    """Send a keepalive ping to the sandbox to extend its lifetime.
+
+    Uses the already-initialised _sandbox global directly so it never
+    creates a new sandbox when none has been acquired yet.
+    """
+    with _sandbox_lock:
+        sb = _sandbox
     if sb is None:
         return False
     try:

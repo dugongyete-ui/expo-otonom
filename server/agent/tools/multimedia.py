@@ -174,6 +174,42 @@ class MultimediaTool(BaseTool):
                 f"npx mmdc -i {inp_q} -o {out_q} 2>&1",
                 timeout=120,
             )
+            if _file_exists(output_path):
+                return ToolResult(
+                    success=True,
+                    message=f"Diagram rendered successfully: {output_path}",
+                    data={"output_path": output_path, "input_path": input_path},
+                )
+            # mmdc failed — fall back to Graphviz by converting Mermaid to a simple dot graph
+            _mmd_to_dot_script = (
+                "import sys, re; "
+                "src = open(sys.argv[1]).read(); "
+                "nodes = re.findall(r'([A-Za-z0-9_]+)\\s*-->\\s*\\|?[^|]*\\|?\\s*([A-Za-z0-9_]+)', src); "
+                "edges = '\\n'.join(f'  {a} -> {b};' for a,b in nodes) or '  placeholder;'; "
+                "open(sys.argv[2], 'w').write(f'digraph G {{\\n{edges}\\n}}')"
+            )
+            dot_tmp = output_path.replace(".png", "_fallback.dot")
+            _shell_run(
+                f"python3 -c {shlex.quote(_mmd_to_dot_script)} {inp_q} {shlex.quote(dot_tmp)} 2>&1",
+                timeout=15,
+            )
+            gv_check = _shell_run("which dot 2>/dev/null && echo ok", timeout=10)
+            if "ok" not in gv_check["stdout"]:
+                _shell_run("apt-get install -y -q graphviz 2>/dev/null || true", timeout=120)
+            gv_result = _shell_run(f"dot -Tpng {shlex.quote(dot_tmp)} -o {out_q} 2>&1", timeout=60)
+            if _file_exists(output_path):
+                return ToolResult(
+                    success=True,
+                    message=f"Diagram rendered via Graphviz fallback (mmdc unavailable): {output_path}",
+                    data={"output_path": output_path, "input_path": input_path, "engine": "graphviz_fallback"},
+                )
+            return ToolResult(
+                success=False,
+                message=(
+                    f"Diagram rendering failed — mmdc error: {result['stderr'] or result['stdout']}; "
+                    f"Graphviz fallback error: {gv_result['stderr'] or gv_result['stdout']}"
+                ),
+            )
         else:
             # GraphViz dot for .dot/.gv and fallback
             check = _shell_run("which dot 2>/dev/null && echo ok", timeout=10)

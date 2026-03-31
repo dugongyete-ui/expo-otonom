@@ -378,10 +378,16 @@ class DzeckAgent:
             store = await _get_store()
             if store:
                 await store.save_event(self.session_id, event_type, data)
+        except RuntimeError as _pe:
+            import logging as _pelog
+            _pelog.getLogger(__name__).warning(
+                "[agent_flow] _persist_event failed — event not saved (session=%s type=%s): %s",
+                self.session_id, event_type, _pe,
+            )
         except Exception as _pe:
             import logging as _pelog
-            _pelog.getLogger(__name__).debug(
-                "[agent_flow] _persist_event failed (session=%s type=%s): %s",
+            _pelog.getLogger(__name__).error(
+                "[agent_flow] _persist_event unexpected error (session=%s type=%s): %s",
                 self.session_id, event_type, _pe,
             )
 

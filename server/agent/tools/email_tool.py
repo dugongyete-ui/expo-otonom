@@ -84,14 +84,16 @@ class EmailTool(BaseTool):
                 return False
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            try:
+                asyncio.get_running_loop()
+                # Called from within a running event loop — run coroutine in a thread
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     fut = pool.submit(asyncio.run, _send())
                     ok = fut.result(timeout=60)
-            else:
-                ok = loop.run_until_complete(_send())
+            except RuntimeError:
+                # No running event loop — safe to use asyncio.run()
+                ok = asyncio.run(_send())
         except Exception as e:
             return ToolResult(
                 success=False,

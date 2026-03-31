@@ -549,14 +549,13 @@ def file_upload_to_storage(
             )
 
         try:
-            _loop = _asyncio.get_event_loop()
-            if _loop.is_running():
-                import concurrent.futures as _cf
-                with _cf.ThreadPoolExecutor() as _pool:
-                    file_id = _pool.submit(_asyncio.run, _do_upload()).result()
-            else:
-                file_id = _loop.run_until_complete(_do_upload())
+            _asyncio.get_running_loop()
+            # Running inside an event loop — offload to a thread
+            import concurrent.futures as _cf
+            with _cf.ThreadPoolExecutor() as _pool:
+                file_id = _pool.submit(_asyncio.run, _do_upload()).result()
         except RuntimeError:
+            # No running event loop — safe to use asyncio.run()
             file_id = _asyncio.run(_do_upload())
 
         download_url = f"/api/files/{file_id}"
@@ -597,14 +596,13 @@ def file_list_session_files(**kwargs) -> ToolResult:
             return await _gridfs_list(session_id=session_id)
 
         try:
-            _loop = _asyncio.get_event_loop()
-            if _loop.is_running():
-                import concurrent.futures as _cf
-                with _cf.ThreadPoolExecutor() as _pool:
-                    file_list = _pool.submit(_asyncio.run, _do_list()).result()
-            else:
-                file_list = _loop.run_until_complete(_do_list())
+            _asyncio.get_running_loop()
+            # Running inside an event loop — offload to a thread
+            import concurrent.futures as _cf
+            with _cf.ThreadPoolExecutor() as _pool:
+                file_list = _pool.submit(_asyncio.run, _do_list()).result()
         except RuntimeError:
+            # No running event loop — safe to use asyncio.run()
             file_list = _asyncio.run(_do_list())
 
         files_data = [f.to_dict() for f in file_list]
