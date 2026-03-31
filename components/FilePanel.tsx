@@ -17,7 +17,7 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getApiBaseUrl } from "@/lib/api-service";
+import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { CodeBlock } from "@/components/CodeBlock";
 import { MarkdownText } from "@/components/MarkdownText";
 
@@ -83,7 +83,6 @@ export function FilePanel({
       const baseUrl = getApiBaseUrl();
       const headers: Record<string, string> = {};
       try {
-        const { getStoredToken } = require("@/lib/api-service");
         const tok = getStoredToken?.();
         if (tok) headers["Authorization"] = `Bearer ${tok}`;
       } catch {}
