@@ -431,6 +431,94 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+/**
+ * Sandbox heartbeat check — runs every 5 minutes.
+ * For each running session, pings the E2B sandbox with a simple command.
+ * If the sandbox has expired (E2B returns "not found" or times out),
+ * automatically recreates a new sandbox, updates session state, and
+ * emits a fresh `vnc_stream_url` event to connected WS clients.
+ */
+setInterval(async () => {
+  const apiKey = getE2BApiKey();
+  if (!apiKey) return;
+
+  for (const [id, session] of activeSessions.entries()) {
+    if (session.status !== "running" || !session._sandbox) continue;
+
+    try {
+      const sandbox = session._sandbox;
+      await (sandbox as any).commands.run("echo heartbeat", { timeoutMs: 8000 });
+      session.lastActivity = Date.now();
+    } catch (err: any) {
+      const isExpired =
+        err?.message?.includes("not found") ||
+        err?.message?.includes("404") ||
+        err?.message?.includes("sandbox not found") ||
+        err?.message?.includes("timed out") ||
+        err?.code === "ETIMEDOUT";
+
+      if (isExpired) {
+        console.warn(`[E2B-Desktop] Heartbeat: session ${id} sandbox ${session.sandboxId} has expired — recreating...`);
+        session.status = "starting";
+        session.error = undefined;
+        sandboxInstances.delete(session.sandboxId);
+
+        // Attempt to recreate the sandbox
+        try {
+          const newResult = await createDesktopSandbox(session.resolution, session.timeout);
+          if (newResult) {
+            const { streamUrl, vncUrl } = await bootstrapDesktop(newResult.sandboxId, "https://www.google.com");
+            session.sandboxId = newResult.sandboxId;
+            session._sandbox = newResult.sandbox;
+            session.streamUrl = streamUrl;
+            session.vncUrl = vncUrl;
+            session.wsProxyUrl = streamUrl;
+            session.status = "running";
+            session.createdAt = Date.now();
+            session.lastActivity = Date.now();
+            touchSession(session);
+            console.log(`[E2B-Desktop] Session ${id} recreated with new sandbox ${newResult.sandboxId}`);
+
+            // Notify clients with the fresh VNC stream URL
+            const vncEvent = JSON.stringify({
+              type: "vnc_stream_url",
+              session_id: id,
+              sandbox_id: newResult.sandboxId,
+              stream_url: streamUrl,
+              vnc_url: vncUrl,
+              reason: "sandbox_recreated_after_expiry",
+            });
+            for (const client of session._wsClients) {
+              try { client.send(vncEvent); } catch {}
+            }
+          } else {
+            console.error(`[E2B-Desktop] Heartbeat: failed to recreate sandbox for session ${id}`);
+            session.status = "error";
+            session.error = "Sandbox kedaluwarsa dan gagal dibuat ulang. Buat sesi baru.";
+            persistSessionToRedis(session).catch(() => {});
+            // Notify clients of failure
+            const errEvent = JSON.stringify({
+              type: "sandbox_expired",
+              session_id: id,
+              message: session.error,
+            });
+            for (const client of session._wsClients) {
+              try { client.send(errEvent); } catch {}
+            }
+          }
+        } catch (recreateErr: any) {
+          console.error(`[E2B-Desktop] Heartbeat: sandbox recreation error for session ${id}: ${recreateErr.message}`);
+          session.status = "error";
+          session.error = `Sandbox kedaluwarsa dan error saat dibuat ulang: ${recreateErr.message}`;
+          persistSessionToRedis(session).catch(() => {});
+        }
+      } else {
+        console.warn(`[E2B-Desktop] Heartbeat error for session ${id}: ${err?.message}`);
+      }
+    }
+  }
+}, 5 * 60 * 1000);
+
 // ─── Exported helpers for routes.ts ──────────────────────────────────────────
 
 /**

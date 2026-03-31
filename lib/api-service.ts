@@ -1,3 +1,5 @@
+import { getApiUrl } from "./query-client";
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -88,7 +90,16 @@ class ApiService {
   private baseUrl: string;
 
   constructor(baseUrl: string = "") {
-    this.baseUrl = baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+    // Use getApiUrl() as single source of truth for URL resolution.
+    // Falls back to window.location.origin for web-only environments where
+    // getApiUrl() returns a relative/empty string.
+    if (baseUrl) {
+      this.baseUrl = baseUrl;
+    } else {
+      const resolved = getApiUrl();
+      // getApiUrl() always returns a full URL with trailing slash; strip the trailing slash for baseUrl
+      this.baseUrl = resolved.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
+    }
   }
 
   async chat(
@@ -537,5 +548,6 @@ class ApiService {
 export const apiService = new ApiService();
 
 export function getApiBaseUrl(): string {
-  return typeof window !== "undefined" ? window.location.origin : "";
+  const resolved = getApiUrl();
+  return resolved.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
 }

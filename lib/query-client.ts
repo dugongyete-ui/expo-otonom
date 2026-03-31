@@ -2,19 +2,36 @@ import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 /**
- * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
- * @returns {string} The API base URL
+ * Gets the base URL for the Express API server (e.g., "https://my-app.replit.dev")
+ *
+ * Resolution order:
+ *   1. EXPO_PUBLIC_DOMAIN env var (explicit domain, e.g., your-project.replit.dev)
+ *   2. Browser's window.location.origin — used in web/preview mode when running
+ *      inside the Replit web preview iframe (relative URL makes sense)
+ *   3. localhost:{EXPO_PUBLIC_API_PORT|5000} — local dev / Expo Go fallback
+ *
+ * @returns {string} The API base URL with trailing slash
  */
 export function getApiUrl(): string {
   const host = process.env.EXPO_PUBLIC_DOMAIN;
 
   if (host) {
-    // Use HTTPS for remote domains
+    // Use HTTPS for remote/Replit domains
     const url = new URL(`https://${host}`);
     return url.href;
   }
 
-  // Fallback to localhost for local development
+  // In web/browser environments (Replit preview, web app), use the same origin
+  // so relative API calls work without needing EXPO_PUBLIC_DOMAIN to be set.
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const origin = window.location.origin;
+    // Only use window.location if it looks like a real HTTP(S) origin (not file://)
+    if (origin.startsWith("http://") || origin.startsWith("https://")) {
+      return origin + "/";
+    }
+  }
+
+  // Fallback to localhost for local development and Expo Go (native)
   const port = process.env.EXPO_PUBLIC_API_PORT || "5000";
   return `http://localhost:${port}/`;
 }

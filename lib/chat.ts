@@ -9,7 +9,7 @@ export async function* streamChat(
   apiUrl: string,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  const response = await fetch(`${apiUrl}api/chat`, {
+  const response = await fetch(`${apiUrl}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
@@ -196,7 +196,7 @@ export async function* streamAgent(
   apiUrl: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
-  const response = await fetch(`${apiUrl}api/agent`, {
+  const response = await fetch(`${apiUrl}/api/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

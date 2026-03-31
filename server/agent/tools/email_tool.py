@@ -53,7 +53,18 @@ class EmailTool(BaseTool):
         html: bool = False,
         cc: Optional[str] = None,
     ) -> ToolResult:
+        import os
         import asyncio
+
+        # Check email configuration upfront and return clear actionable error
+        if not os.environ.get("EMAIL_HOST", "").strip():
+            return ToolResult(
+                success=False,
+                message=(
+                    "Email tidak dikonfigurasi — set EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD di .env "
+                    "(dan opsional EMAIL_PORT, EMAIL_FROM) lalu restart server."
+                ),
+            )
 
         async def _send():
             try:
@@ -96,8 +107,9 @@ class EmailTool(BaseTool):
         return ToolResult(
             success=False,
             message=(
-                "Email could not be sent. "
-                "Check that EMAIL_HOST, EMAIL_USER, and EMAIL_PASSWORD are configured in the server environment."
+                "Email gagal dikirim. Periksa konfigurasi SMTP: "
+                "EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD, EMAIL_PORT di .env. "
+                "Pastikan kredensial SMTP benar dan server SMTP dapat dijangkau."
             ),
         )
 

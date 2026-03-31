@@ -53,8 +53,8 @@ Dzeck AI is a full-stack Expo/React Native AI agent application that runs autono
 - `lib/auth-service.ts` — JWT auth API client with SecureStore/localStorage
 - `lib/i18n.ts` — i18n module (English + Indonesian)
 - `lib/useChat.ts` — Chat/agent hook with VNC URL + browser_screenshot handling
-- `lib/api-service.ts` — API service client (chat, agent, sessions)
-- `lib/agent-service.ts` — Agent SSE service with type definitions (incl. browser_screenshot, shell_output)
+- `lib/api-service.ts` — API service client (chat, agent, sessions) — uses `getApiUrl()` from query-client.ts
+- `lib/query-client.ts` — Single source of truth for API base URL resolution (`getApiUrl()`)
 - `lib/e2b-service.ts` — E2B sandbox client-side service
 
 ## Database Configuration

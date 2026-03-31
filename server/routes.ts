@@ -940,6 +940,19 @@ export async function registerRoutes(app: any): Promise<Server> {
       return res.status(400).json({ error: "message or messages array is required" });
     }
 
+    // ── Concurrency guard: limit active agent runs per user ────────────────────
+    const maxConcurrent = parseInt(process.env.MAX_CONCURRENT_AGENTS_PER_USER || "1", 10);
+    const userActiveSessions = Array.from(activeAgentSessions.values()).filter(
+      (s: any) => !s.done && (s as any)._userId === userId,
+    );
+    if (userActiveSessions.length >= maxConcurrent) {
+      return res.status(429).json({
+        error: `Anda sudah memiliki ${userActiveSessions.length} agent yang sedang berjalan. Tunggu hingga selesai sebelum memulai yang baru. (Maks: ${maxConcurrent} per pengguna)`,
+        active_sessions: userActiveSessions.map((s: any) => (s as any)._sessionId),
+      });
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     setupSSEHeaders(res);
     res.flushHeaders();
 
@@ -1087,8 +1100,12 @@ export async function registerRoutes(app: any): Promise<Server> {
       startedAt: sessionStartedAt,
       stderrBuffer: "",
     };
+    // Set _sessionId and _userId BEFORE inserting into the map to prevent
+    // a race where a concurrent request sees the session without _userId set
+    // and bypasses the concurrency guard.
     (session as any)._sessionId = sid;
     (session as any)._sandboxId = dzeckSandboxId || null;
+    (session as any)._userId = userId;
     activeAgentSessions.set(sid, session);
 
     // Activity-based inactivity watchdog: force-close if no SSE events are emitted
@@ -1115,8 +1132,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     _resetInactivityTimer();
 
     // Sync new session to MongoDB sessions collection (unified)
-    const sessionUserId: string = req.user?.id || "unknown";
-    (session as any)._userId = sessionUserId;
+    const sessionUserId: string = userId;
 
     // Link agent session to E2B desktop sandbox for pause/resume correlation
     if (dzeckSandboxId) {
@@ -2778,6 +2794,15 @@ print(json.dumps(results))
         todo: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
         task: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
         idle: { status: importsOk ? "ready" : "degraded", requires: "none", available: importsOk },
+        email: {
+          status: process.env.EMAIL_HOST ? "ready" : "unconfigured",
+          requires: "EMAIL_HOST",
+          available: !!process.env.EMAIL_HOST,
+          configured: !!process.env.EMAIL_HOST,
+          message: process.env.EMAIL_HOST
+            ? `SMTP configured (${process.env.EMAIL_HOST}:${process.env.EMAIL_PORT || 587})`
+            : "EMAIL_HOST not set — tool will return clear error when used",
+        },
         mcp: { status: "ready", requires: "none", available: true },
       },
       e2b_enabled: e2bOn,

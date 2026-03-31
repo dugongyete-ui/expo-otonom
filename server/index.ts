@@ -6,6 +6,7 @@ import { registerAuthRoutes } from "./auth-routes";
 import * as fs from "fs";
 import * as path from "path";
 import { execFile as _execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
 (function loadDotEnv() {
   const envPath = path.resolve(process.cwd(), ".env");
@@ -36,6 +37,53 @@ if (process.env.E2B_API_KEY) {
   console.warn("[env] To enable E2B sandbox, set E2B_API_KEY in .env or environment variables");
 }
 
+// Startup validation: warn about missing or misconfigured env vars
+(function validateEnv() {
+  const warnings: string[] = [];
+
+  if (!process.env.CEREBRAS_API_KEY) {
+    warnings.push("CEREBRAS_API_KEY — required for AI chat and agent. Get from https://cloud.cerebras.ai/");
+  }
+  if (!process.env.MONGODB_URI) {
+    warnings.push("MONGODB_URI — required for session persistence. Agent will run without history.");
+  }
+  if (!process.env.MONGO_DB_NAME) {
+    warnings.push("MONGO_DB_NAME — database name not set, defaulting to 'manus'. Add MONGO_DB_NAME=manus to .env");
+    process.env.MONGO_DB_NAME = "manus";
+  }
+  if (!process.env.AUTH_PROVIDER) {
+    warnings.push("AUTH_PROVIDER — not set, defaulting to 'none' (auto-login). Add AUTH_PROVIDER=none to .env");
+    process.env.AUTH_PROVIDER = "none";
+  }
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+    // Auto-generate JWT secret if missing (session-scoped — restarts will invalidate tokens)
+    process.env.JWT_SECRET = randomBytes(32).toString("hex");
+    warnings.push("JWT_SECRET — not set or too short. Generated a random secret for this session. Set JWT_SECRET in .env for persistence across restarts.");
+  }
+  if (!process.env.SEARCH_PROVIDER) {
+    warnings.push("SEARCH_PROVIDER — not set, defaulting to 'bing_web'. Add SEARCH_PROVIDER=bing_web to .env");
+    process.env.SEARCH_PROVIDER = "bing_web";
+  }
+  if (!process.env.LOG_LEVEL) {
+    process.env.LOG_LEVEL = "INFO";
+  }
+  if (!process.env.CORS_ORIGINS && !process.env.APP_DOMAIN) {
+    warnings.push("CORS_ORIGINS / APP_DOMAIN — not set. CORS will only allow localhost and Expo Go. Set CORS_ORIGINS or APP_DOMAIN for production.");
+  }
+  if (!process.env.EMAIL_HOST) {
+    warnings.push("EMAIL_HOST — not set. Email tool will return a clear error when used. Set EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD, EMAIL_PORT to enable.");
+  }
+
+  if (warnings.length > 0) {
+    console.warn("[env] Startup configuration warnings (%d):", warnings.length);
+    for (const w of warnings) {
+      console.warn(`[env]   ⚠  ${w}`);
+    }
+  } else {
+    console.log("[env] All required env vars are set.");
+  }
+})();
+
 const app = express();
 const log = console.log;
 
@@ -61,12 +109,32 @@ function setupCors(app: express.Application) {
     }
 
     const origin = req.header("origin");
+    const isDev = process.env.NODE_ENV !== "production";
 
     const isLocalhost =
       origin?.startsWith("http://localhost:") ||
       origin?.startsWith("http://127.0.0.1:");
 
-    if (origin && (origins.has(origin) || isLocalhost)) {
+    // Allow Expo Go (exp:// scheme) and React Native Metro bundler origins
+    const isExpoGo =
+      origin?.startsWith("exp://") ||
+      origin?.startsWith("exps://");
+
+    // Allow all Replit tunnel/preview origins in dev mode
+    const isReplitTunnel =
+      isDev &&
+      (origin?.endsWith(".replit.dev") ||
+        origin?.endsWith(".repl.co") ||
+        origin?.endsWith(".picard.replit.dev"));
+
+    const isAllowed =
+      !origin ||
+      origins.has(origin) ||
+      isLocalhost ||
+      isExpoGo ||
+      isReplitTunnel;
+
+    if (isAllowed && origin) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header(
         "Access-Control-Allow-Methods",

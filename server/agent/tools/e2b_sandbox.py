@@ -243,11 +243,17 @@ def get_cached_file_path(filepath: str) -> Optional[str]:
 
 
 def _is_sandbox_alive(sb: Any) -> bool:
-    """Quick health check for the sandbox."""
+    """Quick health check for the sandbox.
+    Returns False if the sandbox has expired or is unreachable."""
     try:
         result = sb.commands.run("echo alive", timeout=8)
         return result.exit_code == 0 and "alive" in (result.stdout or "")
-    except Exception:
+    except Exception as e:
+        err_str = str(e).lower()
+        if any(kw in err_str for kw in ("not found", "404", "sandbox not found", "expired", "does not exist")):
+            logger.warning("[E2B] Sandbox has expired or been deleted: %s", e)
+        else:
+            logger.debug("[E2B] Sandbox health check failed: %s", e)
         return False
 
 
