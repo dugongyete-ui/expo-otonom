@@ -29,6 +29,14 @@ from server.agent.tools.desktop import (
     DesktopTool,
     desktop_open_app, desktop_app_type, desktop_app_screenshot,
 )
+from server.agent.tools.multimedia import (
+    MultimediaTool,
+    export_pdf, render_diagram, speech_to_text, export_slides, upload_file,
+)
+from server.agent.tools.email_tool import (
+    EmailTool,
+    send_email,
+)
 
 
 # ─── Singleton tool instances ─────────────────────────────────────────────────
@@ -43,6 +51,8 @@ _desktop_tool = DesktopTool()
 _todo_tool = TodoTool()
 _task_tool = TaskTool()
 _idle_tool = IdleTool()
+_multimedia_tool = MultimediaTool()
+_email_tool = EmailTool()
 
 ALL_TOOL_INSTANCES = [
     _shell_tool,
@@ -55,6 +65,8 @@ ALL_TOOL_INSTANCES = [
     _todo_tool,
     _task_tool,
     _idle_tool,
+    _multimedia_tool,
+    _email_tool,
 ]
 
 
@@ -117,6 +129,12 @@ TOOLS: Dict[str, Callable] = {
     "task_complete": task_complete,
     "task_list": task_list,
     "idle": idle,
+    "export_pdf": export_pdf,
+    "render_diagram": render_diagram,
+    "speech_to_text": speech_to_text,
+    "export_slides": export_slides,
+    "upload_file": upload_file,
+    "send_email": send_email,
 }
 
 TOOL_ALIASES: Dict[str, str] = {
@@ -166,6 +184,12 @@ TOOLKIT_MAP: Dict[str, str] = {
     "todo_write": "todo", "todo_update": "todo", "todo_read": "todo",
     "task_create": "task", "task_complete": "task", "task_list": "task",
     "idle": "idle",
+    "export_pdf": "multimedia",
+    "render_diagram": "multimedia",
+    "speech_to_text": "multimedia",
+    "export_slides": "multimedia",
+    "upload_file": "multimedia",
+    "send_email": "email",
 }
 
 

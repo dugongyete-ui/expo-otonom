@@ -90,6 +90,33 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
   })();
 
+  // Available model/provider options.
+  // These can be overridden by setting AVAILABLE_MODELS and AVAILABLE_PROVIDERS env vars
+  // (JSON arrays of {label, value} pairs).
+  const DEFAULT_MODELS = [
+    { label: "Qwen 3 235B (Default)", value: "qwen-3-235b-a22b-instruct-2507" },
+    { label: "Qwen 3 32B", value: "qwen-3-32b" },
+    { label: "Llama 4 Scout", value: "llama-4-scout-17b-16e-instruct" },
+    { label: "Llama 4 Maverick", value: "llama-4-maverick-17b-128e-instruct" },
+    { label: "Llama 3.3 70B", value: "llama-3.3-70b" },
+  ];
+  const DEFAULT_PROVIDERS = [
+    { label: "Cerebras", value: "cerebras" },
+    { label: "OpenAI", value: "openai" },
+    { label: "Anthropic", value: "anthropic" },
+  ];
+  const DEFAULT_SEARCH_PROVIDERS = [
+    { label: "Bing Web", value: "bing_web" },
+    { label: "Google", value: "google" },
+    { label: "DuckDuckGo", value: "duckduckgo" },
+  ];
+
+  function _parseJsonEnvList(envVar: string, fallback: Array<{ label: string; value: string }>) {
+    const raw = process.env[envVar];
+    if (!raw) return fallback;
+    try { return JSON.parse(raw) as Array<{ label: string; value: string }>; } catch { return fallback; }
+  }
+
   app.get("/api/config", (_req: any, res: any) => {
     res.json({
       CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
@@ -106,10 +133,14 @@ export async function registerRoutes(app: any): Promise<Server> {
       MCP_SERVER_URL: process.env.MCP_SERVER_URL || "",
       MCP_AUTH_TOKEN: process.env.MCP_AUTH_TOKEN ? "***" : "",
       EMAIL_ENABLED: !!(process.env.EMAIL_HOST),
+      // Dynamic lists consumed by SettingsPanel (can be overridden via env vars)
+      available_models: _parseJsonEnvList("AVAILABLE_MODELS", DEFAULT_MODELS),
+      available_providers: _parseJsonEnvList("AVAILABLE_PROVIDERS", DEFAULT_PROVIDERS),
+      available_search_providers: _parseJsonEnvList("AVAILABLE_SEARCH_PROVIDERS", DEFAULT_SEARCH_PROVIDERS),
     });
   });
 
-  app.put("/api/config", requireAuth, async (req: any, res: any) => {
+  app.put("/api/config", requireAdmin, async (req: any, res: any) => {
     const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
     const updates: Record<string, string> = {};
 
@@ -151,6 +182,49 @@ export async function registerRoutes(app: any): Promise<Server> {
     });
   });
 
+  // ─── Per-user model/provider preferences ─────────────────────────────────
+  // GET  /api/user/prefs  — get current user's stored preferences
+  // PUT  /api/user/prefs  — save current user's preferences to MongoDB
+
+  app.get("/api/user/prefs", requireAuth, async (req: any, res: any) => {
+    const userId: string = req.user?.id || "";
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const col = await getCollection("user_preferences");
+      const doc = col ? await (col as any).findOne({ user_id: userId }, { projection: { _id: 0, user_id: 0 } }) : null;
+      res.json(doc || {});
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to load preferences: " + err.message });
+    }
+  });
+
+  app.put("/api/user/prefs", requireAuth, async (req: any, res: any) => {
+    const userId: string = req.user?.id || "";
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const allowed = ["model", "modelProvider", "searchProvider", "theme", "language"];
+    const updates: Record<string, string> = {};
+    for (const key of allowed) {
+      if (req.body && typeof req.body[key] === "string" && req.body[key].trim()) {
+        updates[key] = req.body[key].trim();
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid preference fields. Allowed: " + allowed.join(", ") });
+    }
+    try {
+      const col = await getCollection("user_preferences");
+      if (!col) return res.status(503).json({ error: "Database unavailable" });
+      await (col as any).updateOne(
+        { user_id: userId },
+        { $set: { ...updates, user_id: userId, updated_at: new Date() } },
+        { upsert: true },
+      );
+      res.json({ updated: updates });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to save preferences: " + err.message });
+    }
+  });
+
   // ─── MCP Config Management API ────────────────────────────────────────────
   // GET  /api/mcp/config  — list all configured MCP servers
   // POST /api/mcp/config  — add or update an MCP server
@@ -170,9 +244,17 @@ export async function registerRoutes(app: any): Promise<Server> {
         return res.json({ servers: [] });
       }
       const servers = await (col as any).find({}, { projection: { _id: 0 } }).toArray();
+      // Mask auth_token value but include has_auth_token flag so UI can show
+      // "token configured" without revealing or accidentally overwriting the real value.
       const masked = servers.map((s: any) => ({
-        ...s,
-        auth_token: s.auth_token ? "***" : "",
+        name: s.name,
+        url: s.url,
+        description: s.description || "",
+        transport: s.transport || "sse",
+        enabled: s.enabled !== false,
+        has_auth_token: !!s.auth_token,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
       }));
       res.json({ servers: masked });
     } catch (err: any) {
@@ -182,7 +264,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   app.post("/api/mcp/config", requireAdmin, async (req: any, res: any) => {
-    const { name, url, auth_token, description } = req.body || {};
+    const { name, url, auth_token, description, transport, enabled } = req.body || {};
     if (!name || !url) {
       return res.status(400).json({ error: "name and url are required" });
     }
@@ -191,11 +273,13 @@ export async function registerRoutes(app: any): Promise<Server> {
       if (!col) {
         return res.status(503).json({ error: "Database unavailable" });
       }
-      const doc = {
+      const doc: Record<string, any> = {
         name: String(name).trim(),
         url: String(url).trim(),
         auth_token: auth_token ? String(auth_token).trim() : "",
         description: description ? String(description).trim() : "",
+        transport: transport ? String(transport).trim() : "sse",
+        enabled: enabled !== false,
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -206,7 +290,8 @@ export async function registerRoutes(app: any): Promise<Server> {
       );
       console.log(`[MCP Config] Registered MCP server: ${doc.name} → ${doc.url}`);
       _reloadMcpServers().catch(() => {});
-      res.status(201).json({ ok: true, server: { ...doc, auth_token: doc.auth_token ? "***" : "" } });
+      const { auth_token: _t, ...safeDoc } = doc;
+      res.status(201).json({ ok: true, server: { ...safeDoc, has_auth_token: !!doc.auth_token } });
     } catch (err: any) {
       console.warn("[MCP Config] Failed to register MCP server:", err.message);
       res.status(500).json({ error: "Failed to register MCP server" });
@@ -215,7 +300,7 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.put("/api/mcp/config/:name", requireAdmin, async (req: any, res: any) => {
     const { name } = req.params;
-    const { url, auth_token, description } = req.body || {};
+    const { url, auth_token, description, transport, enabled } = req.body || {};
     try {
       const col = await getCollection("mcp_configs");
       if (!col) {
@@ -223,8 +308,17 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
       const updates: Record<string, any> = { updated_at: new Date() };
       if (url) updates.url = String(url).trim();
-      if (auth_token !== undefined) updates.auth_token = String(auth_token).trim();
+      // Only update auth_token if caller sends a non-empty, non-masked value
+      if (auth_token !== undefined && auth_token !== "" && auth_token !== "***") {
+        updates.auth_token = String(auth_token).trim();
+      }
+      // Clear token only if explicitly sent as empty string (not masked)
+      if (auth_token === "") {
+        updates.auth_token = "";
+      }
       if (description !== undefined) updates.description = String(description).trim();
+      if (transport !== undefined) updates.transport = String(transport).trim();
+      if (enabled !== undefined) updates.enabled = !!enabled;
 
       const result = await (col as any).updateOne({ name }, { $set: updates });
       if (result.matchedCount === 0) {
@@ -1239,12 +1333,14 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.on("close", () => { closed = true; });
 
     // Send any already-available events via XRANGE first (catch-up)
+    // Each event is prefixed with an SSE `id:` line so the client can track
+    // the cursor and pass it back as `?last_id=` on reconnect.
     try {
       const catchUp = await redisXRange(streamKey, cursor);
       for (const entry of catchUp) {
         const raw = entry.fields.data || "";
         if (raw) {
-          try { res.write(`data: ${raw}\n\n`); } catch {}
+          try { res.write(`id: ${entry.id}\ndata: ${raw}\n\n`); } catch {}
           cursor = entry.id;
         }
       }
@@ -1263,7 +1359,7 @@ export async function registerRoutes(app: any): Promise<Server> {
         for (const entry of entries) {
           const raw = entry.fields.data || "";
           if (raw) {
-            try { res.write(`data: ${raw}\n\n`); } catch {}
+            try { res.write(`id: ${entry.id}\ndata: ${raw}\n\n`); } catch {}
             cursor = entry.id;
           }
         }
@@ -1877,6 +1973,234 @@ except Exception as ex:
     });
   });
 
+  // ─── Session-specific upload endpoint ────────────────────────────────────────
+  // POST /api/sessions/:sessionId/upload
+  // Same as /api/upload but associates the file with a session in MongoDB.
+  app.post("/api/sessions/:sessionId/upload", requireAuth, (req: any, res: any, next: any) => {
+    upload.array("files", 10)(req, res, async (multerErr: any) => {
+      if (multerErr) {
+        const msg = multerErr.code === "LIMIT_FILE_SIZE"
+          ? "File terlalu besar (max 50MB)"
+          : multerErr.message || "Upload gagal";
+        return res.status(400).json({ error: msg });
+      }
+      const { sessionId } = req.params;
+      const requestingUserId: string = req.user?.id || "";
+
+      // ── Session ownership check (same pattern as GET /files) ──────────────
+      const liveSession = activeAgentSessions.get(sessionId);
+      if (liveSession) {
+        const sessionOwner: string = (liveSession as any)._userId || "";
+        if (!sessionOwner || requestingUserId !== sessionOwner) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } else {
+        let ownerVerified = false;
+        try {
+          const sessionCol = await getCollection("agent_sessions");
+          if (sessionCol) {
+            const sessionDoc = await (sessionCol as any).findOne(
+              { session_id: sessionId },
+              { projection: { user_id: 1 } },
+            );
+            if (sessionDoc) {
+              const owner: string = sessionDoc.user_id || "";
+              if (!owner || requestingUserId !== owner) {
+                return res.status(403).json({ error: "Access denied" });
+              }
+              ownerVerified = true;
+            }
+          }
+        } catch (err: any) {
+          console.warn("[SessionUpload] Ownership check failed:", err.message);
+        }
+        if (!ownerVerified) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      try {
+        const files = (req.files as any[]) || [];
+        if (files.length === 0) {
+          return res.status(400).json({ error: "Tidak ada file yang diunggah" });
+        }
+
+        // Prefer session-bound sandbox (stored on live session) over the global singleton.
+        // This prevents cross-session sandbox contamination when multiple users are active.
+        const sessionBoundSandboxId: string = (liveSession as any)?._sandboxId || "";
+        const sandboxId = sessionBoundSandboxId || getActiveE2BSandboxId();
+        const e2bKey = process.env.E2B_API_KEY || "";
+
+        if (!sandboxId || !e2bKey) {
+          return res.status(503).json({
+            error: "File upload requires an active E2B sandbox. No sandbox is currently connected.",
+          });
+        }
+
+        const result = await Promise.all(files.map(async (f: any) => {
+          const fileName = f.originalname;
+          const mime = f.mimetype || "application/octet-stream";
+          const size = f.size;
+          const buffer: Buffer = f.buffer;
+          const isImage = mime.startsWith("image/");
+          const isText = mime.startsWith("text/") || /\.(txt|md|py|js|ts|json|csv|xml|html|css|sh|yaml|yml|toml|ini|log)$/i.test(fileName);
+
+          let preview: string | null = null;
+          if (isText && size < 500 * 1024) {
+            try { preview = buffer.toString("utf-8"); } catch {}
+          }
+
+          let sandboxPath = `/home/user/sessions/${sessionId}/${fileName}`;
+          let downloadUrl = "";
+
+          try {
+            const pushResult = await new Promise<{ ok: boolean; path: string }>((resolve) => {
+              const py = spawn("python3", ["-c", `
+import sys, os
+e2b_key = os.environ.get("E2B_API_KEY", "")
+sandbox_id = sys.argv[1]
+dest_path = sys.argv[2]
+try:
+    from e2b_desktop import Sandbox
+    sb = Sandbox.connect(sandbox_id, api_key=e2b_key)
+    data = sys.stdin.buffer.read()
+    parent = os.path.dirname(dest_path)
+    if parent:
+        sb.commands.run(f"mkdir -p {parent}", timeout=10)
+    sb.files.write(dest_path, data)
+    print("ok:" + dest_path)
+except Exception as ex:
+    sys.stderr.write(str(ex))
+    sys.exit(1)
+`, sandboxId, sandboxPath], { env: { ...process.env }, timeout: 30000 });
+              let out = "";
+              let errOut = "";
+              py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+              py.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+              py.stdin.write(buffer);
+              py.stdin.end();
+              py.on("close", (code: number | null) => {
+                if (code === 0 && out.startsWith("ok:")) {
+                  resolve({ ok: true, path: out.slice(3).trim() });
+                } else {
+                  resolve({ ok: false, path: sandboxPath });
+                }
+              });
+              py.on("error", () => resolve({ ok: false, path: sandboxPath }));
+            });
+
+            if (pushResult.ok) {
+              sandboxPath = pushResult.path;
+              downloadUrl = `/api/files/download?sandbox_id=${encodeURIComponent(sandboxId)}&path=${encodeURIComponent(sandboxPath)}&name=${encodeURIComponent(fileName)}`;
+            } else {
+              throw new Error(`E2B push failed for ${fileName}`);
+            }
+          } catch (e2bErr: any) {
+            throw e2bErr;
+          }
+
+          // Store file bytes in MongoDB GridFS via stdin (safe for large files — no argv limit).
+          // Args: session_id, filename, mime_type, user_id  |  stdin: raw file bytes
+          let gridfsFileId: string | null = null;
+          try {
+            gridfsFileId = await new Promise<string | null>((resolve) => {
+              const pyScript = `
+import asyncio, json, sys
+from server.agent.db.gridfs import upload_file
+async def main():
+    data = sys.stdin.buffer.read()
+    fid = await upload_file(
+        session_id=sys.argv[1],
+        filename=sys.argv[2],
+        data_bytes=data,
+        mime_type=sys.argv[3],
+        user_id=sys.argv[4],
+    )
+    print(json.dumps({"file_id": fid}))
+asyncio.run(main())
+`.trim();
+              const pyProc = spawn("python3", ["-c", pyScript, sessionId, fileName, mime, requestingUserId], {
+                env: { ...process.env },
+                timeout: 60000,
+              });
+              let out = "";
+              let errOut = "";
+              pyProc.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+              pyProc.stderr.on("data", (d: Buffer) => { errOut += d.toString(); });
+              pyProc.stdin.write(buffer);
+              pyProc.stdin.end();
+              pyProc.on("close", (code: number | null) => {
+                if (code === 0 && out.trim()) {
+                  try {
+                    const parsed = JSON.parse(out.trim());
+                    resolve(parsed.file_id || null);
+                  } catch {
+                    resolve(null);
+                  }
+                } else {
+                  console.warn("[SessionUpload] GridFS upload stderr:", errOut.trim() || out.trim());
+                  resolve(null);
+                }
+              });
+              pyProc.on("error", () => resolve(null));
+            });
+          } catch (gfsErr: any) {
+            console.warn("[SessionUpload] GridFS spawn error:", gfsErr.message);
+          }
+
+          // GridFS persistence is mandatory — hard-fail if GridFS is unavailable.
+          if (!gridfsFileId) {
+            throw new Error(
+              `GridFS storage unavailable for file '${fileName}'. ` +
+              "MongoDB GridFS is required for file persistence (no fallback).",
+            );
+          }
+
+          // GridFS succeeded — use its URL as the canonical download URL.
+          downloadUrl = `/api/files/${gridfsFileId}`;
+
+          // Record metadata in session_files collection with canonical schema.
+          // (matches GET /api/sessions/:sessionId/files reader and GridFS list)
+          try {
+            const col = await getCollection("session_files");
+            if (col) {
+              await (col as any).insertOne({
+                session_id: sessionId,
+                name: fileName,
+                path: sandboxPath,
+                size,
+                mime_type: mime,
+                download_url: downloadUrl,
+                gridfs_file_id: gridfsFileId,
+                created_at: new Date(),
+                user_id: requestingUserId,
+              });
+            }
+          } catch (dbErr: any) {
+            console.warn("[SessionUpload] Failed to record file in MongoDB:", dbErr.message);
+          }
+
+          return {
+            name: fileName,
+            path: sandboxPath,
+            mime_type: mime,
+            size,
+            is_image: isImage,
+            is_text: isText,
+            preview,
+            download_url: downloadUrl,
+            gridfs_file_id: gridfsFileId,
+            session_id: sessionId,
+          };
+        }));
+
+        res.json({ files: result, session_id: sessionId });
+      } catch (err: any) {
+        res.status(500).json({ error: "Upload gagal: " + err.message });
+      }
+    });
+  });
+
   // ─── File list endpoint (files in E2B sandbox output directory) ─────────────
   app.get("/api/files/list", async (_req: any, res: any) => {
     const sandboxId = getActiveE2BSandboxId();
@@ -2207,6 +2531,70 @@ print(json.dumps(results))
       sandbox_id: sandboxId,
       all_tools_ready: e2bOn && cerebrasConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
       e2e_verified: e2eRan && shellOk && fileOk,
+    });
+  });
+
+  // ─── Global health check endpoint ─────────────────────────────────────────
+  // GET /api/health — verifies MongoDB, Redis, and E2B connectivity.
+  // If a critical service is not available, returns 503 with clear error message.
+  app.get("/api/health", async (_req: any, res: any) => {
+    const timestamp = new Date().toISOString();
+    const services: Record<string, { status: string; message: string }> = {};
+
+    // Check MongoDB
+    try {
+      const db = await getMongoDb();
+      if (db) {
+        await db.command({ ping: 1 });
+        services.mongodb = { status: "ok", message: "Connected" };
+      } else {
+        services.mongodb = { status: "unavailable", message: "MONGODB_URI not set or connection failed" };
+      }
+    } catch (err: any) {
+      services.mongodb = { status: "error", message: err.message };
+    }
+
+    // Check Redis
+    try {
+      const rc = getRedisClient();
+      if (rc) {
+        await rc.ping();
+        services.redis = { status: "ok", message: "Connected" };
+      } else {
+        services.redis = { status: "unavailable", message: "REDIS_HOST not set or connection failed" };
+      }
+    } catch (err: any) {
+      services.redis = { status: "error", message: err.message };
+    }
+
+    // Check E2B
+    services.e2b = {
+      status: isE2BEnabled() ? "configured" : "unavailable",
+      message: isE2BEnabled() ? "E2B_API_KEY set" : "E2B_API_KEY not set",
+    };
+
+    // Check Cerebras
+    services.cerebras = {
+      status: !!process.env.CEREBRAS_API_KEY ? "configured" : "unavailable",
+      message: !!process.env.CEREBRAS_API_KEY ? "CEREBRAS_API_KEY set" : "CEREBRAS_API_KEY not set",
+    };
+
+    const mongoOk = services.mongodb.status === "ok";
+    const redisOk = services.redis.status === "ok";
+    const criticalOk = mongoOk && redisOk;
+    const overallStatus = criticalOk ? "ok" : "degraded";
+    const failingServices = [
+      ...(!mongoOk ? ["MongoDB"] : []),
+      ...(!redisOk ? ["Redis"] : []),
+    ];
+
+    res.status(criticalOk ? 200 : 503).json({
+      status: overallStatus,
+      timestamp,
+      services,
+      message: criticalOk
+        ? "All critical services are healthy"
+        : `Critical services unavailable: ${failingServices.join(", ")}`,
     });
   });
 
