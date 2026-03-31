@@ -1717,9 +1717,13 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     yield make_event("session", action="resumed", session_id=resume_from_session)
 
             waiting_state = None
-            if self.session_id:
-                if svc:
-                    waiting_state = await svc.load_waiting_state(self.session_id)
+            # Use preloaded waiting_state from resume_data (passed by agent_runner)
+            # as the primary source — saves a DB round-trip on continuation.
+            _preloaded = getattr(self, "_preloaded_waiting_state", None)
+            if _preloaded:
+                waiting_state = _preloaded
+            elif self.session_id and svc:
+                waiting_state = await svc.load_waiting_state(self.session_id)
 
             # Create session record in MongoDB (best-effort; lifecycle tracking)
             # Pass user_id so ownership is guaranteed even if Python doc lands first.

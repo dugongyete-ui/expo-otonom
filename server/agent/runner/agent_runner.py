@@ -39,6 +39,10 @@ async def run_agent_async(
                 agent.plan = Plan.from_dict(resume_data["plan"])
             except Exception:
                 pass
+        # Preload waiting_state from resume_data so plan_act can use it
+        # directly without an extra DB round-trip (DB remains as fallback).
+        if resume_data.get("waiting_state"):
+            agent._preloaded_waiting_state = resume_data["waiting_state"]
 
     _memory_context = ""
     try:
@@ -263,7 +267,9 @@ def main() -> None:
                             await asyncio.sleep(30 * 60)
                             try:
                                 from server.agent.tools.e2b_sandbox import keepalive as _ka
-                                result = _ka()
+                                _loop = asyncio.get_running_loop()
+                                # Run the blocking SDK call in a thread to avoid stalling the event loop
+                                result = await _loop.run_in_executor(None, _ka)
                                 sys.stderr.write("[agent_runner] E2B keepalive sent, alive={}\n".format(result))
                                 sys.stderr.flush()
                             except Exception as _kae:
