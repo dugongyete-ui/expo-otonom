@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
 MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
-MCP_CONFIG_PATH = os.environ.get("MCP_CONFIG_PATH", "")
+# _get_mcp_config_path() is intentionally read at call time (not module-load time)
+# so runtime env changes take effect without a process restart.
+def _get_mcp_config_path() -> str:
+    return os.environ.get("MCP_CONFIG_PATH", "")
 
 
 def _make_ssl_ctx() -> ssl.SSLContext:
@@ -140,10 +143,11 @@ class MCPClientManager:
 
     def _get_servers_from_config_path(self) -> List[Dict[str, Any]]:
         """Load MCP server configs from MCP_CONFIG_PATH JSON file (highest priority)."""
-        if not MCP_CONFIG_PATH:
+        cfg_path = _get_mcp_config_path()
+        if not cfg_path:
             return []
         try:
-            with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as f:
+            with open(cfg_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             # Support both {servers: [...]} and {mcpServers: {name: {url:...}}} formats
             if isinstance(cfg.get("servers"), list):
@@ -158,11 +162,11 @@ class MCPClientManager:
         except FileNotFoundError:
             logger.warning(
                 "[MCP] MCP_CONFIG_PATH='%s' set but file not found. "
-                "Create the file or unset the env var.", MCP_CONFIG_PATH
+                "Create the file or unset the env var.", cfg_path
             )
             return []
         except (json.JSONDecodeError, OSError) as exc:
-            logger.error("[MCP] Failed to parse MCP_CONFIG_PATH='%s': %s", MCP_CONFIG_PATH, exc)
+            logger.error("[MCP] Failed to parse MCP_CONFIG_PATH='%s': %s", cfg_path, exc)
             return []
 
     def _get_servers_from_mongo(self) -> List[Dict[str, Any]]:
@@ -215,7 +219,7 @@ class MCPClientManager:
             return last_result
 
         # Highest priority: MCP_CONFIG_PATH static JSON file
-        if MCP_CONFIG_PATH:
+        if _get_mcp_config_path():
             cfg_servers = self._get_servers_from_config_path()
             if cfg_servers:
                 res = _try_servers(cfg_servers)
@@ -234,10 +238,11 @@ class MCPClientManager:
             return self._call_http_mcp(MCP_SERVER_URL, tool_name, arguments)
 
         # No server configured — return explicit error with actionable message
-        if MCP_CONFIG_PATH:
+        _cfg_path = _get_mcp_config_path()
+        if _cfg_path:
             configured_hint = (
                 "MCP_CONFIG_PATH='{}' disetel tetapi tidak ada server yang dapat dihubungi. "
-                "Periksa koneksi dan konfigurasi server.".format(MCP_CONFIG_PATH)
+                "Periksa koneksi dan konfigurasi server.".format(_cfg_path)
             )
         else:
             configured_hint = (
@@ -289,7 +294,7 @@ class MCPClientManager:
                     logger.debug("[MCP] Could not list tools from %s: %s", url, exc)
 
         # MCP_CONFIG_PATH JSON file (highest priority)
-        if MCP_CONFIG_PATH:
+        if _get_mcp_config_path():
             _fetch_tools_from_servers(self._get_servers_from_config_path())
 
         # Load from MongoDB (authoritative — includes tools added via REST API)
@@ -302,10 +307,11 @@ class MCPClientManager:
         all_tools.extend(local_tools)
 
         if not all_tools:
-            if MCP_CONFIG_PATH:
+            _cfg_path_list = _get_mcp_config_path()
+            if _cfg_path_list:
                 hint = (
                     "MCP_CONFIG_PATH='{}' disetel tetapi tidak ada tools yang ditemukan. "
-                    "Periksa file konfigurasi dan koneksi server.".format(MCP_CONFIG_PATH)
+                    "Periksa file konfigurasi dan koneksi server.".format(_cfg_path_list)
                 )
             else:
                 hint = (
