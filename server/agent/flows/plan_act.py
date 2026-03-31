@@ -162,15 +162,9 @@ def _is_session_paused(session_id: str) -> bool:
 
 
 def _is_session_stopped(session_id: str) -> bool:
-    """Check if the agent has received a stop signal from the user via Redis.
-
-    Stop key format: agent:<session_id>:stop
-    Must match TypeScript publisher in routes.ts: `agent:${sid}:stop`
-
-    This is called at the start of every agent iteration loop in PlanActAgent._run_agent_loop()
-    to enable graceful shutdown when the user clicks Stop in the frontend.
-    The TypeScript layer (routes.ts POST /api/sessions/:id/stop) sets this key via Redis SET.
-    After 3 seconds if the agent hasn't stopped, ChatPage.tsx sends a SIGTERM fallback.
+    """Check if the agent has received a stop signal via Redis.
+    Key: agent:<session_id>:stop (matches routes.ts POST /api/sessions/:id/stop).
+    Called at the start of every iteration in PlanActAgent._run_agent_loop().
     """
     if not session_id:
         return False

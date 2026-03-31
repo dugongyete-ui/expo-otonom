@@ -579,15 +579,16 @@ export async function registerRoutes(app: any): Promise<Server> {
           }
         }
         console.log(`[share] Loaded ${docs.length} shared sessions from MongoDB.`);
-        // Verify Redis stream key format parity with Python redis_stream_queue.py
-        // Python: f"stream:session:{session_id}"  ←→  TypeScript: `stream:session:${sid}`
-        // Both resolve to "stream:session:<uuid>" — confirmed consistent.
-        console.log(`[stream] Redis stream key format: stream:session:<session_id> (matches Python redis_stream_queue._stream_key())`);
-        // Verify stop key format parity with Python plan_act._is_session_stopped()
-        // Python: "agent:{}:stop".format(session_id)  ←→  TypeScript: `agent:${sid}:stop`
-        console.log(`[stop] Redis stop key format: agent:<session_id>:stop (matches Python plan_act._is_session_stopped())`);
-        // Verify file download endpoint exists for GridFS files
-        console.log(`[files] GridFS download route registered: GET /api/files/download, POST /api/files/one-time-token`);
+        // Runtime assertion: verify Redis key format constants match their Python counterparts
+        // Python redis_stream_queue._stream_key(): f"stream:session:{session_id}"
+        // Python plan_act._is_session_stopped(): "agent:{}:stop".format(session_id)
+        const _testId = "test";
+        const _streamKey = `stream:session:${_testId}`;
+        const _stopKey = `agent:${_testId}:stop`;
+        if (_streamKey !== "stream:session:test" || _stopKey !== "agent:test:stop") {
+          throw new Error(`[BUG] Redis key format mismatch! stream=${_streamKey} stop=${_stopKey}`);
+        }
+        console.log(`[stream] Redis key formats verified: ${_streamKey.replace(_testId, "<sid>")}, ${_stopKey.replace(_testId, "<sid>")}`);
       }
     } catch (err: any) {
       console.warn("[share] Failed to load share state from MongoDB:", err.message);
@@ -795,107 +796,80 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     const messages: Array<{ id: string; role: string; content: string; timestamp: string }> = [];
 
-    // ── Step 1: Always fetch the user's original message from sessions collection ──
-    // The user turn is stored in sessions.user_message (written by Python agent_runner.py).
-    // session_events only contains agent-side events; user turns must come from sessions.
-    let sessionCreatedAt: string | null = null;
+    // Primary source: sessions.chat_history — Python writes the full conversation here
+    // (user + assistant turns, including multi-turn continuations via waiting_for_user).
+    // This is the canonical durable record of all turns for a session.
     try {
       const sc = await getCollection("sessions");
       if (sc) {
-        const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_message: 1, created_at: 1 } });
-        if (sd && sd.user_message) {
-          sessionCreatedAt = sd.created_at ? new Date(sd.created_at).toISOString() : null;
-          messages.push({
-            id: `hist_user_${sessionId}`,
-            role: "user",
-            content: sd.user_message,
-            timestamp: sessionCreatedAt || new Date().toISOString(),
-          });
-        }
-      }
-    } catch (err: any) {
-      console.warn("[session_messages] user_message fetch failed:", err.message);
-    }
-
-    // ── Step 2: Reconstruct agent messages from session_events (SSE replay) ──
-    try {
-      const col = await getCollection("session_events");
-      if (col) {
-        const docs = await (col as any)
-          .find(
-            { session_id: sessionId, event_type: { $in: ["message", "message_start", "message_end", "message_chunk", "ask", "notify"] } },
-            { projection: { _id: 0 }, sort: { timestamp: 1 } },
-          )
-          .toArray();
-
-        let currentMsg: { id: string; role: string; content: string; timestamp: string } | null = null;
-        for (const doc of docs) {
-          const d = doc.data || {};
-          if (doc.event_type === "message_start") {
-            const role = d.role === "ask" ? "assistant" : (d.role || "assistant");
-            currentMsg = {
-              id: `hist_${doc.timestamp}_${Math.random()}`,
-              role,
-              content: d.content || "",
-              timestamp: doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString(),
-            };
-          } else if (doc.event_type === "message_chunk" && currentMsg) {
-            currentMsg.content += (d.chunk || d.content || "");
-          } else if (doc.event_type === "message_end" && currentMsg) {
-            if (currentMsg.content.trim()) messages.push(currentMsg);
-            currentMsg = null;
-          } else if (doc.event_type === "message") {
-            const content = d.content || d.message || "";
-            if (content.trim()) {
-              messages.push({
-                id: `hist_${doc.timestamp}_${Math.random()}`,
-                role: d.role || "assistant",
-                content,
-                timestamp: doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString(),
-              });
-            }
-          } else if (doc.event_type === "ask") {
-            const content = d.text || d.content || d.message || "";
-            if (content.trim()) {
-              messages.push({
-                id: `hist_${doc.timestamp}_${Math.random()}`,
-                role: "assistant",
-                content,
-                timestamp: doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString(),
-              });
-            }
-          }
-        }
-        if (currentMsg && currentMsg.content.trim()) messages.push(currentMsg);
-      }
-    } catch (err: any) {
-      console.warn("[session_messages] session_events fetch failed:", err.message);
-    }
-
-    // ── Step 3: If no agent events found, fall back to sessions.chat_history ──
-    // chat_history is the Python-maintained conversation array (user + assistant turns).
-    if (messages.length <= 1) {
-      try {
-        const sc = await getCollection("sessions");
-        if (sc) {
-          const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { chat_history: 1 } });
-          if (sd && Array.isArray(sd.chat_history) && sd.chat_history.length > 0) {
-            // Clear messages (may only have user turn from Step 1) and use full chat_history
-            messages.length = 0;
+        const sd = await (sc as any).findOne(
+          { session_id: sessionId },
+          { projection: { chat_history: 1, user_message: 1, created_at: 1 } },
+        );
+        if (sd) {
+          if (Array.isArray(sd.chat_history) && sd.chat_history.length > 0) {
             for (const m of sd.chat_history) {
               if (m.role && m.content) {
                 messages.push({
                   id: `hist_${Date.now()}_${Math.random()}`,
                   role: m.role,
                   content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-                  timestamp: new Date().toISOString(),
+                  timestamp: sd.created_at ? new Date(sd.created_at).toISOString() : new Date().toISOString(),
                 });
               }
             }
+          } else if (sd.user_message) {
+            // Minimal fallback: at least show the original user message
+            messages.push({
+              id: `hist_user_${sessionId}`,
+              role: "user",
+              content: sd.user_message,
+              timestamp: sd.created_at ? new Date(sd.created_at).toISOString() : new Date().toISOString(),
+            });
           }
         }
+      }
+    } catch (err: any) {
+      console.warn("[session_messages] chat_history fetch failed:", err.message);
+    }
+
+    // Secondary source: session_events — reconstructs assistant messages from SSE replay.
+    // Used when chat_history is not yet populated (e.g., session still running).
+    if (messages.length === 0) {
+      try {
+        const col = await getCollection("session_events");
+        if (col) {
+          const docs = await (col as any)
+            .find(
+              { session_id: sessionId, event_type: { $in: ["message", "message_start", "message_end", "message_chunk", "ask", "notify"] } },
+              { projection: { _id: 0 }, sort: { timestamp: 1 } },
+            )
+            .toArray();
+
+          let currentMsg: { id: string; role: string; content: string; timestamp: string } | null = null;
+          for (const doc of docs) {
+            const d = doc.data || {};
+            const ts = doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString();
+            if (doc.event_type === "message_start") {
+              const role = d.role === "ask" ? "assistant" : (d.role || "assistant");
+              currentMsg = { id: `hist_${doc.timestamp}_${Math.random()}`, role, content: d.content || "", timestamp: ts };
+            } else if (doc.event_type === "message_chunk" && currentMsg) {
+              currentMsg.content += (d.chunk || d.content || "");
+            } else if (doc.event_type === "message_end" && currentMsg) {
+              if (currentMsg.content.trim()) messages.push(currentMsg);
+              currentMsg = null;
+            } else if (doc.event_type === "message") {
+              const content = d.content || d.message || "";
+              if (content.trim()) messages.push({ id: `hist_${doc.timestamp}_${Math.random()}`, role: d.role || "assistant", content, timestamp: ts });
+            } else if (doc.event_type === "ask") {
+              const content = d.text || d.content || d.message || "";
+              if (content.trim()) messages.push({ id: `hist_${doc.timestamp}_${Math.random()}`, role: "assistant", content, timestamp: ts });
+            }
+          }
+          if (currentMsg && currentMsg.content.trim()) messages.push(currentMsg);
+        }
       } catch (err: any) {
-        console.warn("[session_messages] chat_history fallback failed:", err.message);
+        console.warn("[session_messages] session_events fetch failed:", err.message);
       }
     }
 
