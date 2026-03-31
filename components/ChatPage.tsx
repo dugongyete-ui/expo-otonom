@@ -6,6 +6,7 @@ import { ChatBox } from "./ChatBox";
 import { AgentThinking } from "./AgentThinking";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
 import { processAgentEvent } from "../lib/agent-event-processor";
+import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
 import { randomUUID } from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n, t as translate } from "@/lib/i18n";
@@ -180,6 +181,117 @@ export function ChatPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-reconnect to an in-progress agent session after page refresh / app restart.
+  // Runs once on mount in agent mode. Checks both the persisted active session ID
+  // (no-external-session path) and an explicitly provided externalSessionId.
+  useEffect(() => {
+    if (!isAgentMode) return;
+    let cancelled = false;
+
+    const attemptReconnect = async (sessionIdToRestore: string) => {
+      const status = await apiService.getSessionStatus(sessionIdToRestore);
+      if (cancelled) return;
+
+      if (!status.exists) {
+        if (!externalSessionId) await clearActiveSessionId();
+        return;
+      }
+
+      if (!status.is_running) {
+        // Session finished — clear persisted ID and load history so the UI is not blank.
+        // Only fetch history in the no-external-session path; the existing session-switch
+        // effect already handles history loading when externalSessionId is provided.
+        if (!externalSessionId) {
+          await clearActiveSessionId();
+          const base = getApiBaseUrl();
+          const token = getStoredToken();
+          try {
+            const r = await fetch(`${base}/api/sessions/${sessionIdToRestore}/messages`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!cancelled && r.ok) {
+              const data = await r.json();
+              if (Array.isArray(data.messages) && data.messages.length > 0) {
+                activeSessionIdRef.current = sessionIdToRestore;
+                const restored: ChatMessage[] = data.messages
+                  .filter((m: any) => m.role && m.content)
+                  .map((m: any) => ({
+                    id: m.id || `hist_${Date.now()}_${Math.random()}`,
+                    role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+                    content: m.content,
+                    timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
+                  }));
+                setMessages(restored);
+              }
+            }
+          } catch {}
+        }
+        return;
+      }
+
+      // Session is still running on the server — reconnect to the live stream.
+      // Use stored cursor if we have one for this exact session, otherwise replay from start.
+      let lastId = "0";
+      if (!externalSessionId) {
+        lastId = await loadActiveSessionLastId();
+      } else {
+        const storedActiveId = await loadActiveSessionId();
+        if (storedActiveId === sessionIdToRestore) {
+          lastId = await loadActiveSessionLastId();
+        }
+      }
+      if (cancelled) return;
+
+      activeSessionIdRef.current = sessionIdToRestore;
+      setIsLoading(true);
+      setThinking({ active: true, label: "Menghubungkan kembali ke sesi aktif..." });
+
+      const stopSSE = apiService.connectSessionSSE(sessionIdToRestore, {
+        onMessage: (event: AgentEvent) => {
+          if (!cancelled) {
+            if ((event as any)._streamId) {
+              saveActiveSessionLastId((event as any)._streamId).catch(() => {});
+            }
+            handleEvent(event);
+          }
+        },
+        onDone: () => {
+          if (!cancelled) {
+            handleEvent({ type: "done" });
+            setIsLoading(false);
+            clearActiveSessionId().catch(() => {});
+          }
+        },
+        onError: () => {
+          if (!cancelled) {
+            setIsLoading(false);
+            setThinking({ active: false, label: "" });
+            clearActiveSessionId().catch(() => {});
+          }
+        },
+      }, lastId);
+
+      cancelRef.current = stopSSE;
+    };
+
+    (async () => {
+      if (externalSessionId) {
+        // Explicit session provided: check if it's still running and reconnect
+        await attemptReconnect(externalSessionId);
+      } else {
+        // No explicit session: check if we have a persisted active session from a prior run
+        const persistedId = await loadActiveSessionId();
+        if (!persistedId || cancelled) return;
+        await attemptReconnect(persistedId);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sync session when externalSessionId changes (e.g. sidebar session switch)
   // Also loads historical messages from the server for the selected session
   useEffect(() => {
@@ -254,7 +366,12 @@ export function ChatPage({
 
     switch (ev.kind) {
       case "session": {
-        if (ev.sessionId) activeSessionIdRef.current = ev.sessionId;
+        if (ev.sessionId) {
+          activeSessionIdRef.current = ev.sessionId;
+          if (isAgentMode) {
+            saveActiveSessionId(ev.sessionId).catch(() => {});
+          }
+        }
         return;
       }
 
@@ -746,6 +863,11 @@ export function ChatPage({
         sseReconnectAttemptsRef.current = 0;
         lastEventIdRef.current = "0";
 
+        // Persist the session ID immediately so a refresh mid-run can reconnect,
+        // even if the server-assigned session_id event hasn't arrived yet.
+        saveActiveSessionId(activeSessionIdRef.current).catch(() => {});
+        saveActiveSessionLastId("0").catch(() => {});
+
         const _sseOnError = (err: Error) => {
           const attempt = sseReconnectAttemptsRef.current;
           if (attempt < MAX_SSE_RECONNECT_ATTEMPTS && activeSessionIdRef.current) {
@@ -772,7 +894,10 @@ export function ChatPage({
         };
 
         const _sseOnMessage = (event: any) => {
-          if (event._streamId) lastEventIdRef.current = event._streamId;
+          if (event._streamId) {
+            lastEventIdRef.current = event._streamId;
+            saveActiveSessionLastId(event._streamId).catch(() => {});
+          }
           handleEvent(event);
         };
 
@@ -785,6 +910,7 @@ export function ChatPage({
           handleEvent({ type: "done" });
           setIsLoading(false);
           cancelRef.current = null;
+          clearActiveSessionId().catch(() => {});
         };
 
         const cancel = await apiService.agent(

@@ -428,11 +428,12 @@ class ApiService {
    */
   connectSessionSSE(
     sessionId: string,
-    callbacks: AgentCallbacks & { onReconnect?: (attempt: number) => void } = {}
+    callbacks: AgentCallbacks & { onReconnect?: (attempt: number) => void } = {},
+    initialLastEventId: string = "0"
   ): () => void {
     const { onMessage, onError, onDone, onReconnect } = callbacks;
     let stopped = false;
-    let lastEventId = "0";
+    let lastEventId = initialLastEventId;
     let retryDelay = 1500;
     let retryCount = 0;
     const MAX_RETRIES = 10;
@@ -532,6 +533,29 @@ class ApiService {
 
     connect();
     return stop;
+  }
+
+  /**
+   * Get the running status of a session. Calls GET /api/sessions/:sessionId/status.
+   * Used on app load to determine whether to reconnect to a live stream.
+   */
+  async getSessionStatus(sessionId: string): Promise<{
+    session_id: string;
+    exists: boolean;
+    is_running: boolean;
+    status: string;
+    source?: string;
+  }> {
+    try {
+      const res = await fetch(
+        `${this.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/status`,
+        { headers: authHeaders() }
+      );
+      if (!res.ok) return { session_id: sessionId, exists: false, is_running: false, status: "error" };
+      return res.json();
+    } catch {
+      return { session_id: sessionId, exists: false, is_running: false, status: "error" };
+    }
   }
 
   /**

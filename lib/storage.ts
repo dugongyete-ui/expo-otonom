@@ -2,7 +2,46 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ChatMessage, ChatListItem } from "@/lib/chat";
 
 const SESSIONS_KEY = "dzeck_chat_sessions";
+const ACTIVE_SESSION_KEY = "dzeck_active_session_id";
+const ACTIVE_SESSION_LAST_ID_KEY = "dzeck_active_session_last_id";
 const MAX_SESSIONS = 50;
+
+export async function saveActiveSessionId(sessionId: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+  } catch {}
+}
+
+export async function loadActiveSessionId(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(ACTIVE_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function clearActiveSessionId(): Promise<void> {
+  try {
+    await Promise.all([
+      AsyncStorage.removeItem(ACTIVE_SESSION_KEY),
+      AsyncStorage.removeItem(ACTIVE_SESSION_LAST_ID_KEY),
+    ]);
+  } catch {}
+}
+
+export async function saveActiveSessionLastId(lastId: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ACTIVE_SESSION_LAST_ID_KEY, lastId);
+  } catch {}
+}
+
+export async function loadActiveSessionLastId(): Promise<string> {
+  try {
+    return (await AsyncStorage.getItem(ACTIVE_SESSION_LAST_ID_KEY)) || "0";
+  } catch {
+    return "0";
+  }
+}
 
 export interface ChatSession {
   id: string;

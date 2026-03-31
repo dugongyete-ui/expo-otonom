@@ -1651,6 +1651,60 @@ export async function registerRoutes(app: any): Promise<Server> {
     });
   });
 
+  // ─── Session status endpoint (for client reconnect on page refresh) ────────
+  // GET /api/sessions/:sessionId/status
+  // Returns whether a session exists and is still actively running so the client
+  // can decide whether to reconnect to the live SSE stream or just show history.
+  app.get("/api/sessions/:sessionId/status", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+
+    // Check in-memory first (fastest path)
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const sessionOwner: string = (liveSession as any)._userId || "";
+      if (sessionOwner && requestingUserId && sessionOwner !== requestingUserId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      return res.json({
+        session_id: sessionId,
+        exists: true,
+        is_running: !liveSession.done,
+        status: liveSession.done ? "completed" : "running",
+        source: "memory",
+      });
+    }
+
+    // Fall back to MongoDB
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        const doc = await (col as any).findOne(
+          { session_id: sessionId },
+          { projection: { user_id: 1, status: 1, created_at: 1 } },
+        );
+        if (doc) {
+          const owner: string = doc.user_id || "";
+          if (owner && requestingUserId && owner !== requestingUserId) {
+            return res.status(403).json({ error: "Access denied" });
+          }
+          const isRunning = doc.status === "running" || doc.status === "resuming";
+          return res.json({
+            session_id: sessionId,
+            exists: true,
+            is_running: isRunning,
+            status: doc.status || "completed",
+            source: "history",
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn("[session/status] MongoDB lookup failed:", err.message);
+    }
+
+    return res.json({ session_id: sessionId, exists: false, is_running: false, status: "not_found" });
+  });
+
   // ─── Stop an active agent session ─────────────────────────────────────────
   app.post("/api/agent/stop/:sid", requireAuth, async (req: any, res: any) => {
     const { sid } = req.params;

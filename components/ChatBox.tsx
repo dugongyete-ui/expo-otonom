@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useCallback } from "react";
 import {
   View,
   TextInput,
@@ -39,8 +39,7 @@ export function ChatBox({
   const inputRef = useRef<TextInput>(null);
 
   const inputEditable = true;
-  const showSendButton = true;
-  const canSend = value.trim().length > 0 || attachments.length > 0;
+  const canSend = (!isLoading || isWaitingForUser) && (value.trim().length > 0 || attachments.length > 0);
 
   const placeholder = isWaitingForUser
     ? "Ketik balasan Anda..."
