@@ -415,14 +415,17 @@
 
         qrCode.append(document.getElementById("qr-code"));
 
+        // Show page immediately — do NOT auto-redirect (causes blank Chrome tab)
+        // User can tap "Open in Expo Go" button or scan QR manually
+        if (loadingEl) loadingEl.style.display = "none";
+        if (contentEl) contentEl.style.display = "block";
+
+        // On mobile, show a tip banner
         if (isAndroid || isIOS) {
-          loadingEl.style.display = "block";
-          contentEl.style.display = "none";
-          window.location.href = deepLink;
-          setTimeout(function () {
-            loadingEl.style.display = "none";
-            contentEl.style.display = "block";
-          }, 500);
+          const tipEl = document.createElement("div");
+          tipEl.style.cssText = "background:#2d2b55;color:#c8c4f0;text-align:center;padding:10px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.1);";
+          tipEl.innerHTML = 'Tap <strong style="color:#a78bfa">Open in Expo Go</strong> below — or scan the QR from the Expo Go app';
+          document.body.insertBefore(tipEl, document.body.firstChild);
         }
       })();
 
