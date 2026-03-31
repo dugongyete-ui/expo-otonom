@@ -6,7 +6,7 @@ Dzeck AI is a full-stack Expo/React Native AI agent application that runs autono
 ## Architecture
 
 ### Frontend (Expo / React Native + Web client)
-- **Framework**: Expo ~53.0.0 with React Native 0.79.6
+- **Framework**: Expo ~54.0.0 with React Native 0.79.x
 - **Router**: Expo Router v5 (file-based routing in `app/`)
 - **State**: React Context (Auth) + React Query (server state)
 - **Entry**: `app/_layout.tsx` → `app/(tabs)/index.tsx` → `components/MainLayout.tsx`

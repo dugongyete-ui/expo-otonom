@@ -286,12 +286,16 @@ async function proxyManifestFromMetro(
     const manifest = await metroRes.json() as Record<string, unknown>;
 
     // Determine the public HTTPS base URL for this server (Express backend on port 80)
-    // Priority: x-forwarded-host > APP_DOMAIN env var > EXPO_PUBLIC_DOMAIN env var > req.host
-    const forwardedProto = req.header("x-forwarded-proto") || "https";
+    // Priority: APP_DOMAIN env var > EXPO_PUBLIC_DOMAIN env var > x-forwarded-host > req.host
+    //
+    // IMPORTANT: x-forwarded-host is NOT reliable for Expo Go connections — Replit routes
+    // Expo Go requests through a different proxy path and may send a different host header.
+    // APP_DOMAIN is set by update-domain.sh at startup and is always the correct public domain.
+    const forwardedProto = "https";
     const forwardedHost =
-      req.header("x-forwarded-host") ||
       process.env.APP_DOMAIN ||
       process.env.EXPO_PUBLIC_DOMAIN ||
+      req.header("x-forwarded-host") ||
       req.get("host") ||
       "";
     const backendBase = `${forwardedProto}://${forwardedHost}`;
