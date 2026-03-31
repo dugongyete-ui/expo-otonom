@@ -1,6 +1,9 @@
 /**
  * AuthScreen - Login, Register, and Reset Password screens
- * Supports auth_provider modes: none (auto-login), local, password
+ * Supports auth_provider modes:
+ *   - none: never shown (AuthProvider handles auto-login)
+ *   - local: login form only (no register, no forgot password)
+ *   - password: full form (login + register + forgot password)
  */
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -26,6 +29,7 @@ interface AuthScreenProps {
 
 export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [screen, setScreen] = useState<Screen>("login");
+  const [authMode, setAuthMode] = useState<"none" | "local" | "password" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,16 +40,13 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    checkAutoLogin();
+    authService.getAuthMode().then((mode) => {
+      setAuthMode(mode);
+    });
   }, []);
 
-  const checkAutoLogin = async () => {
-    const mode = await authService.getAuthMode();
-    if (mode === "none") {
-      const result = await authService.login("", "");
-      onAuthenticated(result.user);
-    }
-  };
+  const canRegister = authMode === "password";
+  const canResetPassword = authMode === "password";
 
   const handleLogin = useCallback(async () => {
     setError("");
@@ -94,6 +95,14 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
       setIsLoading(false);
     }
   }, [email]);
+
+  if (authMode === null) {
+    return (
+      <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator size="large" color="#6C5CE7" />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -201,7 +210,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             </View>
           )}
 
-          {screen === "login" && (
+          {screen === "login" && canResetPassword && (
             <TouchableOpacity
               style={styles.forgotLink}
               onPress={() => { setScreen("reset"); setError(""); setSuccess(""); }}
@@ -227,7 +236,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             )}
           </TouchableOpacity>
 
-          {screen === "login" && (
+          {screen === "login" && canRegister && (
             <TouchableOpacity
               style={styles.switchLink}
               onPress={() => { setScreen("register"); setError(""); setSuccess(""); }}

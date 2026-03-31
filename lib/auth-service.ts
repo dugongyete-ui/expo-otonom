@@ -160,7 +160,7 @@ class AuthService {
   }
 
   async resetPassword(email: string): Promise<void> {
-    await fetch(`${getApiBaseUrl()}/api/auth/reset-password`, {
+    await fetch(`${getApiBaseUrl()}/api/auth/request-password-reset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),

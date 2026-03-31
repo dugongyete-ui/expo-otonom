@@ -18,6 +18,7 @@ import {
   formatRelativeTime,
   type ChatSession,
 } from "@/lib/storage";
+import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 
 interface ChatHistoryModalProps {
   visible: boolean;
@@ -98,9 +99,51 @@ export function ChatHistoryModal({
 
   const loadSessions = useCallback(async () => {
     setLoading(true);
-    const data = await loadChatSessions();
-    setSessions(data);
-    setLoading(false);
+    try {
+      const localSessions = await loadChatSessions();
+      setSessions(localSessions);
+
+      const baseUrl = getApiBaseUrl();
+      const token = getStoredToken();
+      if (token) {
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        const res = await fetch(`${baseUrl}/api/sessions`, { headers }).catch(() => null);
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data && Array.isArray(data.sessions)) {
+            const serverSessions: ChatSession[] = data.sessions.map((s: any) => {
+              const rawMsg: string = s.user_message || "";
+              const title = rawMsg.trim()
+                ? (rawMsg.length > 60 ? rawMsg.slice(0, 60) + "…" : rawMsg)
+                : `Session ${s.session_id.slice(-6)}`;
+              const startedAt = s.startedAt;
+              const timestamp = startedAt
+                ? (typeof startedAt === "number" ? startedAt : new Date(startedAt).getTime())
+                : Date.now();
+              return {
+                id: s.session_id,
+                title,
+                mode: "agent" as const,
+                preview: s.eventCount ? `${s.eventCount} events` : "",
+                timestamp,
+                messages: [],
+              };
+            });
+            const localIds = new Set(localSessions.map((s) => s.id));
+            const merged = [
+              ...localSessions,
+              ...serverSessions.filter((s) => !localIds.has(s.id)),
+            ].sort((a, b) => b.timestamp - a.timestamp);
+            setSessions(merged);
+          }
+        }
+      }
+    } catch {
+      const data = await loadChatSessions();
+      setSessions(data);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -121,6 +164,14 @@ export function ChatHistoryModal({
             style: "destructive",
             onPress: async () => {
               await deleteChatSession(id);
+              const baseUrl = getApiBaseUrl();
+              const token = getStoredToken();
+              if (token) {
+                fetch(`${baseUrl}/api/sessions/${id}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${token}` },
+                }).catch(() => {});
+              }
               setSessions((prev) => prev.filter((s) => s.id !== id));
             },
           },

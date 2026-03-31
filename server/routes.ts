@@ -637,8 +637,32 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
   }
 
+  async function verifySessionOwnership(sessionId: string, requestingUserId: string): Promise<boolean> {
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const sessionOwner: string = (liveSession as any)._userId || "";
+      return !!sessionOwner && requestingUserId === sessionOwner;
+    }
+    try {
+      const sc = await getCollection("sessions");
+      if (sc) {
+        const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+        if (sd) {
+          const owner: string = sd.user_id || "";
+          return !!owner && requestingUserId === owner;
+        }
+      }
+    } catch {
+      // fail-closed
+    }
+    return false;
+  }
+
   app.post("/api/sessions/:sessionId/share", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    const owned = await verifySessionOwnership(sessionId, requestingUserId);
+    if (!owned) return res.status(403).json({ error: "Access denied" });
     const { is_shared } = req.body || {};
     await setIsShared(sessionId, !!is_shared);
     const shareUrl = `${req.protocol}://${req.get("host")}/share/${sessionId}`;
@@ -647,11 +671,10 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.get("/api/sessions/:sessionId/share", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    const owned = await verifySessionOwnership(sessionId, requestingUserId);
+    if (!owned) return res.status(403).json({ error: "Access denied" });
     const isShared = await getIsShared(sessionId);
-    const session = activeAgentSessions.get(sessionId);
-    if (!session && !isShared) {
-      return res.status(404).json({ error: "Session not found" });
-    }
     const shareUrl = `${req.protocol}://${req.get("host")}/share/${sessionId}`;
     res.json({ session_id: sessionId, is_shared: isShared, share_url: isShared ? shareUrl : null });
   });

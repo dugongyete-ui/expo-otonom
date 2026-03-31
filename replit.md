@@ -86,9 +86,11 @@ Steps routed by `agent_type` field in plan:
 
 ## Authentication System
 Controlled by `AUTH_PROVIDER` env var:
-- `none` (default) — Auto-login with no credentials required
-- `local` — Single user from env vars
-- `password` — MongoDB-backed user database
+- `none` (default) — Auto-login with no credentials required (handled by `AuthProvider.initAuth()`)
+- `local` — Single user from env vars (`LOCAL_USER_EMAIL`, `LOCAL_USER_PASSWORD`)
+- `password` — MongoDB-backed user database (register/login/reset-password)
+
+Auto-login logic lives exclusively in `AuthProvider` (`lib/auth-context.tsx`). `AuthScreen` only renders forms for `local` and `password` modes.
 
 ## E2B Sandbox
 - `POST /api/e2b/sessions` — Create desktop sandbox (XFCE4 + Chrome + VNC)

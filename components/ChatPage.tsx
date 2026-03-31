@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image } from "react-native";
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image, Share, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
@@ -115,6 +115,9 @@ export function ChatPage({
   const MAX_SSE_RECONNECT_ATTEMPTS = 3;
   const [streamingContent, setStreamingContent] = useState("");
   const [lastBrowserEvent, setLastBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
+  const [isShared, setIsShared] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -143,7 +146,7 @@ export function ChatPage({
     let cancelled = false;
     const checkHealth = async () => {
       try {
-        const base = typeof window !== "undefined" ? window.location.origin : "";
+        const base = getApiBaseUrl();
         const res = await fetch(`${base}/api/health/tools`);
         if (cancelled) return;
         if (!res.ok) { setE2bStatus("error"); return; }
@@ -158,6 +161,20 @@ export function ChatPage({
     checkHealth();
     return () => { cancelled = true; };
   }, [isAgentMode]);
+
+  // Load share status for the initial externalSessionId (mount case)
+  useEffect(() => {
+    if (!externalSessionId) return;
+    apiService.getShareStatus(externalSessionId)
+      .then((status) => {
+        if (activeSessionIdRef.current === externalSessionId || !activeSessionIdRef.current) {
+          setIsShared(status.is_shared);
+          setShareUrl(status.share_url);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync session when externalSessionId changes (e.g. sidebar session switch)
   // Also loads historical messages from the server for the selected session
@@ -180,6 +197,17 @@ export function ChatPage({
       setIsLoading(false);
       setIsWaitingForUser(false);
       isWaitingRef.current = false;
+      setIsShared(false);
+      setShareUrl(null);
+
+      apiService.getShareStatus(externalSessionId)
+        .then((status) => {
+          if (activeSessionIdRef.current === externalSessionId) {
+            setIsShared(status.is_shared);
+            setShareUrl(status.share_url);
+          }
+        })
+        .catch(() => {});
 
       // Fetch historical messages for the selected session
       const base = getApiBaseUrl();
@@ -834,6 +862,31 @@ export function ChatPage({
     }, 3000);
   }, []);
 
+  const handleShare = useCallback(async () => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) return;
+    setIsSharing(true);
+    try {
+      const newShared = !isShared;
+      const result = await apiService.shareSession(sessionId, newShared);
+      setIsShared(result.is_shared);
+      setShareUrl(result.share_url);
+      if (result.is_shared && result.share_url) {
+        try {
+          await Share.share({ message: result.share_url, url: result.share_url });
+        } catch {
+          Alert.alert("Share Link", result.share_url);
+        }
+      } else {
+        Alert.alert("Session unshared", "This session is no longer publicly accessible.");
+      }
+    } catch (err: any) {
+      Alert.alert("Share Error", err.message || "Failed to share session");
+    } finally {
+      setIsSharing(false);
+    }
+  }, [isShared]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -854,6 +907,18 @@ export function ChatPage({
               </Text>
             </View>
           )}
+          <TouchableOpacity
+            onPress={handleShare}
+            style={styles.settingsBtn}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+            disabled={isSharing || messages.length === 0}
+          >
+            <Ionicons
+              name={isShared ? "share-social" : "share-social-outline"}
+              size={18}
+              color={messages.length === 0 ? "#444" : isShared ? "#6C5CE7" : "#8a8780"}
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSettings(true)}
             style={styles.settingsBtn}

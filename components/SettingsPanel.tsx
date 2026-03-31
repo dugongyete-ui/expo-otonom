@@ -25,6 +25,11 @@ interface SelectOption {
   value: string;
 }
 
+interface ServiceStatus {
+  configured: boolean;
+  message: string;
+}
+
 interface AppConfig {
   CEREBRAS_CHAT_MODEL?: string;
   CEREBRAS_AGENT_MODEL?: string;
@@ -138,13 +143,14 @@ function FieldInput({
   );
 }
 
-function StatusRow({ label, enabled }: { label: string; enabled: boolean }) {
+function StatusRow({ label, enabled, message }: { label: string; enabled: boolean; message?: string }) {
+  const badgeText = enabled ? "Configured" : (message || "Not Configured");
   return (
     <View style={styles.statusRow}>
       <Text style={styles.statusLabel}>{label}</Text>
       <View style={[styles.statusBadge, enabled ? styles.statusOk : styles.statusOff]}>
-        <Text style={[styles.statusBadgeText, enabled ? styles.statusOkText : styles.statusOffText]}>
-          {enabled ? "Configured" : "Not Configured"}
+        <Text style={[styles.statusBadgeText, enabled ? styles.statusOkText : styles.statusOffText]} numberOfLines={1}>
+          {badgeText}
         </Text>
       </View>
     </View>
@@ -153,6 +159,7 @@ function StatusRow({ label, enabled }: { label: string; enabled: boolean }) {
 
 export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProps) {
   const [config, setConfig] = useState<AppConfig>({});
+  const [serviceStatuses, setServiceStatuses] = useState<Record<string, ServiceStatus>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,12 +183,42 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
     setIsLoading(true);
     setError(null);
     try {
-      const [configRes, prefsRes] = await Promise.all([
+      const [configRes, prefsRes, healthRes] = await Promise.all([
         fetch(`${apiBase}/api/config`),
         fetch(`${apiBase}/api/user/prefs`, { headers }),
+        fetch(`${apiBase}/api/health`).catch(() => null),
       ]);
       if (!configRes.ok) throw new Error(`HTTP ${configRes.status}`);
       const data: AppConfig = await configRes.json();
+      const health = healthRes && healthRes.ok ? await healthRes.json().catch(() => null) : null;
+      const statuses: Record<string, ServiceStatus> = {};
+      if (health?.services) {
+        const svcMap: Record<string, string> = {
+          cerebras: "cerebras",
+          mongodb: "mongodb",
+          redis: "redis",
+        };
+        for (const [key, svcKey] of Object.entries(svcMap)) {
+          const svc = health.services[svcKey];
+          if (svc) {
+            const ok = svc.status === "configured" || svc.status === "ok" || svc.status === "connected";
+            statuses[key] = { configured: ok, message: svc.message || (ok ? "Connected" : "Not configured") };
+          }
+        }
+        statuses.e2b = {
+          configured: !!data.E2B_ENABLED,
+          message: data.E2B_ENABLED ? "E2B API key set" : "E2B_API_KEY not configured",
+        };
+        statuses.email = {
+          configured: !!data.EMAIL_ENABLED,
+          message: data.EMAIL_ENABLED ? "SMTP configured" : "EMAIL_HOST not configured",
+        };
+        statuses.google = {
+          configured: !!data.GOOGLE_SEARCH_CONFIGURED,
+          message: data.GOOGLE_SEARCH_CONFIGURED ? "Google CSE configured" : "API key not configured",
+        };
+      }
+      setServiceStatuses(statuses);
       setConfig(data);
       if (data.available_models?.length) setModelOptions(data.available_models);
       if (data.available_providers?.length) setProviderOptions(data.available_providers);
@@ -305,9 +342,12 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
             )}
 
             <SectionHeader title="Service Status" />
-            <StatusRow label="E2B Sandbox" enabled={!!config.E2B_ENABLED} />
-            <StatusRow label="Email" enabled={!!config.EMAIL_ENABLED} />
-            <StatusRow label="Google Search" enabled={!!config.GOOGLE_SEARCH_CONFIGURED} />
+            <StatusRow label="Cerebras AI" enabled={serviceStatuses.cerebras?.configured ?? false} message={serviceStatuses.cerebras?.message} />
+            <StatusRow label="MongoDB" enabled={serviceStatuses.mongodb?.configured ?? false} message={serviceStatuses.mongodb?.message} />
+            <StatusRow label="Redis" enabled={serviceStatuses.redis?.configured ?? false} message={serviceStatuses.redis?.message} />
+            <StatusRow label="E2B Sandbox" enabled={serviceStatuses.e2b?.configured ?? !!config.E2B_ENABLED} message={serviceStatuses.e2b?.message} />
+            <StatusRow label="Email" enabled={serviceStatuses.email?.configured ?? !!config.EMAIL_ENABLED} message={serviceStatuses.email?.message} />
+            <StatusRow label="Google Search" enabled={serviceStatuses.google?.configured ?? !!config.GOOGLE_SEARCH_CONFIGURED} message={serviceStatuses.google?.message} />
 
             <View style={{ height: 32 }} />
           </ScrollView>

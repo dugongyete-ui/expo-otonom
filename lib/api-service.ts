@@ -533,6 +533,31 @@ class ApiService {
   }
 
   /**
+   * Share or unshare a session. Calls POST /api/sessions/:sessionId/share.
+   * Returns the share URL if is_shared=true, null otherwise.
+   */
+  async shareSession(sessionId: string, isShared: boolean): Promise<{ is_shared: boolean; share_url: string | null }> {
+    const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/share`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ is_shared: isShared }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /**
+   * Get share status for a session. Calls GET /api/sessions/:sessionId/share.
+   */
+  async getShareStatus(sessionId: string): Promise<{ is_shared: boolean; share_url: string | null }> {
+    const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/share`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /**
    * Health check: fetch /api/health and return parsed result.
    */
   async health(): Promise<{ status: string; services: Record<string, any> }> {

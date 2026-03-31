@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { apiService, getApiBaseUrl, getStoredToken } from "@/lib/api-service";
@@ -113,6 +114,21 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
     setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
   }, []);
 
+  const handleShareSession = useCallback(async (sessionId: string) => {
+    try {
+      const result = await apiService.shareSession(sessionId, true);
+      if (result.share_url) {
+        try {
+          await Share.share({ message: result.share_url, url: result.share_url });
+        } catch {
+          Alert.alert("Share Link", result.share_url);
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Share Error", err.message || "Failed to share session");
+    }
+  }, []);
+
   const runningCount = sessions.filter(s => s.is_running).length;
 
   if (!isOpen) {
@@ -176,6 +192,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
               session={session}
               onSelect={() => handleSessionSelect(session.session_id)}
               onDelete={() => handleDeleteSession(session.session_id)}
+              onShare={() => handleShareSession(session.session_id)}
             />
           ))}
         </ScrollView>
@@ -249,9 +266,10 @@ interface SessionItemProps {
   session: Session;
   onSelect: () => void;
   onDelete: () => void;
+  onShare: () => void;
 }
 
-function SessionItem({ session, onSelect, onDelete }: SessionItemProps) {
+function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps) {
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -288,7 +306,14 @@ function SessionItem({ session, onSelect, onDelete }: SessionItemProps) {
       </View>
       <Text style={styles.sessionItemTime}>{formatTime(session.timestamp)}</Text>
       <TouchableOpacity
-        style={styles.sessionItemDelete}
+        style={styles.sessionItemAction}
+        onPress={onShare}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="share-social-outline" size={15} color="#8a8780" />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.sessionItemAction}
         onPress={onDelete}
         activeOpacity={0.7}
       >
@@ -443,6 +468,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   sessionItemDelete: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sessionItemAction: {
     width: 28,
     height: 28,
     borderRadius: 6,
