@@ -152,8 +152,29 @@ Auto-login logic lives exclusively in `AuthProvider` (`lib/auth-context.tsx`). `
 - `lib/i18n.ts` exports `t()`, `useI18n()`, `setLocale()`
 
 ## Development Workflows
-- **Backend**: `npm run dev` (tsx server/index.ts) — port 5000
-- **Expo Go**: `npx expo start` — port 8083 (web)
+- **Backend**: `npx tsx server/index.ts` — port 5000 (external port 80, HTTPS)
+- **Expo Go**: `bash scripts/update-domain.sh && REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN npx expo start --port 3002`
+
+## Expo Go Connection Architecture
+Replit only accepts HTTPS on external ports — plain HTTP (port 3002) is rejected. The connection uses an HTTPS relay through the Express backend:
+
+1. User opens `https://domain/mobile` → sees QR code with `exps://domain`
+2. Expo Go scans QR → connects to Express backend via HTTPS (port 80)
+3. Express backend proxies manifest from Metro (`http://localhost:3002/manifest`)
+4. Manifest URLs are rewritten: `http://domain:3002/*` → `https://domain/metro-proxy/*`
+5. Expo Go downloads bundle via `https://domain/metro-proxy/index.bundle?...`
+6. Express `/metro-proxy/*` route streams from Metro (`http://localhost:3002`) back to Expo Go
+7. App loads!
+
+**Key backend routes for Expo:**
+- `GET /` or `/manifest` with `expo-platform: android` header → serves manifest (proxied from Metro)
+- `GET /metro-proxy/*` → proxies all requests to Metro bundler on port 3002
+- `GET /mobile` → landing page with QR code
+
+## Critical Patches Applied
+- **`node_modules/@expo/metro-config/build/serializer/fork/js.js`**: Patched undefined `dependency.absolutePath` bug (line ~72) that caused `TypeError: The "to" argument must be of type string` when bundling Android. Fix: wrap `path.relative()` call in null-check.
+- **`babel.config.cjs`**: Added `react-native-reanimated/plugin` (required for TypingIndicator worklets)
+- **`components/FilePanel.tsx`**: Fixed dynamic `require("@/lib/api-service")` → static import of `getStoredToken`
 
 ## Python Agent Dependencies (`requirements.txt`)
 - `e2b>=2.0.0` + `e2b-desktop>=1.0.0`

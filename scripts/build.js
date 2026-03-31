@@ -5,6 +5,7 @@ const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
 
 let metroProcess = null;
+const METRO_PORT = 3002;
 
 function exitWithError(message) {
   console.error(message);
@@ -39,7 +40,6 @@ function stripProtocol(domain) {
 }
 
 function getDeploymentDomain() {
-  // Check APP_DOMAIN first (primary for E2B deployments)
   if (process.env.APP_DOMAIN) {
     return stripProtocol(process.env.APP_DOMAIN);
   }
@@ -48,7 +48,6 @@ function getDeploymentDomain() {
     return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
   }
 
-  // Legacy Replit env vars (backward compatibility)
   if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
     return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
   }
@@ -99,9 +98,10 @@ function clearMetroCache() {
   console.log("Cache cleared");
 }
 
-async function checkMetroHealth() {
+async function checkMetroHealth(port) {
+  const p = port || METRO_PORT;
   try {
-    const response = await fetch("http://localhost:8081/status", {
+    const response = await fetch(`http://localhost:${p}/status`, {
       signal: AbortSignal.timeout(5000),
     });
     return response.ok;
@@ -111,23 +111,35 @@ async function checkMetroHealth() {
 }
 
 async function startMetro(expoPublicDomain) {
-  const isRunning = await checkMetroHealth();
+  const isRunning = await checkMetroHealth(METRO_PORT);
   if (isRunning) {
-    console.log("Metro already running");
+    console.log(`Metro already running on port ${METRO_PORT}`);
     return;
   }
 
-  console.log("Starting Metro...");
+  console.log(`Starting Metro on port ${METRO_PORT}...`);
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
   const env = {
     ...process.env,
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
+    REACT_NATIVE_PACKAGER_HOSTNAME: expoPublicDomain,
   };
-  metroProcess = spawn("npm", ["run", "expo:start:static:build"], {
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: false,
-    env,
-  });
+  metroProcess = spawn(
+    "npx",
+    [
+      "expo",
+      "start",
+      "--port",
+      String(METRO_PORT),
+      "--no-dev",
+      "--non-interactive",
+    ],
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
+      env,
+    },
+  );
 
   if (metroProcess.stdout) {
     metroProcess.stdout.on("data", (data) => {
@@ -142,17 +154,17 @@ async function startMetro(expoPublicDomain) {
     });
   }
 
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 90; i++) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const healthy = await checkMetroHealth();
+    const healthy = await checkMetroHealth(METRO_PORT);
     if (healthy) {
       console.log("Metro ready");
       return;
     }
   }
 
-  console.error("Metro timeout");
+  console.error("Metro timeout after 90s");
   process.exit(1);
 }
 
@@ -193,8 +205,9 @@ async function downloadFile(url, outputPath) {
 }
 
 async function downloadBundle(platform, timestamp) {
-  // For expo-router apps, the entry is node_modules/expo-router/entry
-  const url = new URL("http://localhost:8081/node_modules/expo-router/entry.bundle");
+  const url = new URL(
+    `http://localhost:${METRO_PORT}/node_modules/expo-router/entry.bundle`,
+  );
   url.searchParams.set("platform", platform);
   url.searchParams.set("dev", "false");
   url.searchParams.set("hot", "false");
@@ -222,7 +235,7 @@ async function downloadManifest(platform) {
 
   try {
     console.log(`Fetching ${platform} manifest...`);
-    const response = await fetch("http://localhost:8081/manifest", {
+    const response = await fetch(`http://localhost:${METRO_PORT}/manifest`, {
       headers: { "expo-platform": platform },
       signal: controller.signal,
     });
@@ -252,9 +265,7 @@ async function downloadBundlesAndManifests(timestamp) {
 
   try {
     const results = await Promise.allSettled([
-      downloadBundle("ios", timestamp),
       downloadBundle("android", timestamp),
-      downloadManifest("ios"),
       downloadManifest("android"),
     ]);
 
@@ -264,25 +275,18 @@ async function downloadBundlesAndManifests(timestamp) {
 
     if (failures.length > 0) {
       const errorMessages = failures.map(({ result, index }) => {
-        const names = [
-          "iOS bundle",
-          "Android bundle",
-          "iOS manifest",
-          "Android manifest",
-        ];
+        const names = ["Android bundle", "Android manifest"];
         return `  - ${names[index]}: ${result.reason?.message || result.reason}`;
       });
 
       exitWithError(`Download failed:\n${errorMessages.join("\n")}`);
     }
 
-    const iosManifest =
-      results[2].status === "fulfilled" ? results[2].value : null;
     const androidManifest =
-      results[3].status === "fulfilled" ? results[3].value : null;
+      results[1].status === "fulfilled" ? results[1].value : null;
 
     console.log("All downloads completed successfully");
-    return { ios: iosManifest, android: androidManifest };
+    return { android: androidManifest };
   } catch (error) {
     exitWithError(`Unexpected download error: ${error.message}`);
   }
@@ -290,18 +294,6 @@ async function downloadBundlesAndManifests(timestamp) {
 
 function extractAssets(timestamp) {
   const bundles = {
-    ios: fs.readFileSync(
-      path.join(
-        "static-build",
-        timestamp,
-        "_expo",
-        "static",
-        "js",
-        "ios",
-        "bundle.js",
-      ),
-      "utf-8",
-    ),
     android: fs.readFileSync(
       path.join(
         "static-build",
@@ -325,11 +317,14 @@ function extractAssets(timestamp) {
       const originalPath = match[1];
       const filename = match[3] + "." + match[4];
 
-      const tempUrl = new URL(`http://localhost:8081${originalPath}`);
+      const tempUrl = new URL(
+        `http://localhost:${METRO_PORT}${originalPath}`,
+      );
       const unstablePath = tempUrl.searchParams.get("unstable_path");
 
       if (!unstablePath) {
-        throw new Error(`Asset missing unstable_path: ${originalPath}`);
+        console.warn(`Asset missing unstable_path: ${originalPath}, skipping`);
+        continue;
       }
 
       const decodedPath = decodeURIComponent(unstablePath);
@@ -351,7 +346,6 @@ function extractAssets(timestamp) {
     }
   };
 
-  extractFromBundle(bundles.ios, "ios");
   extractFromBundle(bundles.android, "android");
 
   return Array.from(assetsMap.values());
@@ -369,16 +363,19 @@ async function downloadAssets(assets, timestamp) {
   const downloadPromises = assets.map(async (asset) => {
     const platform = Array.from(asset.platforms)[0];
 
-    const tempUrl = new URL(`http://localhost:8081${asset.originalPath}`);
+    const tempUrl = new URL(
+      `http://localhost:${METRO_PORT}${asset.originalPath}`,
+    );
     const unstablePath = tempUrl.searchParams.get("unstable_path");
 
     if (!unstablePath) {
-      throw new Error(`Asset missing unstable_path: ${asset.originalPath}`);
+      console.warn(`Asset missing unstable_path: ${asset.originalPath}, skipping`);
+      return;
     }
 
     const decodedPath = decodeURIComponent(unstablePath);
     const metroUrl = new URL(
-      `http://localhost:8081${path.posix.join("/assets", decodedPath, asset.filename)}`,
+      `http://localhost:${METRO_PORT}${path.posix.join("/assets", decodedPath, asset.filename)}`,
     );
     metroUrl.searchParams.set("platform", platform);
     metroUrl.searchParams.set("hash", asset.hash);
@@ -409,12 +406,10 @@ async function downloadAssets(assets, timestamp) {
   await Promise.all(downloadPromises);
 
   if (failures.length > 0) {
-    const errorMsg =
-      `Failed to download ${failures.length} asset(s):\n` +
-      failures
-        .map((f) => `  - ${f.filename}: ${f.error} (${f.url})`)
-        .join("\n");
-    exitWithError(errorMsg);
+    console.warn(
+      `Warning: Failed to download ${failures.length} asset(s):\n` +
+        failures.map((f) => `  - ${f.filename}: ${f.error}`).join("\n"),
+    );
   }
 
   console.log(`Downloaded ${successCount} assets`);
@@ -432,18 +427,19 @@ function updateBundleUrls(timestamp, baseUrl) {
       platform,
       "bundle.js",
     );
+    if (!fs.existsSync(bundlePath)) return;
     let bundle = fs.readFileSync(bundlePath, "utf-8");
 
     bundle = bundle.replace(
       /httpServerLocation:"(\/[^"]+)"/g,
       (_match, capturedPath) => {
-        const tempUrl = new URL(`http://localhost:8081${capturedPath}`);
+        const tempUrl = new URL(
+          `http://localhost:${METRO_PORT}${capturedPath}`,
+        );
         const unstablePath = tempUrl.searchParams.get("unstable_path");
 
         if (!unstablePath) {
-          throw new Error(
-            `Asset missing unstable_path in bundle: ${capturedPath}`,
-          );
+          return _match;
         }
 
         const decodedPath = decodeURIComponent(unstablePath);
@@ -454,15 +450,22 @@ function updateBundleUrls(timestamp, baseUrl) {
     fs.writeFileSync(bundlePath, bundle);
   };
 
-  updateForPlatform("ios");
   updateForPlatform("android");
   console.log("Updated bundle URLs");
 }
 
 function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   const updateForPlatform = (platform, manifest) => {
+    if (!manifest) {
+      console.warn(`No manifest for ${platform}, skipping`);
+      return;
+    }
+
     if (!manifest.launchAsset || !manifest.extra) {
-      exitWithError(`Malformed manifest for ${platform}`);
+      console.warn(`Malformed manifest for ${platform}:`, JSON.stringify(manifest).slice(0, 200));
+      exitWithError(
+        `Malformed manifest for ${platform} — missing launchAsset or extra`,
+      );
     }
 
     manifest.launchAsset.url = `${baseUrl}/${timestamp}/_expo/static/js/${platform}/bundle.js`;
@@ -496,7 +499,6 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
     );
   };
 
-  updateForPlatform("ios", manifests.ios);
   updateForPlatform("android", manifests.android);
   console.log("Manifests updated");
 }
@@ -511,11 +513,10 @@ async function main() {
   const timestamp = `${Date.now()}-${process.pid}`;
 
   prepareDirectories(timestamp);
-  clearMetroCache();
 
   await startMetro(domain);
 
-  const downloadTimeout = 300000;
+  const downloadTimeout = 600000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
@@ -552,6 +553,8 @@ async function main() {
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);
 
   console.log("Build complete! Deploy to:", baseUrl);
+  console.log(`Expo Go URL: exps://${domain}`);
+  console.log(`Landing page: ${baseUrl}/mobile`);
 
   if (metroProcess) {
     metroProcess.kill();

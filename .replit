@@ -7,6 +7,10 @@ channel = "stable-24_05"
 packages = ["cacert", "gitFull", "libxcrypt", "libyaml", "playwright-driver", "xcodebuild", "zlib"]
 
 [[ports]]
+localPort = 3002
+externalPort = 3002
+
+[[ports]]
 localPort = 5000
 externalPort = 80
 
@@ -21,10 +25,6 @@ externalPort = 3002
 [[ports]]
 localPort = 8084
 externalPort = 3001
-
-[[ports]]
-localPort = 3002
-externalPort = 3002
 
 [env]
 PORT = "5000"

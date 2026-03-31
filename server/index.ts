@@ -5,6 +5,7 @@ import { registerE2BDesktopRoutes } from "./e2b-desktop";
 import { registerAuthRoutes } from "./auth-routes";
 import * as fs from "fs";
 import * as path from "path";
+import * as http from "http";
 import { execFile as _execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
@@ -208,7 +209,92 @@ function getAppName(): string {
   }
 }
 
-function serveExpoManifest(platform: string, res: Response) {
+const METRO_PORT = 3002;
+
+/**
+ * Proxy a request to Metro bundler and stream the response back.
+ * Used for bundle and asset downloads so they go through Express (port 80/HTTPS)
+ * rather than directly to Metro's port (which Replit's proxy can't handle for large bundles).
+ */
+function proxyToMetro(req: Request, res: Response) {
+  const metroPath = req.url.replace(/^\/metro-proxy/, "");
+  const options: http.RequestOptions = {
+    hostname: "localhost",
+    port: METRO_PORT,
+    path: metroPath || "/",
+    method: req.method,
+    headers: {
+      ...req.headers,
+      host: `localhost:${METRO_PORT}`,
+    },
+  };
+
+  const proxyReq = http.request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode ?? 200, proxyRes.headers as Record<string, string>);
+    proxyRes.pipe(res, { end: true });
+  });
+
+  proxyReq.on("error", (err) => {
+    log(`[Expo] Metro proxy error: ${err.message}`);
+    if (!res.headersSent) {
+      res.status(502).json({ error: "Metro bundler proxy error" });
+    }
+  });
+
+  req.pipe(proxyReq, { end: true });
+}
+
+async function proxyManifestFromMetro(
+  platform: string,
+  req: Request,
+  res: Response,
+  metroPort: number = METRO_PORT,
+) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const metroRes = await fetch(`http://localhost:${metroPort}/manifest`, {
+      headers: { "expo-platform": platform },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+
+    if (!metroRes.ok) {
+      return res.status(502).json({
+        error: `Metro bundler returned ${metroRes.status}. Is Expo Go workflow running?`,
+      });
+    }
+
+    const manifest = await metroRes.json() as Record<string, unknown>;
+
+    // Determine the public HTTPS base URL for this server (Express backend on port 80)
+    const forwardedProto = req.header("x-forwarded-proto") || "https";
+    const forwardedHost = req.header("x-forwarded-host") || req.get("host") || "";
+    const backendBase = `${forwardedProto}://${forwardedHost}`;
+
+    // Rewrite Metro's http://domain:3002/... URLs to go through Express backend
+    // so that Expo Go downloads bundles via HTTPS on port 80 (no Replit proxy issues)
+    const manifestStr = JSON.stringify(manifest).replace(
+      /http:\/\/[^"]+:(\d+)\//g,
+      `${backendBase}/metro-proxy/`,
+    );
+
+    res.setHeader("expo-protocol-version", "1");
+    res.setHeader("expo-sfv-version", "0");
+    res.setHeader("content-type", "application/json");
+    res.send(manifestStr);
+
+    log(`[Expo] Proxied ${platform} manifest from Metro → bundle via Express backend`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`[Expo] Metro proxy failed: ${msg}`);
+    return res.status(502).json({
+      error: "Metro bundler unavailable. Make sure the Expo Go workflow is running.",
+    });
+  }
+}
+
+async function serveExpoManifest(platform: string, req: Request, res: Response) {
   const manifestPath = path.resolve(
     process.cwd(),
     "static-build",
@@ -217,9 +303,11 @@ function serveExpoManifest(platform: string, res: Response) {
   );
 
   if (!fs.existsSync(manifestPath)) {
-    return res
-      .status(404)
-      .json({ error: `Manifest not found for platform: ${platform}` });
+    // Fallback: proxy manifest from the running Metro dev server (port 3002)
+    // Rewrite bundle URLs to go through Express backend so Expo Go downloads
+    // via HTTPS on port 80 (avoids Replit proxy issues on port 3002)
+    log(`[Expo] static-build not found — falling back to Metro dev proxy`);
+    return proxyManifestFromMetro(platform, req, res, METRO_PORT);
   }
 
   res.setHeader("expo-protocol-version", "1");
@@ -279,7 +367,7 @@ function configureExpoAndLanding(app: express.Application) {
 
   log("Serving static Expo files with dynamic manifest routing");
 
-  app.use((req: Request, res: Response, next: NextFunction) => {
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) {
       return next();
     }
@@ -306,7 +394,7 @@ function configureExpoAndLanding(app: express.Application) {
     if (req.path === "/manifest") {
       const platform = req.header("expo-platform");
       if (platform && (platform === "ios" || platform === "android")) {
-        return serveExpoManifest(platform, res);
+        return await serveExpoManifest(platform, req, res);
       }
       return next();
     }
@@ -314,10 +402,17 @@ function configureExpoAndLanding(app: express.Application) {
     if (req.path === "/") {
       const platform = req.header("expo-platform");
       if (platform && (platform === "ios" || platform === "android")) {
-        return serveExpoManifest(platform, res);
+        return await serveExpoManifest(platform, req, res);
       }
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(200).send(webChatTemplate);
+    }
+
+    // Metro proxy: forward /metro-proxy/* requests to Metro bundler on localhost:METRO_PORT
+    // This allows Expo Go to download bundles via Express HTTPS (port 80) instead of
+    // Metro's port directly (which Replit's proxy can't handle for large 10MB+ bundles)
+    if (req.path.startsWith("/metro-proxy/") || req.path === "/metro-proxy") {
+      return proxyToMetro(req, res);
     }
 
     next();
