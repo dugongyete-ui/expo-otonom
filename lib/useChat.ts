@@ -4,11 +4,12 @@ import { getToolActionVerb } from "./tool-constants";
 import {
   processAgentEvent,
   applyEventToFlatMessages,
+  FlatMessage,
   FlatChatReducerCallbacks,
 } from "./agent-event-processor";
 
-// FlatMessage is defined in agent-event-processor; re-exported here for consumers.
-export type { FlatMessage as Message } from "./agent-event-processor";
+// Re-export FlatMessage as Message for backward-compat with existing consumers.
+export type Message = FlatMessage;
 
 export interface AgentPlan {
   title?: string;
