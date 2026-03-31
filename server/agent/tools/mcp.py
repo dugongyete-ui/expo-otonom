@@ -20,12 +20,20 @@ from server.agent.tools.base import BaseTool, tool
 
 logger = logging.getLogger(__name__)
 
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
-MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
-# _get_mcp_config_path() is intentionally read at call time (not module-load time)
-# so runtime env changes take effect without a process restart.
+# All MCP env vars are read at call time (not module-load time) so that
+# runtime environment changes take effect without a process restart.
+def _get_mcp_server_url() -> str:
+    return os.environ.get("MCP_SERVER_URL", "")
+
+def _get_mcp_auth_token() -> str:
+    return os.environ.get("MCP_AUTH_TOKEN", "")
+
 def _get_mcp_config_path() -> str:
     return os.environ.get("MCP_CONFIG_PATH", "")
+
+# Module-level aliases kept for backward-compatibility with direct imports.
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
+MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
 
 
 def _make_ssl_ctx() -> ssl.SSLContext:
@@ -63,8 +71,9 @@ class MCPClientManager:
     @staticmethod
     def _get_auth_token(server_url: str) -> str:
         """Get the appropriate auth token for a given MCP server URL."""
-        if MCP_AUTH_TOKEN:
-            return MCP_AUTH_TOKEN
+        token = _get_mcp_auth_token()
+        if token:
+            return token
         return ""
 
     def _call_http_mcp(self, server_url: str, tool_name: str, arguments: Dict[str, Any], auth_token: str = "") -> ToolResult:
@@ -234,8 +243,9 @@ class MCPClientManager:
                 return res
 
         # Fallback to MCP_SERVER_URL env var
-        if MCP_SERVER_URL:
-            return self._call_http_mcp(MCP_SERVER_URL, tool_name, arguments)
+        _srv_url = _get_mcp_server_url()
+        if _srv_url:
+            return self._call_http_mcp(_srv_url, tool_name, arguments)
 
         # No server configured — return explicit error with actionable message
         _cfg_path = _get_mcp_config_path()
@@ -300,8 +310,9 @@ class MCPClientManager:
         # Load from MongoDB (authoritative — includes tools added via REST API)
         _fetch_tools_from_servers(self._get_servers_from_mongo())
 
-        if not all_tools and MCP_SERVER_URL:
-            return self._list_http_tools(MCP_SERVER_URL)
+        _fallback_url = _get_mcp_server_url()
+        if not all_tools and _fallback_url:
+            return self._list_http_tools(_fallback_url)
 
         local_tools = self.get_all_tools()
         all_tools.extend(local_tools)
