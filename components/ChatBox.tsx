@@ -1,12 +1,16 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   View,
   TextInput,
   StyleSheet,
   TouchableOpacity,
   Platform,
+  Image,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import type { ChatAttachment } from "@/lib/chat";
 
 interface ChatBoxProps {
@@ -18,6 +22,7 @@ interface ChatBoxProps {
   isAgentMode?: boolean;
   isWaitingForUser?: boolean;
   attachments?: ChatAttachment[];
+  onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
 }
 
 export function ChatBox({
@@ -29,12 +34,13 @@ export function ChatBox({
   isAgentMode = false,
   isWaitingForUser = false,
   attachments = [],
+  onAttachmentsChange,
 }: ChatBoxProps) {
   const inputRef = useRef<TextInput>(null);
 
-  const inputEditable = true; // Always allow input
-  const showSendButton = true; // Always show send button
-  const canSend = value.trim().length > 0;
+  const inputEditable = true;
+  const showSendButton = true;
+  const canSend = value.trim().length > 0 || attachments.length > 0;
 
   const placeholder = isWaitingForUser
     ? "Ketik balasan Anda..."
@@ -42,8 +48,61 @@ export function ChatBox({
       ? "Pesan untuk Agent AI..."
       : "Kirim pesan ke Dzeck AI...";
 
+  const handleAttachImage = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const newAttachments = [
+          ...attachments,
+          {
+            uri: asset.uri,
+            type: "image" as const,
+            name: asset.fileName || "image.jpg",
+          },
+        ];
+        onAttachmentsChange?.(newAttachments);
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+      }
+    } catch (error) {
+      console.error("Image picker error:", error);
+    }
+  }, [attachments, onAttachmentsChange]);
+
+  const removeAttachment = useCallback((index: number) => {
+    onAttachmentsChange?.(attachments.filter((_, i) => i !== index));
+  }, [attachments, onAttachmentsChange]);
+
   return (
     <View style={styles.container}>
+      {/* Attachment previews */}
+      {attachments.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.attachmentBar}
+          contentContainerStyle={styles.attachmentBarContent}
+        >
+          {attachments.map((att, i) => (
+            <View key={i} style={styles.attachmentPreview}>
+              <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+              <TouchableOpacity
+                style={styles.removeAttachment}
+                onPress={() => removeAttachment(i)}
+              >
+                <Ionicons name="close-circle" size={18} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
       <View style={[styles.inputWrapper, isWaitingForUser && styles.inputWrapperWaiting]}>
         <TextInput
           ref={inputRef}
@@ -62,13 +121,20 @@ export function ChatBox({
 
       <View style={styles.toolbar}>
         <View style={styles.toolbarLeft}>
+          {/* Attachment button */}
+          <TouchableOpacity
+            onPress={handleAttachImage}
+            style={styles.toolbarBtn}
+            activeOpacity={0.6}
+          >
+            <Ionicons name="image-outline" size={20} color="#8a8780" />
+          </TouchableOpacity>
           {isAgentMode && (
             <Ionicons name="flash" size={18} color="#d97706" style={styles.modeIcon} />
           )}
         </View>
 
         <View style={styles.toolbarRight}>
-          {/* Always show Send button if there is text, otherwise show Stop if loading */}
           {canSend ? (
             <TouchableOpacity
               onPress={onSubmit}
@@ -108,6 +174,30 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === "ios" ? 20 : 8,
     paddingHorizontal: 12,
   },
+  attachmentBar: {
+    maxHeight: 80,
+    marginBottom: 4,
+  },
+  attachmentBarContent: {
+    paddingVertical: 4,
+    gap: 8,
+  },
+  attachmentPreview: {
+    position: "relative",
+    marginRight: 8,
+  },
+  attachmentThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+  },
+  removeAttachment: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "#edebe3",
+    borderRadius: 9,
+  },
   inputWrapper: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -141,6 +231,7 @@ const styles = StyleSheet.create({
   toolbarLeft: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
   toolbarRight: {
     flexDirection: "row",

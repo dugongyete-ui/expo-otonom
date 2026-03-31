@@ -83,10 +83,14 @@ function SearchContent({ query, results }: { query?: string; results?: { title: 
 function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; title?: string; content?: string; screenshotB64?: string }) {
   const [imgError, setImgError] = useState(false);
 
-  // Validate base64 uri — must have proper prefix and reasonable length
-  const validScreenshot = screenshotB64 &&
-    (screenshotB64.startsWith("data:image/jpeg;base64,") || screenshotB64.startsWith("data:image/png;base64,")) &&
-    screenshotB64.length > 100;
+  // Normalize raw base64 to data URI so screenshots render regardless of prefix
+  const normalizedShot = screenshotB64
+    ? (screenshotB64.startsWith("data:") ? screenshotB64 : `data:image/png;base64,${screenshotB64}`)
+    : "";
+  // Validate: must have proper prefix and reasonable length
+  const validScreenshot = normalizedShot &&
+    (normalizedShot.startsWith("data:image/jpeg;base64,") || normalizedShot.startsWith("data:image/png;base64,")) &&
+    normalizedShot.length > 100;
 
   return (
     <View style={styles.browserBody}>
@@ -100,7 +104,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
       {validScreenshot && !imgError ? (
         <View style={styles.screenshotWrapper}>
           <Image
-            source={{ uri: screenshotB64 }}
+            source={{ uri: normalizedShot }}
             style={styles.screenshotImage}
             resizeMode="cover"
             onError={() => setImgError(true)}
@@ -416,7 +420,7 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: "#ddd9d0",
     overflow: "hidden",

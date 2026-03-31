@@ -105,6 +105,7 @@ export function ChatPage({
   const sseReconnectAttemptsRef = useRef(0);
   const sseReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventIdRef = useRef<string>("0");
+  const filesShownViaNotifyRef = useRef(false);
   const MAX_SSE_RECONNECT_ATTEMPTS = 3;
   const [streamingContent, setStreamingContent] = useState("");
   const [lastBrowserEvent, setLastBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
@@ -166,6 +167,7 @@ export function ChatPage({
       planMsgIdRef.current = null;
       currentPlanRef.current = null;
       streamingMsgIdRef.current = null;
+      filesShownViaNotifyRef.current = false;
       setStreamingContent('');
       setThinking({ active: false, label: '', stepLabel: undefined });
       setIsLoading(false);
@@ -310,31 +312,34 @@ export function ChatPage({
           const idx = prev.findIndex(t => t.tool_call_id === callId);
           if (idx >= 0) {
             const updated = [...prev];
+            const existing = updated[idx];
+            // Deep-merge tool_content: preserve screenshot_b64/url/title from prior
+            // browser_screenshot/desktop_screenshot events unless new payload provides them
+            const prevTc = existing.tool_content || {};
+            const newTc = event.tool_content || {};
+            // Normalize screenshot_b64 to data URI format at merge time
+            const normalizeShot = (s: string) =>
+              s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
+            const newShot = normalizeShot(newTc.screenshot_b64 || "");
+            const mergedTc = {
+              ...prevTc,
+              ...newTc,
+              // Preserve existing normalized screenshot if new payload doesn't include one
+              screenshot_b64: newShot || prevTc.screenshot_b64 || "",
+              url: newTc.url || prevTc.url || "",
+              title: newTc.title || prevTc.title || "",
+            };
             updated[idx] = {
-              ...updated[idx],
+              ...existing,
               status: "called",
               function_name: functionName,
               output: event.function_result,
-              tool_content: event.tool_content,
+              tool_content: mergedTc,
             };
             return updated;
           }
           return prev;
         });
-        // If tool result includes a screenshot, show it inline in chat
-        const toolScr: string = (event.tool_content && typeof event.tool_content["screenshot_b64"] === "string")
-          ? event.tool_content["screenshot_b64"]
-          : "";
-        if (toolScr) {
-          const scrMsg: ChatMessage = {
-            id: `scr_${Date.now()}_tool_${callId}`,
-            role: "assistant",
-            content: "",
-            timestamp: Date.now(),
-            screenshotB64: toolScr.startsWith("data:") ? toolScr : `data:image/png;base64,${toolScr}`,
-          };
-          setMessages(prev => [...prev, scrMsg]);
-        }
       } else if (status === "error") {
         setTools(prev => {
           const idx = prev.findIndex(t => t.tool_call_id === callId);
@@ -475,6 +480,7 @@ export function ChatPage({
       // If notify event includes file attachments, show them as a chat message with download buttons
       const notifyAttachments = event.attachments as Array<{ filename: string; download_url: string; sandbox_path?: string }> | undefined;
       if (notifyAttachments && notifyAttachments.length > 0) {
+        filesShownViaNotifyRef.current = true;
         const filesMsg: ChatMessage = {
           id: `msg_${Date.now()}_notify_files`,
           role: "assistant",
@@ -492,6 +498,11 @@ export function ChatPage({
     }
 
     if (type === "files") {
+      // Skip if files were already shown via a notify event (prevents duplicate cards)
+      if (filesShownViaNotifyRef.current) {
+        filesShownViaNotifyRef.current = false;
+        return;
+      }
       const files = event.files as Array<{ filename: string; download_url: string; mime?: string; sandbox_path?: string }> | undefined;
       if (files && files.length > 0) {
         const fileMsg: ChatMessage = {
@@ -514,14 +525,28 @@ export function ChatPage({
           url: event.url || event.vnc_url || "",
           title: event.title || "",
         });
-        const scrMsg: ChatMessage = {
-          id: `scr_${Date.now()}_browser`,
-          role: "assistant",
-          content: "",
-          timestamp: Date.now(),
-          screenshotB64: scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`,
-        };
-        setMessages(prev => [...prev, scrMsg]);
+        // Attach screenshot inline to the relevant tool card by tool_call_id
+        const callId = event.tool_call_id || "";
+        const normalizedScr = scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`;
+        setTools(prev => {
+          const idx = callId ? prev.findIndex(t => t.tool_call_id === callId) : prev.length - 1;
+          if (idx >= 0) {
+            const updated = [...prev];
+            const existing = updated[idx].tool_content || {};
+            updated[idx] = {
+              ...updated[idx],
+              tool_content: {
+                ...existing,
+                type: existing.type || "browser",
+                screenshot_b64: normalizedScr,
+                url: event.url || existing.url || "",
+                title: event.title || existing.title || "",
+              },
+            };
+            return updated;
+          }
+          return prev;
+        });
       }
       return;
     }
@@ -530,14 +555,26 @@ export function ChatPage({
       const scr = event.screenshot_b64 || "";
       if (scr) {
         setLastBrowserEvent({ screenshot_b64: scr });
-        const scrMsg: ChatMessage = {
-          id: `scr_${Date.now()}_desktop`,
-          role: "assistant",
-          content: "",
-          timestamp: Date.now(),
-          screenshotB64: scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`,
-        };
-        setMessages(prev => [...prev, scrMsg]);
+        // Attach screenshot inline to the most recent tool card
+        const callId = event.tool_call_id || "";
+        const normalizedScr = scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`;
+        setTools(prev => {
+          const idx = callId ? prev.findIndex(t => t.tool_call_id === callId) : prev.length - 1;
+          if (idx >= 0) {
+            const updated = [...prev];
+            const existing = updated[idx].tool_content || {};
+            updated[idx] = {
+              ...updated[idx],
+              tool_content: {
+                ...existing,
+                type: existing.type || "browser",
+                screenshot_b64: normalizedScr,
+              },
+            };
+            return updated;
+          }
+          return prev;
+        });
       }
       return;
     }
@@ -573,7 +610,7 @@ export function ChatPage({
   }, [onVncSessionChange]);
 
   const handleSubmit = useCallback(async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() && attachments.length === 0) return;
 
     if (cancelRef.current) {
       cancelRef.current();
@@ -591,8 +628,11 @@ export function ChatPage({
     const wasContinuation = isWaitingForUser;
 
     setMessages(prev => [...prev, userMsg]);
-    const msgText = inputMessage.trim();
+    // If attachment-only (no text), synthesize a default prompt so the backend receives non-empty message
+    const msgText = inputMessage.trim() || (attachments.length > 0 ? "Analisis lampiran ini." : "");
     setInputMessage("");
+    setAttachments([]);
+    filesShownViaNotifyRef.current = false;
     setIsLoading(true);
     isWaitingRef.current = false;
     setIsWaitingForUser(false);
@@ -660,7 +700,7 @@ export function ChatPage({
             message: msgText,
             messages: historyMsgs,
             model: activeModel,
-            attachments: [],
+            attachments: attachments.length > 0 ? attachments : [],
             session_id: activeSessionIdRef.current,
             is_continuation: wasContinuation,
           },
@@ -922,6 +962,7 @@ export function ChatPage({
         isWaitingForUser={isWaitingForUser}
         isAgentMode={isAgentMode}
         attachments={attachments}
+        onAttachmentsChange={setAttachments}
       />
     </KeyboardAvoidingView>
   );

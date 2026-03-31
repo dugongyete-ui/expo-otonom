@@ -155,13 +155,12 @@ def main() -> None:
     Reads JSON from stdin, runs async agent, writes events to stdout.
     """
     # ── Preflight: validate required environment variables ────────────────────
+    # Only CEREBRAS_API_KEY is strictly required for basic chat/agent function.
+    # E2B_API_KEY and MONGODB_URI are optional (agent will run without them,
+    # but sandbox tools and session persistence will be unavailable).
     _missing = []
     if not os.environ.get("CEREBRAS_API_KEY", ""):
         _missing.append("CEREBRAS_API_KEY")
-    if not os.environ.get("E2B_API_KEY", ""):
-        _missing.append("E2B_API_KEY")
-    if not os.environ.get("MONGODB_URI", ""):
-        _missing.append("MONGODB_URI")
     if _missing:
         _emit({
             "type": "error",
@@ -169,6 +168,16 @@ def main() -> None:
         })
         _emit({"type": "done", "success": False})
         return
+
+    # Warn about optional but recommended env vars (non-fatal)
+    _optional_missing = []
+    if not os.environ.get("E2B_API_KEY", ""):
+        _optional_missing.append("E2B_API_KEY")
+    if not os.environ.get("MONGODB_URI", ""):
+        _optional_missing.append("MONGODB_URI")
+    if _optional_missing:
+        sys.stderr.write("[agent_runner] Optional env vars not set (some features disabled): {}\n".format(", ".join(_optional_missing)))
+        sys.stderr.flush()
 
     try:
         raw_input = sys.stdin.read()

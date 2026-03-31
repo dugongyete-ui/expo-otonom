@@ -394,6 +394,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       }
 
       let buffer = "";
+      let messageStarted = false;
       apiRes.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
         const lines = buffer.split("\n");
@@ -407,6 +408,10 @@ export async function registerRoutes(app: any): Promise<Server> {
               const parsed = JSON.parse(trimmed.slice(6));
               const content = parsed.response ?? parsed.choices?.[0]?.delta?.content ?? "";
               if (content) {
+                if (!messageStarted) {
+                  res.write(`data: ${JSON.stringify({ type: "message_start", role: "assistant" })}\n\n`);
+                  messageStarted = true;
+                }
                 res.write(`data: ${JSON.stringify({ type: "message_chunk", chunk: content })}\n\n`);
                 if (typeof (res as any).flush === "function") (res as any).flush();
               }
