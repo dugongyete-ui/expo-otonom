@@ -1093,6 +1093,9 @@ export async function registerRoutes(app: any): Promise<Server> {
         DZECK_USER_ID: userId || "",
         E2B_API_KEY: e2bKey,
         ...(dzeckSandboxId ? { DZECK_E2B_SANDBOX_ID: dzeckSandboxId } : {}),
+        // Pass the TS-obtained VNC stream URL to Python so it can use it as a reliable
+        // fallback instead of constructing a potentially wrong URL from the sandbox ID.
+        ...(preLaunchStreamUrl ? { DZECK_VNC_STREAM_URL: preLaunchStreamUrl } : {}),
         // If Python will create its own sandbox (no pre-existing sandbox ID), mark ownership
         // so _cleanup_e2b_sandbox() runs at agent exit and prevents sandbox leaks.
         ...(!dzeckSandboxId ? { DZECK_AGENT_OWNS_SANDBOX: "1" } : {}),

@@ -302,15 +302,22 @@ def _connect_existing_sandbox(sandbox_id: str, max_retries: int = 3) -> Optional
                 _vnc_stream_url = vnc_url
                 logger.info("[E2B] VNC stream URL from connected sandbox: %s", vnc_url)
             except Exception:
-                # SDK stream methods unavailable after Sandbox.connect() — construct URL manually.
-                # The TS server has already emitted this URL to the frontend; this just keeps
-                # Python's internal state in sync so any tool that checks _vnc_stream_url works.
-                fallback_url = (
-                    f"https://6080-{sandbox_id}.e2b.app"
-                    f"/vnc.html?autoconnect=true&resize=scale"
-                )
-                _vnc_stream_url = fallback_url
-                logger.info("[E2B] Using constructed VNC URL for connected sandbox: %s", fallback_url)
+                # SDK stream methods unavailable after Sandbox.connect() — use the URL that
+                # the TypeScript server passed via DZECK_VNC_STREAM_URL env var (set in routes.ts
+                # from preLaunchStreamUrl). This is more reliable than constructing a URL from
+                # the sandbox ID because the TS server got the URL directly from the E2B SDK.
+                ts_vnc_url = os.environ.get("DZECK_VNC_STREAM_URL", "").strip()
+                if ts_vnc_url:
+                    _vnc_stream_url = ts_vnc_url
+                    logger.info("[E2B] Using TS-provided VNC URL for connected sandbox: %s", ts_vnc_url)
+                else:
+                    # Last resort: construct from sandbox ID (may not always be correct)
+                    fallback_url = (
+                        f"https://6080-{sandbox_id}.e2b.app"
+                        f"/vnc.html?autoconnect=true&resize=scale"
+                    )
+                    _vnc_stream_url = fallback_url
+                    logger.info("[E2B] Using constructed VNC URL for connected sandbox: %s", fallback_url)
 
             # Push config files in background — same as _create_sandbox does.
             # Replay file cache so any files written before connect are available.
@@ -371,30 +378,26 @@ def get_sandbox() -> Optional[Any]:
                 )
                 _sandbox = _connect_existing_sandbox(existing_sandbox_id)
                 if _sandbox is None:
-                    logger.warning(
-                        "[E2B] Could not connect to existing sandbox %s after retries — creating new sandbox. "
-                        "This may cause a VNC/sandbox mismatch; new ID will be emitted to frontend.",
-                        existing_sandbox_id,
+                    # TS created the sandbox and passed DZECK_E2B_SANDBOX_ID — if we cannot
+                    # connect, do NOT silently create a new sandbox. That would cause a
+                    # VNC/sandbox split-brain (user sees TS sandbox, agent runs in a different
+                    # one). Emit a clear error event instead so the frontend shows the issue.
+                    err_msg = (
+                        "E2B sandbox '{}' created by server is not reachable after {} attempts. "
+                        "The sandbox may have expired or been deleted. "
+                        "Please start a new session to continue.".format(existing_sandbox_id, 3)
                     )
-                    _sandbox = _create_sandbox()
-                    # Emit new sandbox ID to TypeScript via stdout so frontend VNC stays in sync
-                    if _sandbox is not None:
-                        try:
-                            new_id = _sandbox.sandbox_id
-                            new_vnc = _vnc_stream_url or ""
-                            # Update env var so subsequent get_sandbox() calls use the new sandbox
-                            os.environ["DZECK_E2B_SANDBOX_ID"] = new_id
-                            import sys as _sys
-                            _sys.stdout.write(json.dumps({
-                                "type": "vnc_stream_url",
-                                "vnc_url": new_vnc,
-                                "sandbox_id": new_id,
-                                "reason": "reconnect_failed_new_sandbox",
-                            }) + "\n")
-                            _sys.stdout.flush()
-                            logger.info("[E2B] Emitted new sandbox ID %s to frontend after reconnect failure.", new_id)
-                        except Exception as _emit_err:
-                            logger.warning("[E2B] Failed to emit new sandbox ID: %s", _emit_err)
+                    logger.error("[E2B] %s", err_msg)
+                    import sys as _sys
+                    _sys.stdout.write(json.dumps({
+                        "type": "error",
+                        "error": err_msg,
+                        "sandbox_id": existing_sandbox_id,
+                        "fatal": True,
+                    }) + "\n")
+                    _sys.stdout.flush()
+                    # Return None so callers get a clear "sandbox unavailable" error
+                    # from their own error handling path (run_command returns error dict etc.)
                 else:
                     logger.info(
                         "[E2B] Successfully connected to existing TS sandbox %s — sharing same desktop.",

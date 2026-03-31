@@ -143,7 +143,7 @@ async def send_email_async(
 ) -> bool:
     """Async wrapper for send_email — runs the SMTP call in an executor thread."""
     import asyncio
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None,
         lambda: send_email(
