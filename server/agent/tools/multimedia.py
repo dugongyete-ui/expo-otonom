@@ -99,9 +99,33 @@ class MultimediaTool(BaseTool):
                 message=f"PDF generated successfully: {output_path}",
                 data={"output_path": output_path, "input_path": input_path},
             )
+
+        # Pandoc failed — try pdfkit (wkhtmltopdf Python wrapper) as last resort
+        pkg_check = _shell_run("python3 -c 'import pdfkit; print(\"ok\")' 2>/dev/null", timeout=10)
+        if "ok" not in pkg_check["stdout"]:
+            _shell_run("pip install --break-system-packages pdfkit 2>/dev/null || true", timeout=60)
+        _pdfkit_script = (
+            "import pdfkit, sys; "
+            "pdfkit.from_file(sys.argv[1], sys.argv[2])"
+        )
+        pdfkit_result = _shell_run(
+            f"python3 -c {shlex.quote(_pdfkit_script)} {inp_q} {out_q} 2>&1",
+            timeout=60,
+        )
+        if _file_exists(output_path):
+            return ToolResult(
+                success=True,
+                message=f"PDF generated via pdfkit: {output_path}",
+                data={"output_path": output_path, "input_path": input_path},
+            )
+
         return ToolResult(
             success=False,
-            message=f"PDF conversion failed: {result['stderr'] or result['stdout']}",
+            message=(
+                f"PDF conversion failed with all engines (pandoc + pdfkit). "
+                f"Pandoc error: {result['stderr'] or result['stdout']}. "
+                f"pdfkit error: {pdfkit_result['stderr'] or pdfkit_result['stdout']}"
+            ),
         )
 
     @tool(
@@ -184,17 +208,23 @@ class MultimediaTool(BaseTool):
         required=["input_path"],
     )
     def speech_to_text(self, input_path: str) -> ToolResult:
-        # Check if whisper is available, install if not
+        # Check if whisper is available; install with a shorter timeout to avoid silent hang
         check = _shell_run("python3 -c 'import whisper; print(\"ok\")' 2>/dev/null", timeout=15)
         if "ok" not in check["stdout"]:
             inst = _shell_run(
                 "pip install --break-system-packages openai-whisper 2>&1 | tail -5",
-                timeout=300,
+                timeout=120,
             )
-            if inst["exit_code"] != 0:
+            # Re-verify import after install attempt (catches silent install failures)
+            check2 = _shell_run("python3 -c 'import whisper; print(\"ok\")' 2>/dev/null", timeout=15)
+            if "ok" not in check2["stdout"]:
                 return ToolResult(
                     success=False,
-                    message=f"Could not install whisper: {inst['stderr'] or inst['stdout']}",
+                    message=(
+                        "openai-whisper tidak tersedia di sandbox dan gagal diinstall. "
+                        "Pastikan pip bisa mengakses PyPI di dalam sandbox E2B. "
+                        f"Detail: {inst.get('stderr') or inst.get('stdout') or 'unknown error'}"
+                    ),
                 )
 
         script = (

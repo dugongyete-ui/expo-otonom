@@ -1061,7 +1061,12 @@ export async function registerRoutes(app: any): Promise<Server> {
       const existingSandboxId = getActiveE2BSandboxId();
       if (existingSandboxId) {
         dzeckSandboxId = existingSandboxId;
-        console.log(`[Agent] Reusing existing TS sandbox ${dzeckSandboxId} for Python agent`);
+        // Look up the VNC stream URL from the active session so Python can use it reliably.
+        const existingSession = getSessionBySandboxId(existingSandboxId);
+        if (existingSession?.streamUrl) {
+          preLaunchStreamUrl = existingSession.streamUrl;
+        }
+        console.log(`[Agent] Reusing existing TS sandbox ${dzeckSandboxId} for Python agent (vnc=${!!preLaunchStreamUrl})`);
       } else {
         // No existing sandbox — create one now so Python uses the same sandbox user sees
         console.log(`[Agent] No active E2B session, creating new sandbox for Python agent...`);
@@ -1424,7 +1429,9 @@ export async function registerRoutes(app: any): Promise<Server> {
   app.get("/api/agent/stream/:sid", requireAuth, async (req: any, res: any) => {
     const { sid } = req.params;
     const replay = req.query.replay === "true";
-    const lastId: string = (req.query.last_id as string) || "0";
+    // Support both ?last_id= query param and the standard Last-Event-ID header
+    // (browser EventSource sends Last-Event-ID header on auto-reconnect).
+    const lastId: string = (req.query.last_id as string) || (req.headers["last-event-id"] as string) || "0";
     const requestingUserIdStream: string = req.user?.id || "";
 
     const session = activeAgentSessions.get(sid);
@@ -1524,7 +1531,8 @@ export async function registerRoutes(app: any): Promise<Server> {
   // Client sends ?last_id=<last-seen-stream-id> (default "0" = from start).
   app.get("/api/agent/stream-redis/:sid", requireAuth, async (req: any, res: any) => {
     const { sid } = req.params;
-    const lastId: string = (req.query.last_id as string) || "0";
+    // Support both ?last_id= query param and the standard Last-Event-ID header.
+    const lastId: string = (req.query.last_id as string) || (req.headers["last-event-id"] as string) || "0";
     const requestingUserId: string = req.user?.id || "";
     const streamKey = `stream:session:${sid}`;
 
