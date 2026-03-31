@@ -1,15 +1,7 @@
 /**
- * Shared agent event processor — single source of truth for parsing AgentEvent objects
- * into normalized, typed structures usable by both useChat.ts and ChatPage.tsx.
- *
- * Architecture:
- *   Backend (Python plan_act.py)
- *     → Redis Stream  (key: stream:session:<id>)
- *     → TypeScript SSE relay (routes.ts)
- *     → AgentEvent (api-service.ts)
- *     → processAgentEvent() [HERE]  ← one parser, two consumers
- *         ├── useChat.ts    (ChatScreen — flat message model)
- *         └── ChatPage.tsx  (primary UI — rich plan/tool grouping model)
+ * Shared agent event parser — single source of truth for AgentEvent → NormalizedEvent conversion.
+ * Both useChat.ts (flat message model) and ChatPage.tsx (rich plan/tool model) call
+ * processAgentEvent() and switch on ev.kind instead of duplicating raw field access.
  */
 
 import { AgentEvent } from "./api-service";

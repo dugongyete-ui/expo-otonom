@@ -1,12 +1,4 @@
-/**
- * @deprecated agent-service.ts is a legacy module that is no longer active.
- * It was previously initialized in app/(tabs)/index.tsx but that call has been removed.
- * Active event processing now goes through:
- *   lib/agent-event-processor.ts  ← shared parser (source of truth)
- *   lib/useChat.ts                ← used by ChatScreen (flat message model)
- *   components/ChatPage.tsx       ← primary UI (rich plan/tool grouping model)
- * This file is kept for reference only and will be removed in a future cleanup.
- */
+/** @deprecated No longer initialized. Legacy module kept for reference. */
 import { EventEmitter } from "events";
 
 export interface AgentMessage {

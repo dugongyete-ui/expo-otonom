@@ -26,6 +26,8 @@ except ImportError:
 
 
 def _stream_key(session_id: str) -> str:
+    # Key format: stream:session:<session_id>
+    # Must match TypeScript consumer in routes.ts: `stream:session:${sid}`
     return f"stream:session:{session_id}"
 
 

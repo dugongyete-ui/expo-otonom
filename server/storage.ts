@@ -1,3 +1,13 @@
+/**
+ * storage.ts — MongoDB-only user persistence layer.
+ *
+ * This module provides user CRUD operations backed exclusively by MongoDB.
+ * There are NO in-memory Maps or in-process caches here. Every call hits MongoDB.
+ *
+ * Note: The `sharedSessions` Map in routes.ts is a separate write-through cache
+ * for session share state — it is always persisted to MongoDB on write and loaded
+ * from MongoDB on server startup. It is NOT part of this module.
+ */
 import { type User, type InsertUser } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { getCollection } from "./db/mongo";

@@ -212,13 +212,6 @@ export function ChatPage({
     onBrowserEventChange?.(lastBrowserEvent);
   }, [lastBrowserEvent, onBrowserEventChange]);
 
-  /**
-   * handleEvent — primary event dispatcher for ChatPage.
-   * Calls processAgentEvent() (shared parser from agent-event-processor.ts) to normalize
-   * the raw AgentEvent, then applies ChatPage-specific UI updates (plan grouping,
-   * tool-content merging, thinking labels, VNC/browser panel propagation, etc.).
-   * useChat.ts uses the same processAgentEvent() parser with its simpler flat-message model.
-   */
   const handleEvent = useCallback((event: AgentEvent) => {
     const ev = processAgentEvent(event);
 

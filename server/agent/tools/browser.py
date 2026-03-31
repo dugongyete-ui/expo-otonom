@@ -11,6 +11,12 @@ Architecture (Manus.im pattern):
   - screenshot via scrot
   - Page content extracted via curl + python beautifulsoup in sandbox
 
+E2B-ONLY ENFORCEMENT:
+  - Local Playwright fallback is intentionally NOT implemented (security boundary).
+  - When E2B_API_KEY is not set, _make_session() returns _E2BRequiredBrowserStub
+    which returns clear error messages for all browser methods.
+  - There is NO code path that falls back to a local browser process.
+
 Provides: BrowserTool class + backward-compatible functions.
 """
 import re
