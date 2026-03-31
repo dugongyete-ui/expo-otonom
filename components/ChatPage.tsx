@@ -3,12 +3,12 @@ import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, Touch
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
-import { AgentThinking } from "./AgentThinking";
+import { AgentPlanView } from "./AgentPlanView";
+import { Ionicons } from "@expo/vector-icons";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
 import { processAgentEvent } from "../lib/agent-event-processor";
 import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
 import { randomUUID } from "expo-crypto";
-import { Ionicons } from "@expo/vector-icons";
 import { useI18n, t as translate } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { MCPPanel } from "./MCPPanel";
@@ -105,6 +105,8 @@ export function ChatPage({
   const { logout } = useAuth();
   const [attachments, setAttachments] = useState<any[]>([]);
   const [e2bStatus, setE2bStatus] = useState<"checking" | "connected" | "error">("checking");
+  const [taskCompleted, setTaskCompleted] = useState(false);
+  const [taskCompletedExpanded, setTaskCompletedExpanded] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const activeSessionIdRef = useRef<string>(externalSessionId || randomUUID());
@@ -605,6 +607,10 @@ export function ChatPage({
         }
         setThinking({ active: false, label: "", stepLabel: undefined });
         setIsLoading(false);
+        if (isAgentMode) {
+          setTaskCompleted(true);
+          setTaskCompletedExpanded(false);
+        }
         return;
       }
 
@@ -816,7 +822,7 @@ export function ChatPage({
       default:
         return;
     }
-  }, [onVncSessionChange]);
+  }, [onVncSessionChange, isAgentMode]);
 
   const handleSubmit = useCallback(async () => {
     if (!inputMessage.trim() && attachments.length === 0) return;
@@ -846,6 +852,8 @@ export function ChatPage({
     isWaitingRef.current = false;
     setIsWaitingForUser(false);
     setTools([]);
+    setTaskCompleted(false);
+    setTaskCompletedExpanded(false);
     if (!wasContinuation) {
       setStepHistory([]);
       planMsgIdRef.current = null;
@@ -1183,70 +1191,135 @@ export function ChatPage({
               </View>
             );
           }
+
+          // Plan message — show agent header + AgentPlanView card(s)
+          if (item.plan) {
+            const isPlanRunning = item.plan.status === "running" || item.plan.steps.some(s => s.status === "running");
+            const isPlanDone = item.plan.status === "completed" || item.plan.steps.every(s => s.status === "completed" || s.status === "failed");
+            return (
+              <View style={styles.agentTurnBlock}>
+                <View style={styles.agentTurnHeader}>
+                  <View style={styles.agentTurnIcon}>
+                    <Ionicons name="hardware-chip-outline" size={13} color="#ffffff" />
+                  </View>
+                  <Text style={styles.agentTurnName}>Dzeck</Text>
+                  {isPlanRunning && !isPlanDone && (
+                    <View style={styles.agentTurnBadgeRunning}>
+                      <Text style={styles.agentTurnBadgeText}>Working…</Text>
+                    </View>
+                  )}
+                  {isPlanDone && (
+                    <View style={styles.agentTurnBadgeDone}>
+                      <Text style={[styles.agentTurnBadgeText, { color: "#16a34a" }]}>Done</Text>
+                    </View>
+                  )}
+                </View>
+                <AgentPlanView plan={item.plan} />
+              </View>
+            );
+          }
+
+          // File output message — redesigned document cards
           if (item.files && item.files.length > 0) {
             const base = getApiBaseUrl();
+            const openFile = async (f: CreatedFile) => {
+              try {
+                const token = getStoredToken();
+                const downloadUrl = f.download_url.startsWith("http")
+                  ? f.download_url
+                  : `${base}${f.download_url}`;
+                const tokenRes = await fetch(`${base}/api/files/one-time-token`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({ download_url: f.download_url }),
+                });
+                if (tokenRes.ok) {
+                  const { url } = await tokenRes.json();
+                  Linking.openURL(url).catch(() => {});
+                } else {
+                  Linking.openURL(downloadUrl).catch(() => {});
+                }
+              } catch {
+                const base2 = getApiBaseUrl();
+                const url = f.download_url.startsWith("http") ? f.download_url : `${base2}${f.download_url}`;
+                Linking.openURL(url).catch(() => {});
+              }
+            };
+
+            const getFileExt = (name: string) => name.split(".").pop()?.toUpperCase() || "FILE";
+
             return (
-              <View style={styles.fileCardContainer}>
-                <View style={styles.fileCardHeader}>
-                  <Ionicons name="document-outline" size={15} color="#636366" />
-                  <Text style={styles.fileCardTitle}>File yang dibuat:</Text>
+              <View style={styles.fileCardsBlock}>
+                <View style={styles.agentTurnHeader}>
+                  <View style={styles.agentTurnIcon}>
+                    <Ionicons name="hardware-chip-outline" size={13} color="#ffffff" />
+                  </View>
+                  <Text style={styles.agentTurnName}>Dzeck</Text>
                 </View>
                 {item.files.map((f, i) => (
                   <TouchableOpacity
                     key={i}
-                    style={styles.fileCard}
-                    activeOpacity={0.7}
-                    onPress={async () => {
-                      try {
-                        const token = getStoredToken();
-                        const downloadUrl = f.download_url.startsWith("http")
-                          ? f.download_url
-                          : `${base}${f.download_url}`;
-                        // Request a one-time token so Linking.openURL works without auth headers
-                        const tokenRes = await fetch(`${base}/api/files/one-time-token`, {
-                          method: "POST",
-                          headers: {
-                            "Content-Type": "application/json",
-                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                          },
-                          body: JSON.stringify({ download_url: f.download_url }),
-                        });
-                        if (tokenRes.ok) {
-                          const { url } = await tokenRes.json();
-                          Linking.openURL(url).catch(() => {});
-                        } else {
-                          // Fallback: open with regular URL (web only)
-                          Linking.openURL(downloadUrl).catch(() => {});
-                        }
-                      } catch {
-                        const base2 = getApiBaseUrl();
-                        const url = f.download_url.startsWith("http") ? f.download_url : `${base2}${f.download_url}`;
-                        Linking.openURL(url).catch(() => {});
-                      }
-                    }}
+                    style={styles.fileDocCard}
+                    activeOpacity={0.75}
+                    onPress={() => openFile(f)}
                   >
-                    <Ionicons name="download-outline" size={16} color="#1a73e8" />
-                    <Text style={styles.fileCardName} numberOfLines={1}>{f.filename}</Text>
-                    <Text style={styles.fileCardAction}>Unduh</Text>
+                    <View style={styles.fileDocIconWrap}>
+                      <Ionicons name="document-text-outline" size={20} color="#2563eb" />
+                    </View>
+                    <View style={styles.fileDocInfo}>
+                      <Text style={styles.fileDocName} numberOfLines={1}>{f.filename}</Text>
+                      <Text style={styles.fileDocType}>{getFileExt(f.filename)}</Text>
+                    </View>
+                    <View style={styles.fileDocDownloadBtn}>
+                      <Ionicons name="download-outline" size={16} color="#2563eb" />
+                    </View>
                   </TouchableOpacity>
                 ))}
+                {item.files.length > 1 && (
+                  <Text style={styles.fileViewAllLink}>View all files in this task</Text>
+                )}
               </View>
             );
           }
+
           return (
             <MessageComponent
               message={item}
-              tools={item.id === planMsgIdRef.current ? tools : undefined}
             />
           );
         }}
         contentContainerStyle={styles.messageList}
         ListFooterComponent={
-          thinking.active ? (
-            <AgentThinking
-              thinking={thinking.label}
-            />
-          ) : null
+          <>
+            {thinking.active && (
+              <View style={styles.thinkingRow}>
+                <View style={styles.thinkingDotWrap}>
+                  <View style={[styles.thinkingDot, styles.thinkingDotPulse]} />
+                </View>
+                <Text style={styles.thinkingLabel} numberOfLines={1}>{thinking.label}</Text>
+              </View>
+            )}
+            {taskCompleted && !thinking.active && (
+              <TouchableOpacity
+                style={styles.taskCompletedBanner}
+                onPress={() => setTaskCompletedExpanded(!taskCompletedExpanded)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.taskCompletedIcon}>
+                  <Ionicons name="checkmark" size={13} color="#ffffff" />
+                </View>
+                <Text style={styles.taskCompletedText}>Task Completed</Text>
+                <Ionicons
+                  name={taskCompletedExpanded ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color="#16a34a"
+                />
+              </TouchableOpacity>
+            )}
+          </>
         }
       />
 
@@ -1450,5 +1523,166 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0efea",
     borderWidth: 1,
     borderColor: "#ddd9d0",
+  },
+  agentTurnBlock: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  agentTurnHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  agentTurnIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: "#1a1916",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  agentTurnName: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: "#1a1916",
+    letterSpacing: -0.2,
+  },
+  agentTurnBadgeRunning: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: "rgba(37,99,235,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(37,99,235,0.2)",
+  },
+  agentTurnBadgeDone: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: "rgba(22,163,74,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.2)",
+  },
+  agentTurnBadgeText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 10,
+    color: "#2563eb",
+    letterSpacing: -0.1,
+  },
+  fileCardsBlock: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  fileDocCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ddd9d0",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  fileDocIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "rgba(37,99,235,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  fileDocInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  fileDocName: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: "#1a1916",
+    lineHeight: 18,
+  },
+  fileDocType: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#8a8780",
+    letterSpacing: 0.2,
+  },
+  fileDocDownloadBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(37,99,235,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  fileViewAllLink: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#2563eb",
+    paddingLeft: 2,
+    paddingTop: 2,
+  },
+  thinkingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  thinkingDotWrap: {
+    width: 10,
+    height: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thinkingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#8a8780",
+  },
+  thinkingDotPulse: {
+    backgroundColor: "#2563eb",
+  },
+  thinkingLabel: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#8a8780",
+    fontStyle: "italic",
+  },
+  taskCompletedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginVertical: 8,
+    backgroundColor: "rgba(22,163,74,0.08)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.25)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  taskCompletedIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#16a34a",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  taskCompletedText: {
+    flex: 1,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: "#16a34a",
+    letterSpacing: -0.2,
   },
 });
