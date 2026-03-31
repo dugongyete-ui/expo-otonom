@@ -1852,42 +1852,26 @@ export async function registerRoutes(app: any): Promise<Server> {
     }
 
     try {
-      const result = await new Promise<{ ok: boolean; files?: any[]; error?: string }>((resolve) => {
-        const py = spawn("python3", ["-c", `
-import sys, json, asyncio, os
-session_id = sys.argv[1]
-async def main():
-    try:
-        from server.agent.db.gridfs import list_files
-        files = await list_files(session_id)
-        print(json.dumps({"ok": True, "files": [f.to_dict() for f in files]}))
-    except Exception as e:
-        print(json.dumps({"ok": False, "error": str(e)}))
-asyncio.run(main())
-`, sessionId], {
-          env: { ...process.env },
-          cwd: process.cwd(),
-          timeout: 15000,
-        });
-        let out = "";
-        py.stdout.on("data", (d: Buffer) => { out += d.toString(); });
-        py.on("close", () => {
-          try {
-            const parsed = JSON.parse(out.trim());
-            resolve(parsed);
-          } catch {
-            resolve({ ok: false, error: "parse error" });
-          }
-        });
-        py.on("error", (err: Error) => resolve({ ok: false, error: err.message }));
-      });
-
-      if (!result.ok) {
-        return res.status(500).json({ error: result.error || "Failed to list GridFS files" });
+      const db = await getMongoDb();
+      if (!db) {
+        return res.status(503).json({ error: "Database unavailable" });
       }
-      const files = (result.files || []).map((f: any) => ({
-        ...f,
-        download_url: `/api/files/${f.file_id}`,
+      // Query fs.files (GridFS metadata) directly — no subprocess needed.
+      // Files are stored with metadata.session_id matching sessionId.
+      const cursor = db.collection("fs.files").find(
+        { "metadata.session_id": sessionId },
+        { projection: { _id: 1, filename: 1, length: 1, contentType: 1, uploadDate: 1, metadata: 1 } }
+      );
+      const docs = await cursor.toArray();
+      const files = docs.map((doc: any) => ({
+        file_id: doc._id.toString(),
+        filename: doc.filename || doc.metadata?.filename || "",
+        size: doc.length || 0,
+        mime_type: doc.contentType || doc.metadata?.mime_type || "application/octet-stream",
+        uploaded_at: doc.uploadDate ? doc.uploadDate.toISOString() : null,
+        session_id: sessionId,
+        user_id: doc.metadata?.user_id || "",
+        download_url: `/api/files/${doc._id.toString()}`,
       }));
       res.json({ files });
     } catch (err: any) {

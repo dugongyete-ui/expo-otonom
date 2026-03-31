@@ -1728,13 +1728,16 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                 await svc.create_session(user_message, session_id=self.session_id, user_id=_session_user_id or None)
 
             if is_continuation and waiting_state and self.session_id:
-                if svc:
-                    await svc.clear_waiting_state(self.session_id)
-
+                # NOTE: clear_waiting_state is called AFTER we have successfully
+                # restored plan/state — not before — so a crash during restoration
+                # leaves the waiting state intact for the next retry.
                 if waiting_state.get("clarification_mode"):
                     original_message = waiting_state.get("user_message", user_message)
                     user_message = "{}\n\nKlarifikasi dari user: {}".format(original_message, user_message)
                     is_continuation = False
+                    # State successfully consumed — clear it now
+                    if svc:
+                        await svc.clear_waiting_state(self.session_id)
                 else:
                     self.plan = Plan.from_dict(waiting_state["plan"])
                     original_user_message = waiting_state.get("user_message", user_message)
@@ -1744,6 +1747,12 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                         for s in self.plan.steps:
                             if s.id == saved_step_id and s.status == ExecutionStatus.PENDING:
                                 s.status = ExecutionStatus.RUNNING
+
+                    # Plan restored successfully — safe to clear waiting state now.
+                    # Any failure between here and the next save_waiting_state is a
+                    # fresh agent error, not a lost-resume scenario.
+                    if svc:
+                        await svc.clear_waiting_state(self.session_id)
 
                     self.state = FlowState.EXECUTING
                     yield make_event("plan", status=PlanStatus.RUNNING.value, plan=safe_plan_dict(self.plan))

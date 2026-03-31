@@ -33,6 +33,7 @@ export const AGENT_EVENT_TYPES = {
   TODO_UPDATE: "todo_update",
   TASK_UPDATE: "task_update",
   SEARCH_RESULTS: "search_results",
+  SHELL_OUTPUT: "shell_output",
 } as const;
 
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[keyof typeof AGENT_EVENT_TYPES];
@@ -149,6 +150,29 @@ export interface NormalizedDoneEvent {
   kind: "done";
 }
 
+export interface NormalizedTodoUpdateEvent {
+  kind: "todo_update";
+  items: Array<{ id: string; text: string; status: string; [key: string]: any }>;
+  sessionId?: string;
+}
+
+export interface NormalizedTaskUpdateEvent {
+  kind: "task_update";
+  task: { id?: string; title?: string; status?: string; description?: string; [key: string]: any };
+}
+
+export interface NormalizedSearchResultsEvent {
+  kind: "search_results";
+  results: Array<{ title: string; url: string; snippet?: string; [key: string]: any }>;
+  query?: string;
+}
+
+export interface NormalizedShellOutputEvent {
+  kind: "shell_output";
+  output: string;
+  callId?: string;
+}
+
 export interface NormalizedUnknownEvent {
   kind: "unknown";
   rawType: string;
@@ -174,6 +198,10 @@ export type NormalizedEvent =
   | NormalizedScreenshotEvent
   | NormalizedErrorEvent
   | NormalizedDoneEvent
+  | NormalizedTodoUpdateEvent
+  | NormalizedTaskUpdateEvent
+  | NormalizedSearchResultsEvent
+  | NormalizedShellOutputEvent
   | NormalizedUnknownEvent;
 
 // ─── Flat message model (shared by useChat and any flat-chat consumers) ─────
@@ -502,6 +530,33 @@ export function processAgentEvent(event: AgentEvent): NormalizedEvent {
 
     case AGENT_EVENT_TYPES.DONE:
       return { kind: "done" };
+
+    case AGENT_EVENT_TYPES.TODO_UPDATE:
+      return {
+        kind: "todo_update",
+        items: Array.isArray(event.items) ? event.items : (event.todo_items || []),
+        sessionId: event.session_id,
+      };
+
+    case AGENT_EVENT_TYPES.TASK_UPDATE:
+      return {
+        kind: "task_update",
+        task: event.task || { status: event.status, title: event.title },
+      };
+
+    case AGENT_EVENT_TYPES.SEARCH_RESULTS:
+      return {
+        kind: "search_results",
+        results: Array.isArray(event.results) ? event.results : [],
+        query: event.query || event.search_query || "",
+      };
+
+    case AGENT_EVENT_TYPES.SHELL_OUTPUT:
+      return {
+        kind: "shell_output",
+        output: event.output || event.content || "",
+        callId: event.tool_call_id,
+      };
 
     default:
       return { kind: "unknown", rawType: type };

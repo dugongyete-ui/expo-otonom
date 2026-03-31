@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
 MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
+MCP_CONFIG_PATH = os.environ.get("MCP_CONFIG_PATH", "")
 
 
 def _make_ssl_ctx() -> ssl.SSLContext:
@@ -137,6 +138,33 @@ class MCPClientManager:
         except Exception as e:
             return ToolResult(success=False, message=f"Failed to list MCP tools: {str(e)}", data={"error": str(e)})
 
+    def _get_servers_from_config_path(self) -> List[Dict[str, Any]]:
+        """Load MCP server configs from MCP_CONFIG_PATH JSON file (highest priority)."""
+        if not MCP_CONFIG_PATH:
+            return []
+        try:
+            with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            # Support both {servers: [...]} and {mcpServers: {name: {url:...}}} formats
+            if isinstance(cfg.get("servers"), list):
+                return cfg["servers"]
+            if isinstance(cfg.get("mcpServers"), dict):
+                return [
+                    {"name": k, **v}
+                    for k, v in cfg["mcpServers"].items()
+                    if isinstance(v, dict)
+                ]
+            return []
+        except FileNotFoundError:
+            logger.warning(
+                "[MCP] MCP_CONFIG_PATH='%s' set but file not found. "
+                "Create the file or unset the env var.", MCP_CONFIG_PATH
+            )
+            return []
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error("[MCP] Failed to parse MCP_CONFIG_PATH='%s': %s", MCP_CONFIG_PATH, exc)
+            return []
+
     def _get_servers_from_mongo(self) -> List[Dict[str, Any]]:
         """Load MCP server configs from MongoDB at call time (authoritative source)."""
         try:
@@ -158,8 +186,9 @@ class MCPClientManager:
         
         Resolution order:
         1. Locally registered tools (in-memory via register_tool/register_server)
-        2. MCP servers from MongoDB (mcp_configs collection) — authoritative, no restart needed
-        3. MCP_SERVER_URL env var (legacy fallback)
+        2. MCP_CONFIG_PATH JSON file (highest-priority static config)
+        3. MCP servers from MongoDB (mcp_configs collection) — dynamic, no restart needed
+        4. MCP_SERVER_URL env var (legacy fallback)
         """
         with self._lock:
             tool_info = self._registered_tools.get(tool_name)
@@ -172,12 +201,9 @@ class MCPClientManager:
             if server_url:
                 return self._call_http_mcp(server_url, tool_name, arguments)
 
-        # Check MongoDB for dynamically configured MCP servers
-        mongo_servers = self._get_servers_from_mongo()
-        if mongo_servers:
-            # Try each server — call first one that responds
+        def _try_servers(servers: List[Dict[str, Any]]) -> Optional[ToolResult]:
             last_result = None
-            for server in mongo_servers:
+            for server in servers:
                 url = server.get("url", "")
                 auth_token = server.get("auth_token", "")
                 if not url:
@@ -186,20 +212,43 @@ class MCPClientManager:
                 if result.success:
                     return result
                 last_result = result
-            # Return the last error result instead of retrying the first server
-            if last_result is not None:
-                return last_result
+            return last_result
+
+        # Highest priority: MCP_CONFIG_PATH static JSON file
+        if MCP_CONFIG_PATH:
+            cfg_servers = self._get_servers_from_config_path()
+            if cfg_servers:
+                res = _try_servers(cfg_servers)
+                if res is not None:
+                    return res
+
+        # Check MongoDB for dynamically configured MCP servers
+        mongo_servers = self._get_servers_from_mongo()
+        if mongo_servers:
+            res = _try_servers(mongo_servers)
+            if res is not None:
+                return res
 
         # Fallback to MCP_SERVER_URL env var
         if MCP_SERVER_URL:
             return self._call_http_mcp(MCP_SERVER_URL, tool_name, arguments)
 
+        # No server configured — return explicit error with actionable message
+        if MCP_CONFIG_PATH:
+            configured_hint = (
+                "MCP_CONFIG_PATH='{}' disetel tetapi tidak ada server yang dapat dihubungi. "
+                "Periksa koneksi dan konfigurasi server.".format(MCP_CONFIG_PATH)
+            )
+        else:
+            configured_hint = (
+                "Set MCP_CONFIG_PATH ke path file JSON berisi daftar server MCP, "
+                "atau set MCP_SERVER_URL untuk server tunggal."
+            )
         return ToolResult(
             success=False,
             message=(
                 "MCP tool '{}' tidak dapat dijalankan: belum ada MCP server yang dikonfigurasi. "
-                "Set environment variable MCP_SERVER_URL untuk mengaktifkan MCP tools eksternal. "
-                "Set juga MCP_AUTH_TOKEN jika server memerlukan autentikasi.".format(tool_name)
+                "{}".format(tool_name, configured_hint)
             ),
             data={"tool_name": tool_name, "arguments": arguments, "configured": False},
         )
@@ -207,37 +256,43 @@ class MCPClientManager:
     def list_remote_tools(self) -> ToolResult:
         """Fetch available tools from all configured MCP servers.
         
-        Checks MongoDB for dynamically configured servers, then falls back to
+        Checks MCP_CONFIG_PATH (highest priority), MongoDB, then falls back to
         MCP_SERVER_URL env var. Returns merged tool list from all sources.
         """
         all_tools: List[Dict[str, Any]] = []
 
+        def _fetch_tools_from_servers(servers: List[Dict[str, Any]]) -> None:
+            for server in servers:
+                url = server.get("url", "")
+                auth_token = server.get("auth_token", "")
+                if not url:
+                    continue
+                try:
+                    body = json.dumps({
+                        "jsonrpc": "2.0", "id": 1,
+                        "method": "tools/list", "params": {},
+                    }).encode("utf-8")
+                    headers: Dict[str, str] = {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    }
+                    effective_token = auth_token or self._get_auth_token(url)
+                    if effective_token:
+                        headers["Authorization"] = f"Bearer {effective_token}"
+                    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+                    with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=10) as resp:
+                        result = json.loads(resp.read().decode("utf-8"))
+                    tools = result.get("result", {}).get("tools", [])
+                    all_tools.extend(tools)
+                except Exception as exc:
+                    logger.debug("[MCP] Could not list tools from %s: %s", url, exc)
+
+        # MCP_CONFIG_PATH JSON file (highest priority)
+        if MCP_CONFIG_PATH:
+            _fetch_tools_from_servers(self._get_servers_from_config_path())
+
         # Load from MongoDB (authoritative — includes tools added via REST API)
-        mongo_servers = self._get_servers_from_mongo()
-        for server in mongo_servers:
-            url = server.get("url", "")
-            auth_token = server.get("auth_token", "")
-            if not url:
-                continue
-            try:
-                body = json.dumps({
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "tools/list", "params": {},
-                }).encode("utf-8")
-                headers: Dict[str, str] = {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                }
-                effective_token = auth_token or self._get_auth_token(url)
-                if effective_token:
-                    headers["Authorization"] = f"Bearer {effective_token}"
-                req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-                with urllib.request.urlopen(req, context=_make_ssl_ctx(), timeout=10) as resp:
-                    result = json.loads(resp.read().decode("utf-8"))
-                tools = result.get("result", {}).get("tools", [])
-                all_tools.extend(tools)
-            except Exception as exc:
-                logger.debug("[MCP] Could not list tools from %s: %s", url, exc)
+        _fetch_tools_from_servers(self._get_servers_from_mongo())
 
         if not all_tools and MCP_SERVER_URL:
             return self._list_http_tools(MCP_SERVER_URL)
