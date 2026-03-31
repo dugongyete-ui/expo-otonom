@@ -81,6 +81,17 @@ REDIS_PORT = "16364"
 SESSION_TTL_HOURS = "24"
 PORT = "5000"
 NODE_ENV = "development"
+MONGO_DB_NAME = "manus"
+AUTH_PROVIDER = "none"
+SEARCH_PROVIDER = "tavily"
+LOG_LEVEL = "INFO"
+MAX_CONCURRENT_AGENTS_PER_USER = "1"
+EXPO_PUBLIC_API_PORT = "5000"
+EXPO_PUBLIC_DOMAIN = "b1eb567d-faed-41f9-a561-0bf4f8d6c067-00-2gkk56zll7yiu.pike.replit.dev"
+APP_DOMAIN = "b1eb567d-faed-41f9-a561-0bf4f8d6c067-00-2gkk56zll7yiu.pike.replit.dev"
+CORS_ORIGINS = "https://b1eb567d-faed-41f9-a561-0bf4f8d6c067-00-2gkk56zll7yiu.pike.replit.dev"
+MCP_CONFIG_PATH = "mcp.json"
+EMAIL_PORT = "587"
 
 [agent]
 expertMode = true
