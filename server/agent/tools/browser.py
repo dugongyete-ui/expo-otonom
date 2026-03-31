@@ -1911,13 +1911,17 @@ def _make_session() -> Any:
     """Create browser session inside the unified E2B Desktop sandbox.
     The browser runs VISIBLY on the desktop - users can see it on VNC.
     All browser automation runs in the same sandbox as shell/file tools.
+
+    IMPORTANT: There is NO local browser fallback. If E2B is unavailable,
+    _E2BRequiredBrowserStub is returned — all its methods return ToolResult(success=False).
+    This is a deliberate security boundary: browser automation MUST run in the E2B sandbox.
     """
     if _is_e2b_enabled():
         logger.info("[Browser] E2B Desktop mode -- xdotool/xdg-open will control visible Chrome.")
         return E2BDesktopBrowserSession()
 
-    logger.error("[Browser] E2B sandbox not available (E2B_API_KEY not set). "
-                 "Browser operations require E2B sandbox for security.")
+    # Hard-fail path: no local browser, no Playwright, no fallback.
+    logger.error("[Browser] E2B_API_KEY not set — returning stub. All browser calls will fail with clear errors.")
     return _E2BRequiredBrowserStub()
 
 

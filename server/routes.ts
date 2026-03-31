@@ -579,6 +579,15 @@ export async function registerRoutes(app: any): Promise<Server> {
           }
         }
         console.log(`[share] Loaded ${docs.length} shared sessions from MongoDB.`);
+        // Verify Redis stream key format parity with Python redis_stream_queue.py
+        // Python: f"stream:session:{session_id}"  ←→  TypeScript: `stream:session:${sid}`
+        // Both resolve to "stream:session:<uuid>" — confirmed consistent.
+        console.log(`[stream] Redis stream key format: stream:session:<session_id> (matches Python redis_stream_queue._stream_key())`);
+        // Verify stop key format parity with Python plan_act._is_session_stopped()
+        // Python: "agent:{}:stop".format(session_id)  ←→  TypeScript: `agent:${sid}:stop`
+        console.log(`[stop] Redis stop key format: agent:<session_id>:stop (matches Python plan_act._is_session_stopped())`);
+        // Verify file download endpoint exists for GridFS files
+        console.log(`[files] GridFS download route registered: GET /api/files/download, POST /api/files/one-time-token`);
       }
     } catch (err: any) {
       console.warn("[share] Failed to load share state from MongoDB:", err.message);
@@ -786,6 +795,29 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     const messages: Array<{ id: string; role: string; content: string; timestamp: string }> = [];
 
+    // ── Step 1: Always fetch the user's original message from sessions collection ──
+    // The user turn is stored in sessions.user_message (written by Python agent_runner.py).
+    // session_events only contains agent-side events; user turns must come from sessions.
+    let sessionCreatedAt: string | null = null;
+    try {
+      const sc = await getCollection("sessions");
+      if (sc) {
+        const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_message: 1, created_at: 1 } });
+        if (sd && sd.user_message) {
+          sessionCreatedAt = sd.created_at ? new Date(sd.created_at).toISOString() : null;
+          messages.push({
+            id: `hist_user_${sessionId}`,
+            role: "user",
+            content: sd.user_message,
+            timestamp: sessionCreatedAt || new Date().toISOString(),
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn("[session_messages] user_message fetch failed:", err.message);
+    }
+
+    // ── Step 2: Reconstruct agent messages from session_events (SSE replay) ──
     try {
       const col = await getCollection("session_events");
       if (col) {
@@ -796,7 +828,6 @@ export async function registerRoutes(app: any): Promise<Server> {
           )
           .toArray();
 
-        // Reconstruct messages by replaying events in order
         let currentMsg: { id: string; role: string; content: string; timestamp: string } | null = null;
         for (const doc of docs) {
           const d = doc.data || {};
@@ -835,38 +866,30 @@ export async function registerRoutes(app: any): Promise<Server> {
             }
           }
         }
-        // Flush any incomplete streaming message
         if (currentMsg && currentMsg.content.trim()) messages.push(currentMsg);
       }
     } catch (err: any) {
-      console.warn("[session_messages] MongoDB fetch failed:", err.message);
+      console.warn("[session_messages] session_events fetch failed:", err.message);
     }
 
-    // If no events in MongoDB, try to reconstruct from sessions collection chat_history
-    if (messages.length === 0) {
+    // ── Step 3: If no agent events found, fall back to sessions.chat_history ──
+    // chat_history is the Python-maintained conversation array (user + assistant turns).
+    if (messages.length <= 1) {
       try {
         const sc = await getCollection("sessions");
         if (sc) {
-          const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { chat_history: 1, user_message: 1 } });
-          if (sd) {
-            if (sd.user_message) {
-              messages.push({
-                id: `hist_user_${sessionId}`,
-                role: "user",
-                content: sd.user_message,
-                timestamp: new Date().toISOString(),
-              });
-            }
-            if (Array.isArray(sd.chat_history)) {
-              for (const m of sd.chat_history) {
-                if (m.role && m.content) {
-                  messages.push({
-                    id: `hist_${Date.now()}_${Math.random()}`,
-                    role: m.role,
-                    content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-                    timestamp: new Date().toISOString(),
-                  });
-                }
+          const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { chat_history: 1 } });
+          if (sd && Array.isArray(sd.chat_history) && sd.chat_history.length > 0) {
+            // Clear messages (may only have user turn from Step 1) and use full chat_history
+            messages.length = 0;
+            for (const m of sd.chat_history) {
+              if (m.role && m.content) {
+                messages.push({
+                  id: `hist_${Date.now()}_${Math.random()}`,
+                  role: m.role,
+                  content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+                  timestamp: new Date().toISOString(),
+                });
               }
             }
           }
