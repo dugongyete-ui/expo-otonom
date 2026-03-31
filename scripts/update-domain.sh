@@ -13,8 +13,26 @@ CURRENT_DOMAIN="$REPLIT_DEV_DOMAIN"
 echo "[update-domain] Domain aktif: $CURRENT_DOMAIN"
 
 if [ -f "$ENV_FILE" ]; then
-  sed -i "s|APP_DOMAIN=.*|APP_DOMAIN=${CURRENT_DOMAIN}|g" "$ENV_FILE"
-  sed -i "s|EXPO_PUBLIC_DOMAIN=.*|EXPO_PUBLIC_DOMAIN=${CURRENT_DOMAIN}|g" "$ENV_FILE"
-  sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=https://${CURRENT_DOMAIN}|g" "$ENV_FILE"
+  # Fungsi helper: update atau tambah baris di .env
+  update_or_add() {
+    local KEY="$1"
+    local VALUE="$2"
+    if grep -q "^${KEY}=" "$ENV_FILE"; then
+      sed -i "s|^${KEY}=.*|${KEY}=${VALUE}|g" "$ENV_FILE"
+    else
+      echo "${KEY}=${VALUE}" >> "$ENV_FILE"
+    fi
+  }
+
+  update_or_add "APP_DOMAIN" "${CURRENT_DOMAIN}"
+  update_or_add "EXPO_PUBLIC_DOMAIN" "${CURRENT_DOMAIN}"
+  update_or_add "CORS_ORIGINS" "https://${CURRENT_DOMAIN}"
   echo "[update-domain] .env berhasil diupdate"
 fi
+
+echo ""
+echo "========================================================"
+echo " SCAN QR CODE DARI HALAMAN INI (bukan dari Metro terminal):"
+echo " https://${CURRENT_DOMAIN}/mobile"
+echo "========================================================"
+echo ""

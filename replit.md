@@ -175,6 +175,8 @@ Replit only accepts HTTPS on external ports — plain HTTP (port 3002) is reject
 - **`node_modules/@expo/metro-config/build/serializer/fork/js.js`**: Patched undefined `dependency.absolutePath` bug (line ~72) that caused `TypeError: The "to" argument must be of type string` when bundling Android. Fix: wrap `path.relative()` call in null-check.
 - **`babel.config.cjs`**: Added `react-native-reanimated/plugin` (required for TypingIndicator worklets)
 - **`components/FilePanel.tsx`**: Fixed dynamic `require("@/lib/api-service")` → static import of `getStoredToken`
+- **`app.config.js`**: Dynamic Expo config overrides `app.json` plugins — sets `expo-router` `origin` from `EXPO_PUBLIC_DOMAIN` env var instead of hardcoded `https://dzeck-ai.app/`. Also sets `extra.apiDomain` for runtime use.
+- **`scripts/update-domain.sh`**: Now uses `grep + append` to add missing `.env` keys (not just sed-replace existing ones), and prints the `/mobile` URL clearly in the terminal after each start.
 
 ## Python Agent Dependencies (`requirements.txt`)
 - `e2b>=2.0.0` + `e2b-desktop>=1.0.0`

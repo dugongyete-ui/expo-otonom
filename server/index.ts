@@ -254,10 +254,28 @@ async function proxyManifestFromMetro(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
 
-    const metroRes = await fetch(`http://localhost:${metroPort}/manifest`, {
-      headers: { "expo-platform": platform },
+    // Try root '/' first (what Expo Go actually requests), fallback to '/manifest'
+    let metroRes = await fetch(`http://localhost:${metroPort}/`, {
+      headers: {
+        "expo-platform": platform,
+        "accept": "application/expo+json,application/json",
+        "expo-protocol-version": "1",
+      },
       signal: controller.signal,
     }).finally(() => clearTimeout(timeout));
+
+    // Fallback to /manifest if root returns non-JSON
+    if (!metroRes.ok || !metroRes.headers.get("content-type")?.includes("json")) {
+      const controller2 = new AbortController();
+      const timeout2 = setTimeout(() => controller2.abort(), 30000);
+      metroRes = await fetch(`http://localhost:${metroPort}/manifest`, {
+        headers: {
+          "expo-platform": platform,
+          "accept": "application/expo+json,application/json",
+        },
+        signal: controller2.signal,
+      }).finally(() => clearTimeout(timeout2));
+    }
 
     if (!metroRes.ok) {
       return res.status(502).json({
@@ -268,15 +286,29 @@ async function proxyManifestFromMetro(
     const manifest = await metroRes.json() as Record<string, unknown>;
 
     // Determine the public HTTPS base URL for this server (Express backend on port 80)
+    // Priority: x-forwarded-host > APP_DOMAIN env var > EXPO_PUBLIC_DOMAIN env var > req.host
     const forwardedProto = req.header("x-forwarded-proto") || "https";
-    const forwardedHost = req.header("x-forwarded-host") || req.get("host") || "";
+    const forwardedHost =
+      req.header("x-forwarded-host") ||
+      process.env.APP_DOMAIN ||
+      process.env.EXPO_PUBLIC_DOMAIN ||
+      req.get("host") ||
+      "";
     const backendBase = `${forwardedProto}://${forwardedHost}`;
 
     // Rewrite Metro's http://domain:3002/... URLs to go through Express backend
     // so that Expo Go downloads bundles via HTTPS on port 80 (no Replit proxy issues)
-    const manifestStr = JSON.stringify(manifest).replace(
+    let manifestStr = JSON.stringify(manifest).replace(
       /http:\/\/[^"]+:(\d+)\//g,
       `${backendBase}/metro-proxy/`,
+    );
+
+    // Also rewrite hostUri and debuggerHost (format: "host:port") so that
+    // hot-reload WebSocket connections also go through the Express proxy domain
+    const metroHostPort = `[^"]+:${metroPort}`;
+    manifestStr = manifestStr.replace(
+      new RegExp(`"(${metroHostPort})"`, "g"),
+      `"${forwardedHost}"`,
     );
 
     res.setHeader("expo-protocol-version", "1");
@@ -284,7 +316,7 @@ async function proxyManifestFromMetro(
     res.setHeader("content-type", "application/json");
     res.send(manifestStr);
 
-    log(`[Expo] Proxied ${platform} manifest from Metro → bundle via Express backend`);
+    log(`[Expo] Proxied ${platform} manifest (backendBase: ${backendBase}) → bundle via Express`);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     log(`[Expo] Metro proxy failed: ${msg}`);
