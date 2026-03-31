@@ -9,6 +9,10 @@ if [ -z "$GITHUB_TOKEN" ]; then
   exit 1
 fi
 
+# Bersihkan semua stale lock file git
+echo "Membersihkan git lock files..."
+find .git -name "*.lock" -delete 2>/dev/null || true
+
 # Setup credential helper
 git config --local credential.helper \
   "!f() { echo username=x-token-auth; echo password=${GITHUB_TOKEN}; }; f"
