@@ -19,7 +19,6 @@ sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
 # ── Domain layer ──────────────────────────────────────────────────────────────
 from server.agent.domain.cerebras import (
     CEREBRAS_API_URL,
-    CEREBRAS_API_KEY,
     _NO_TOOL_CALL_MODELS,
     _TOOLS_SUPPORTED,
     _get_model_name,

@@ -53,7 +53,7 @@ async def run_agent_async(
         _lmlog.getLogger(__name__).warning("[memory] Failed to load memories: %s", _load_mem_err)
 
     if _memory_context:
-        _mem_msg = {"role": "assistant", "content": f"[Memory context from previous sessions]\n{_memory_context}"}
+        _mem_msg = {"role": "system", "content": f"[Memory context from previous sessions]\n{_memory_context}"}
         if chat_history:
             chat_history = [_mem_msg] + list(chat_history)
         else:
@@ -328,17 +328,7 @@ def main() -> None:
                 # Cleanup E2B sandbox if it was created by this agent run
                 await _cleanup_e2b_sandbox()
 
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures as _cf
-                with _cf.ThreadPoolExecutor() as pool:
-                    future = pool.submit(asyncio.run, _run())
-                    future.result()
-            else:
-                loop.run_until_complete(_run())
-        except RuntimeError:
-            asyncio.run(_run())
+        asyncio.run(_run())
 
     except json.JSONDecodeError as e:
         _emit({"type": "error", "error": "Invalid JSON input: {}".format(e)})

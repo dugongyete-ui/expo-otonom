@@ -53,6 +53,7 @@ export function useChat(
   const [agentFiles, setAgentFiles] = useState<AgentFile[]>([]);
   const cancelRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const streamingMsgIdRef = useRef<string | null>(null);
 
   const addMessage = useCallback((message: Message) => {
     setMessages((prev) => [...prev, message]);
@@ -110,33 +111,70 @@ export function useChat(
           } else if (event.type === "waiting_for_user" || event.type === "ask") {
             setIsWaitingForUser(true);
             setIsLoading(false);
-          } else if (event.type === "message" || event.type === "message_start") {
+          } else if (event.type === "message_start") {
+            const newMsgId = `msg-${Date.now()}`;
+            streamingMsgIdRef.current = newMsgId;
+            const assistantMessage: Message = {
+              id: newMsgId,
+              type: "assistant",
+              content: event.content || event.message || "",
+              timestamp: new Date(event.timestamp || new Date()),
+              isLoading: true,
+            };
+            addMessage(assistantMessage);
+          } else if (event.type === "message") {
             const assistantMessage: Message = {
               id: `msg-${Date.now()}`,
               type: "assistant",
               content: event.content || event.message || "",
               timestamp: new Date(event.timestamp || new Date()),
-              isLoading: event.type === "message_start",
+              isLoading: false,
             };
             addMessage(assistantMessage);
           } else if (event.type === "message_chunk") {
-            // Append chunk to the last assistant message
-            setMessages((prev) => {
-              const lastIdx = prev.length - 1;
-              if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
-                const updated = [...prev];
-                updated[lastIdx] = {
-                  ...updated[lastIdx],
-                  content: updated[lastIdx].content + (event.chunk || event.content || ""),
-                  isLoading: true,
-                };
-                return updated;
-              }
-              return prev;
-            });
+            const chunk = event.chunk || event.content || "";
+            if (chunk) {
+              const currentId = streamingMsgIdRef.current;
+              setMessages((prev) => {
+                if (currentId) {
+                  const idx = prev.findIndex((m) => m.id === currentId);
+                  if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = {
+                      ...updated[idx],
+                      content: updated[idx].content + chunk,
+                      isLoading: true,
+                    };
+                    return updated;
+                  }
+                }
+                // Fallback: append to last assistant message
+                const lastIdx = prev.length - 1;
+                if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
+                  const updated = [...prev];
+                  updated[lastIdx] = {
+                    ...updated[lastIdx],
+                    content: updated[lastIdx].content + chunk,
+                    isLoading: true,
+                  };
+                  return updated;
+                }
+                return prev;
+              });
+            }
           } else if (event.type === "message_end") {
-            // Mark last assistant message as done streaming
+            const currentId = streamingMsgIdRef.current;
+            streamingMsgIdRef.current = null;
             setMessages((prev) => {
+              if (currentId) {
+                const idx = prev.findIndex((m) => m.id === currentId);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = { ...updated[idx], isLoading: false };
+                  return updated;
+                }
+              }
+              // Fallback: mark last assistant message as done
               const lastIdx = prev.length - 1;
               if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
                 const updated = [...prev];
@@ -195,10 +233,15 @@ export function useChat(
               });
             }
           } else if (event.type === "step") {
+            const stepContent =
+              event.step?.description ||
+              event.step?.title ||
+              event.content ||
+              "Processing...";
             const stepMessage: Message = {
               id: `msg-${Date.now()}`,
               type: "step",
-              content: event.content || "Processing...",
+              content: stepContent,
               timestamp: new Date(event.timestamp || new Date()),
               isLoading: true,
             };
@@ -227,7 +270,7 @@ export function useChat(
             const notifyMessage: Message = {
               id: `msg-notify-${Date.now()}`,
               type: "assistant",
-              content: event.content || event.message || "",
+              content: event.text || event.content || event.message || "",
               timestamp: new Date(event.timestamp || new Date()),
             };
             addMessage(notifyMessage);
@@ -393,10 +436,12 @@ export function useChat(
       cancelRef.current();
       cancelRef.current = null;
     }
+    streamingMsgIdRef.current = null;
     setIsLoading(false);
   }, []);
 
   const clear = useCallback(() => {
+    streamingMsgIdRef.current = null;
     setMessages([]);
     setError(null);
     setAgentPlan(null);

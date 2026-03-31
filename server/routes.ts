@@ -69,18 +69,19 @@ export async function registerRoutes(app: any): Promise<Server> {
       if (col) {
         const doc = await (col as any).findOne({ _type: "app_config" }, { projection: { _id: 0 } });
         if (doc) {
-          if (doc.CEREBRAS_CHAT_MODEL) process.env.CEREBRAS_CHAT_MODEL = doc.CEREBRAS_CHAT_MODEL;
-          if (doc.CEREBRAS_AGENT_MODEL) process.env.CEREBRAS_AGENT_MODEL = doc.CEREBRAS_AGENT_MODEL;
-          if (doc.SEARCH_PROVIDER) process.env.SEARCH_PROVIDER = doc.SEARCH_PROVIDER;
-          if (doc.GOOGLE_SEARCH_API_KEY) process.env.GOOGLE_SEARCH_API_KEY = doc.GOOGLE_SEARCH_API_KEY;
-          if (doc.GOOGLE_SEARCH_ENGINE_ID) process.env.GOOGLE_SEARCH_ENGINE_ID = doc.GOOGLE_SEARCH_ENGINE_ID;
-          if (doc.GOOGLE_CSE_ID) process.env.GOOGLE_CSE_ID = doc.GOOGLE_CSE_ID;
-          if (doc.MODEL_PROVIDER) process.env.MODEL_PROVIDER = doc.MODEL_PROVIDER;
-          console.log("[Config] Loaded persisted config from MongoDB:", {
-            CEREBRAS_CHAT_MODEL: doc.CEREBRAS_CHAT_MODEL,
-            CEREBRAS_AGENT_MODEL: doc.CEREBRAS_AGENT_MODEL,
-            SEARCH_PROVIDER: doc.SEARCH_PROVIDER,
-            GOOGLE_SEARCH_CONFIGURED: !!(doc.GOOGLE_SEARCH_API_KEY && (doc.GOOGLE_SEARCH_ENGINE_ID || doc.GOOGLE_CSE_ID)),
+          // .env always wins for model config — only apply MongoDB values if .env is not set
+          if (doc.CEREBRAS_CHAT_MODEL && !process.env.CEREBRAS_CHAT_MODEL) process.env.CEREBRAS_CHAT_MODEL = doc.CEREBRAS_CHAT_MODEL;
+          if (doc.CEREBRAS_AGENT_MODEL && !process.env.CEREBRAS_AGENT_MODEL) process.env.CEREBRAS_AGENT_MODEL = doc.CEREBRAS_AGENT_MODEL;
+          if (doc.SEARCH_PROVIDER && !process.env.SEARCH_PROVIDER) process.env.SEARCH_PROVIDER = doc.SEARCH_PROVIDER;
+          if (doc.GOOGLE_SEARCH_API_KEY && !process.env.GOOGLE_SEARCH_API_KEY) process.env.GOOGLE_SEARCH_API_KEY = doc.GOOGLE_SEARCH_API_KEY;
+          if (doc.GOOGLE_SEARCH_ENGINE_ID && !process.env.GOOGLE_SEARCH_ENGINE_ID) process.env.GOOGLE_SEARCH_ENGINE_ID = doc.GOOGLE_SEARCH_ENGINE_ID;
+          if (doc.GOOGLE_CSE_ID && !process.env.GOOGLE_CSE_ID) process.env.GOOGLE_CSE_ID = doc.GOOGLE_CSE_ID;
+          if (doc.MODEL_PROVIDER && !process.env.MODEL_PROVIDER) process.env.MODEL_PROVIDER = doc.MODEL_PROVIDER;
+          console.log("[Config] Loaded persisted config from MongoDB (skipped keys already set in .env):", {
+            CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL,
+            CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL,
+            SEARCH_PROVIDER: process.env.SEARCH_PROVIDER,
+            GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
           });
         }
       }

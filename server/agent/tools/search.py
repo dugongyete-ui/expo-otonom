@@ -493,17 +493,34 @@ def info_search_web(
             return False
 
         # Try the configured provider first
+        providers_tried: List[str] = [provider]
         if not _try_provider(provider):
             # Fallback chain (spec): bing API → tavily → bing_web scraper → duckduckgo
             # google is intentionally excluded from fallback — only used if SEARCH_PROVIDER=google
             for fallback in ["bing", "tavily", "bing_web", "duckduckgo"]:
-                if fallback != provider and _try_provider(fallback):
-                    break
+                if fallback != provider:
+                    providers_tried.append(fallback)
+                    if _try_provider(fallback):
+                        break
+
+        if not results:
+            tried_str = ", ".join(providers_tried)
+            return ToolResult(
+                success=False,
+                message=(
+                    f"Search failed for '{query}': all providers returned no results "
+                    f"(tried: {tried_str}). "
+                    "Check that at least one search provider is reachable (bing_web scraper requires "
+                    "internet access; for API-based providers set BING_SEARCH_API_KEY, TAVILY_API_KEY, "
+                    "or GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_ENGINE_ID)."
+                ),
+                data={"results": [], "query": query, "count": 0, "date_range": date_range, "engine": None, "providers_tried": providers_tried},
+            )
 
         formatted = "\n\n".join(
             f"{i+1}. [{r['title']}]({r['url']})\n   {r['snippet']}"
             for i, r in enumerate(results)
-        ) if results else "No results found."
+        )
 
         return ToolResult(
             success=True,

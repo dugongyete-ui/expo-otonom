@@ -30,7 +30,7 @@ def _get_model_name() -> str:
     return "qwen-3-235b-a22b-instruct-2507"
 
 
-_TOOLS_SUPPORTED: Optional[bool] = None if _get_model_name() not in _NO_TOOL_CALL_MODELS else False
+_TOOLS_SUPPORTED: Optional[bool] = None
 
 
 def _build_request_body(
@@ -269,19 +269,22 @@ def call_api_with_retry(
     tools: Optional[List[Dict[str, Any]]] = None,
     max_retries: int = 7,
 ) -> Dict[str, Any]:
-    global _TOOLS_SUPPORTED
     last_error: Optional[Exception] = None
-    effective_tools = tools if _TOOLS_SUPPORTED is not False else None
+
+    # Determine per-request whether the current model supports tools.
+    # We check at call time (not module load time) so that model changes
+    # between requests are respected, and a 400 from one model does not
+    # permanently disable tools for all subsequent requests.
+    current_model = _get_model_name()
+    model_supports_tools = current_model not in _NO_TOOL_CALL_MODELS
+    effective_tools = tools if (model_supports_tools and tools) else None
 
     for attempt in range(max_retries):
         try:
             result = call_cerebras_api(messages, tools=effective_tools)
-            if effective_tools is not None:
-                _TOOLS_SUPPORTED = True
             return result
         except urllib.error.HTTPError as e:
             if e.code == 400 and effective_tools is not None:
-                _TOOLS_SUPPORTED = False
                 sys.stderr.write(
                     "[agent] Model doesn't support native tool schemas (400). Falling back to text-based tool calling.\n"
                 )
