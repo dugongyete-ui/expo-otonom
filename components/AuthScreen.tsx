@@ -68,7 +68,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     setError("");
     if (!fullname.trim() || fullname.trim().length < 2) { setError("Full name must be at least 2 characters"); return; }
     if (!email.trim() || !email.includes("@")) { setError("Please enter a valid email"); return; }
-    if (password.length < 6) { setError(t("Password must be at least 6 characters")); return; }
+    if (password.length < 8) { setError(t("Password must be at least 8 characters")); return; }
     if (password !== confirmPassword) { setError(t("Passwords do not match")); return; }
     setIsLoading(true);
     try {

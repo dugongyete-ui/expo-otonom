@@ -37,8 +37,8 @@ Dzeck AI is a full-stack Expo/React Native AI agent application that runs autono
 - `server/agent/` — Python agent flow (LLM + tool execution)
 
 ### Frontend Components
-- `components/MainLayout.tsx` — Root layout with left/chat/right panels
-- `components/ChatPage.tsx` — Main chat UI, handles browser_screenshot + desktop_screenshot events
+- `components/MainLayout.tsx` — Root layout with left/chat/right panels; accepts `isAgentMode` prop to pass down to ChatPage
+- `components/ChatPage.tsx` — Main chat UI; `isAgentMode` prop takes priority over URL `?mode=agent` param
 - `components/ChatInput.tsx` — Chat input with image + document file upload
 - `components/VNCViewer.tsx` — VNC desktop viewer (noVNC on web, screenshot polling on mobile), exponential backoff retry
 - `components/BrowserPanel.tsx` — Browser panel, accepts lastBrowserEvent with screenshot_b64

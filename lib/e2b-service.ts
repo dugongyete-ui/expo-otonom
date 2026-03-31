@@ -1,3 +1,5 @@
+import { getMemoryToken } from "./token-store";
+
 /**
  * E2B Desktop Sandbox Service
  *
@@ -66,11 +68,8 @@ class E2BService {
    * Get the stored auth token for attaching to requests.
    */
   private getToken(): string {
-    try {
-      const { getMemoryAccessToken } = require("./auth-service");
-      const memToken = getMemoryAccessToken();
-      if (memToken) return memToken;
-    } catch {}
+    const memToken = getMemoryToken();
+    if (memToken) return memToken;
     try {
       if (typeof window !== "undefined" && window.localStorage) {
         return localStorage.getItem("dzeck_access_token") || "";

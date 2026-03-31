@@ -1,5 +1,6 @@
 import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getMemoryToken } from "./token-store";
 
 /**
  * Gets the base URL for the Express API server (e.g., "https://my-app.replit.dev")
@@ -61,6 +62,17 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function _getStoredTokenForQueryClient(): string {
+  const memToken = getMemoryToken();
+  if (memToken) return memToken;
+  try {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem("dzeck_access_token") || "";
+    }
+  } catch {}
+  return "";
+}
+
 export async function apiRequest(
   method: string,
   route: string,
@@ -69,9 +81,13 @@ export async function apiRequest(
   const baseUrl = getApiUrl();
   const url = new URL(route, baseUrl);
 
+  const token = _getStoredTokenForQueryClient();
+  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(url.toString(), {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -89,7 +105,12 @@ export const getQueryFn: <T>(options: {
     const baseUrl = getApiUrl();
     const url = new URL(queryKey.join("/") as string, baseUrl);
 
+    const token = _getStoredTokenForQueryClient();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
     const res = await fetch(url.toString(), {
+      headers,
       credentials: "include",
     });
 

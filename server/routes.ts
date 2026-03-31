@@ -1386,7 +1386,7 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     const BENIGN = [/redis/i, /mongodb/i, /motor/i, /DNS/i, /Name or service not known/i,
       /ConnectionRefusedError/i, /\[CacheStore\]/i, /\[SessionStore\]/i, /\[SessionService\]/i,
-      /WARNING:/i, /DeprecationWarning/i, /connection failed/i, /Traceback/i,
+      /WARNING:/i, /DeprecationWarning/i, /connection failed/i,
       /aioredis/i, /pymongo/i, /socket\.gaierror/i, /\[agent\]/i,
       /Config push failed/i, /fork\/exec/i, /permission denied/i,
       /\[E2B\]/i, /\[E2B-Desktop\]/i, /\[Browser\]/i, /Authentication required/i,
@@ -1637,7 +1637,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Agent session status endpoint ────────────────────────────────────────
-  app.get("/api/agent/status/:sid", (req: any, res: any) => {
+  app.get("/api/agent/status/:sid", requireAuth, (req: any, res: any) => {
     const { sid } = req.params;
     const session = activeAgentSessions.get(sid);
     if (!session) {

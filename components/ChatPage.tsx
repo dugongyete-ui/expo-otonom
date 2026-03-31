@@ -66,6 +66,8 @@ interface BrowserEventState {
 
 interface ChatPageProps {
   sessionId?: string;
+  isAgentMode?: boolean;
+  onAgentModeChange?: (enabled: boolean) => void;
   isLeftPanelShow?: boolean;
   onToggleLeftPanel?: () => void;
   onToolsChange?: (tools: any[]) => void;
@@ -75,6 +77,8 @@ interface ChatPageProps {
 
 export function ChatPage({
   sessionId: externalSessionId,
+  isAgentMode: agentModeProp,
+  onAgentModeChange,
   isLeftPanelShow,
   onToggleLeftPanel,
   onToolsChange,
@@ -82,7 +86,7 @@ export function ChatPage({
   onBrowserEventChange,
 }: ChatPageProps = {}) {
   const { mode } = useLocalSearchParams<{ mode: string }>();
-  const isAgentMode = mode === "agent";
+  const isAgentMode = agentModeProp ?? mode === "agent";
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -847,7 +851,7 @@ export function ChatPage({
 
     // Step 2: SIGTERM fallback after 3s — only if agent session is still alive
     setTimeout(() => {
-      fetch(`${base}/api/agent/status/${sid}`)
+      fetch(`${base}/api/agent/status/${sid}`, { headers: authHdr })
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
           // Only send SIGTERM if the session exists and hasn't finished gracefully
@@ -907,6 +911,17 @@ export function ChatPage({
               </Text>
             </View>
           )}
+          <TouchableOpacity
+            onPress={() => onAgentModeChange?.(!isAgentMode)}
+            style={[styles.settingsBtn, isAgentMode && styles.agentModeActive]}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          >
+            <Ionicons
+              name={isAgentMode ? "flash" : "flash-outline"}
+              size={18}
+              color={isAgentMode ? "#d97706" : "#8a8780"}
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={handleShare}
             style={styles.settingsBtn}
@@ -1157,6 +1172,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f5f3ee",
+  },
+  agentModeActive: {
+    backgroundColor: "#fef3c7",
   },
   settingsOverlay: {
     flex: 1,

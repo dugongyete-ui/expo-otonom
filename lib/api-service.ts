@@ -1,4 +1,5 @@
 import { getApiUrl } from "./query-client";
+import { getMemoryToken, setMemoryToken } from "./token-store";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -63,12 +64,13 @@ export interface AgentCallbacks {
   onDone?: () => void;
 }
 
+export function setSharedMemoryToken(token: string | null) {
+  setMemoryToken(token);
+}
+
 export function getStoredToken(): string {
-  try {
-    const { getMemoryAccessToken } = require("./auth-service");
-    const memToken = getMemoryAccessToken();
-    if (memToken) return memToken;
-  } catch {}
+  const memToken = getMemoryToken();
+  if (memToken) return memToken;
   try {
     if (typeof window !== "undefined" && window.localStorage) {
       return localStorage.getItem("dzeck_access_token") || "";

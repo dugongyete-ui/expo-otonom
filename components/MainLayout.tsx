@@ -31,13 +31,15 @@ interface ToolItem {
 
 interface MainLayoutProps {
   sessionId?: string;
+  isAgentMode?: boolean;
 }
 
 const TOOL_PANEL_WIDTH = 280;
 
-export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
+export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentModeProp = false }: MainLayoutProps) {
   const [isLeftPanelShow, setIsLeftPanelShow] = useState(false);
   const [sessionId, setSessionId] = useState(initialSessionId);
+  const [isAgentMode, setIsAgentMode] = useState(isAgentModeProp);
   const [tools, setTools] = useState<ToolItem[]>([]);
   const [isToolPanelVisible, setIsToolPanelVisible] = useState(true);
   const [rightPanelMode, setRightPanelMode] = useState<"tools" | "browser" | "files">("tools");
@@ -158,6 +160,8 @@ export function MainLayout({ sessionId: initialSessionId }: MainLayoutProps) {
         <View style={styles.chatArea}>
           <ChatPage
             sessionId={sessionId}
+            isAgentMode={isAgentMode}
+            onAgentModeChange={setIsAgentMode}
             isLeftPanelShow={isLeftPanelShow}
             onToggleLeftPanel={toggleLeftPanel}
             onToolsChange={handleToolsChange}

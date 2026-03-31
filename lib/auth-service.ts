@@ -5,6 +5,7 @@
  */
 import { Platform } from "react-native";
 import { getApiBaseUrl } from "./api-service";
+import { setMemoryToken } from "./token-store";
 
 let SecureStore: typeof import("expo-secure-store") | null = null;
 if (Platform.OS !== "web") {
@@ -150,6 +151,7 @@ class AuthService {
       const data = await res.json();
       if (data.access_token) {
         _memoryAccessToken = data.access_token;
+        setMemoryToken(data.access_token);
         await secureSet(ACCESS_TOKEN_KEY, data.access_token);
         return data.access_token;
       }
@@ -186,6 +188,7 @@ class AuthService {
 
   async storeTokens(accessToken: string, refreshToken: string, user: AuthUser): Promise<void> {
     _memoryAccessToken = accessToken;
+    setMemoryToken(accessToken);
     await secureSet(ACCESS_TOKEN_KEY, accessToken);
     await secureSet(REFRESH_TOKEN_KEY, refreshToken);
     await secureSet(USER_KEY, JSON.stringify(user));
@@ -193,6 +196,7 @@ class AuthService {
 
   async clearTokens(): Promise<void> {
     _memoryAccessToken = null;
+    setMemoryToken(null);
     await secureDel(ACCESS_TOKEN_KEY);
     await secureDel(REFRESH_TOKEN_KEY);
     await secureDel(USER_KEY);
