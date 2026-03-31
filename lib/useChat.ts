@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { apiService, ChatMessage, ChatResponse, AgentEvent } from "./api-service";
 import { getToolActionVerb } from "./tool-constants";
+import { processAgentEvent, NormalizedEvent } from "./agent-event-processor";
 
 export interface Message {
   id: string;
@@ -96,253 +97,295 @@ export function useChat(
     [messages, addMessage]
   );
 
-  const handleAgentChat = useCallback(
-    async (text: string, existingSessionId?: string, isContinuation?: boolean, attachments?: any[], currentMessages?: Message[]) => {
-      return new Promise<void>((resolve, reject) => {
-        const onEvent = (event: AgentEvent) => {
-          if (event.type === "session") {
-            if (event.session_id) {
-              sessionIdRef.current = event.session_id;
-              setSessionId(event.session_id);
-            }
-          } else if (event.type === "done" && event.session_id) {
-            sessionIdRef.current = event.session_id;
-            setSessionId(event.session_id);
-          } else if (event.type === "waiting_for_user" || event.type === "ask") {
-            setIsWaitingForUser(true);
-            setIsLoading(false);
-          } else if (event.type === "message_start") {
-            const newMsgId = `msg-${Date.now()}`;
-            streamingMsgIdRef.current = newMsgId;
-            const assistantMessage: Message = {
-              id: newMsgId,
-              type: "assistant",
-              content: event.content || event.message || "",
-              timestamp: new Date(event.timestamp || new Date()),
-              isLoading: true,
-            };
-            addMessage(assistantMessage);
-          } else if (event.type === "message") {
-            const assistantMessage: Message = {
-              id: `msg-${Date.now()}`,
-              type: "assistant",
-              content: event.content || event.message || "",
-              timestamp: new Date(event.timestamp || new Date()),
-              isLoading: false,
-            };
-            addMessage(assistantMessage);
-          } else if (event.type === "message_chunk") {
-            const chunk = event.chunk || event.content || "";
-            if (chunk) {
-              const currentId = streamingMsgIdRef.current;
-              setMessages((prev) => {
-                if (currentId) {
-                  const idx = prev.findIndex((m) => m.id === currentId);
-                  if (idx >= 0) {
-                    const updated = [...prev];
-                    updated[idx] = {
-                      ...updated[idx],
-                      content: updated[idx].content + chunk,
-                      isLoading: true,
-                    };
-                    return updated;
-                  }
-                }
-                // Fallback: append to last assistant message
-                const lastIdx = prev.length - 1;
-                if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
-                  const updated = [...prev];
-                  updated[lastIdx] = {
-                    ...updated[lastIdx],
-                    content: updated[lastIdx].content + chunk,
-                    isLoading: true,
-                  };
-                  return updated;
-                }
-                return prev;
-              });
-            }
-          } else if (event.type === "message_end") {
+  /**
+   * handleNormalizedEvent — processes a NormalizedEvent (from processAgentEvent)
+   * and updates useChat state accordingly.
+   * This is the single source of truth for event → state mapping in this hook.
+   */
+  const handleNormalizedEvent = useCallback(
+    (ev: NormalizedEvent) => {
+      switch (ev.kind) {
+        case "session": {
+          if (ev.sessionId) {
+            sessionIdRef.current = ev.sessionId;
+            setSessionId(ev.sessionId);
+          }
+          break;
+        }
+
+        case "done": {
+          // session_id may be in the done event — already handled by session event
+          break;
+        }
+
+        case "waiting_for_user": {
+          setIsWaitingForUser(true);
+          setIsLoading(false);
+          break;
+        }
+
+        case "message_start": {
+          const newMsgId = `msg-${Date.now()}`;
+          streamingMsgIdRef.current = newMsgId;
+          const assistantMessage: Message = {
+            id: newMsgId,
+            type: "assistant",
+            content: ev.content,
+            timestamp: new Date(),
+            isLoading: true,
+          };
+          addMessage(assistantMessage);
+          break;
+        }
+
+        case "message": {
+          const assistantMessage: Message = {
+            id: `msg-${Date.now()}`,
+            type: "assistant",
+            content: ev.content,
+            timestamp: new Date(),
+            isLoading: false,
+          };
+          addMessage(assistantMessage);
+          break;
+        }
+
+        case "message_chunk": {
+          const chunk = ev.chunk;
+          if (chunk) {
             const currentId = streamingMsgIdRef.current;
-            streamingMsgIdRef.current = null;
             setMessages((prev) => {
               if (currentId) {
                 const idx = prev.findIndex((m) => m.id === currentId);
                 if (idx >= 0) {
                   const updated = [...prev];
-                  updated[idx] = { ...updated[idx], isLoading: false };
-                  return updated;
-                }
-              }
-              // Fallback: mark last assistant message as done
-              const lastIdx = prev.length - 1;
-              if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
-                const updated = [...prev];
-                updated[lastIdx] = { ...updated[lastIdx], isLoading: false };
-                return updated;
-              }
-              return prev;
-            });
-          } else if (event.type === "tool") {
-            const fnName = event.function_name || event.tool_name || "";
-            const label = getToolActionVerb(fnName);
-            const toolStatus = (event.status as "calling" | "called" | "error") || "calling";
-            const toolMessage: Message = {
-              id: event.tool_call_id || `msg-${Date.now()}`,
-              type: "tool",
-              content: label,
-              timestamp: new Date(event.timestamp || new Date()),
-              toolName: fnName,
-              toolArgs: event.function_args,
-              toolCallId: event.tool_call_id,
-              toolStatus,
-              isLoading: toolStatus === "calling",
-            };
-            // If this tool_call_id already exists, update instead of adding
-            if (event.tool_call_id) {
-              setMessages((prev) => {
-                const existingIdx = prev.findIndex((m) => m.id === event.tool_call_id);
-                if (existingIdx >= 0) {
-                  const updated = [...prev];
-                  updated[existingIdx] = {
-                    ...updated[existingIdx],
-                    ...toolMessage,
-                  };
-                  return updated;
-                }
-                return [...prev, toolMessage];
-              });
-            } else {
-              addMessage(toolMessage);
-            }
-          } else if (event.type === "tool_stream") {
-            // Update the corresponding tool message with streaming content
-            if (event.tool_call_id) {
-              setMessages((prev) => {
-                const idx = prev.findIndex((m) => m.id === event.tool_call_id);
-                if (idx >= 0) {
-                  const updated = [...prev];
                   updated[idx] = {
                     ...updated[idx],
-                    content: event.content || updated[idx].content,
+                    content: updated[idx].content + chunk,
                     isLoading: true,
                   };
                   return updated;
                 }
-                return prev;
-              });
-            }
-          } else if (event.type === "step") {
-            const stepContent =
-              event.step?.description ||
-              event.step?.title ||
-              event.content ||
-              "Processing...";
-            const stepMessage: Message = {
-              id: `msg-${Date.now()}`,
-              type: "step",
-              content: stepContent,
-              timestamp: new Date(event.timestamp || new Date()),
-              isLoading: true,
-            };
-            addMessage(stepMessage);
-          } else if (event.type === "thinking") {
-            const thinkingMessage: Message = {
-              id: `msg-thinking-${Date.now()}`,
-              type: "thinking",
-              content: event.thinking || event.content || "",
-              timestamp: new Date(event.timestamp || new Date()),
-              isLoading: true,
-            };
-            addMessage(thinkingMessage);
-          } else if (event.type === "title") {
-            // Title events can be used for display purposes
-            if (event.title) {
-              const titleMessage: Message = {
-                id: `msg-title-${Date.now()}`,
-                type: "title",
-                content: event.title,
-                timestamp: new Date(event.timestamp || new Date()),
-              };
-              addMessage(titleMessage);
-            }
-          } else if (event.type === "notify") {
-            const notifyMessage: Message = {
-              id: `msg-notify-${Date.now()}`,
-              type: "assistant",
-              content: event.text || event.content || event.message || "",
-              timestamp: new Date(event.timestamp || new Date()),
-            };
-            addMessage(notifyMessage);
-          } else if (event.type === "vnc_stream_url") {
-            if (onVncUrl && event.vnc_url) {
-              onVncUrl({
-                vncUrl: event.vnc_url,
-                sandboxId: event.sandbox_id || "",
-                e2bSessionId: event.e2b_session_id || "",
-              });
-            }
-          } else if (event.type === "browser_screenshot" || event.type === "desktop_screenshot") {
-            if (onBrowserEvent && event.screenshot_b64) {
-              onBrowserEvent({
-                screenshot_b64: event.screenshot_b64,
-                url: event.url || "",
-                title: event.title || "",
-              });
-            }
-          } else if (event.type === "plan") {
-            // Agent plan received — store plan state
-            if (event.plan) {
-              setAgentPlan({
-                title: event.plan.title || event.title,
-                steps: (event.plan.steps || []).map((s: any) => ({
-                  id: s.id,
-                  title: s.title || s.description || "",
-                  status: s.status,
-                })),
-                status: event.status || event.plan.status,
-              });
-            }
-          } else if (event.type === "message_correct") {
-            // Correct/finalize the last assistant message with the complete text
-            if (event.text || event.content) {
-              const correctedText = event.text || event.content;
-              setMessages((prev) => {
-                const lastAssistantIdx = [...prev].reverse().findIndex((m) => m.type === "assistant");
-                if (lastAssistantIdx >= 0) {
-                  const idx = prev.length - 1 - lastAssistantIdx;
-                  const updated = [...prev];
-                  updated[idx] = { ...updated[idx], content: correctedText, isLoading: false };
-                  return updated;
-                }
-                return prev;
-              });
-            }
-          } else if (event.type === "files") {
-            // Files created/modified by the agent
-            if (Array.isArray(event.files) && event.files.length > 0) {
-              const newFiles: AgentFile[] = event.files.map((f: any) => ({
-                name: f.name || f.filename || "",
-                path: f.path || "",
-                size: f.size,
-                mime_type: f.mime_type || f.type,
-                download_url: f.download_url || f.url || "",
-              }));
-              setAgentFiles((prev) => {
-                const existingPaths = new Set(prev.map((f) => f.path));
-                const unique = newFiles.filter((f) => !existingPaths.has(f.path));
-                return [...prev, ...unique];
-              });
-            }
-          } else if (event.type === "todo_update") {
-            // todo_update events are informational — no UI message needed,
-            // frontend can poll /api/sessions/:id/todos for the latest state
-          } else if (event.type === "task_update") {
-            // task_update events are informational — no UI message needed,
-            // frontend can poll /api/sessions/:id/tasks for the latest state
-          } else if (event.type === "error") {
-            setError(event.error || "An error occurred");
+              }
+              const lastIdx = prev.length - 1;
+              if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
+                const updated = [...prev];
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  content: updated[lastIdx].content + chunk,
+                  isLoading: true,
+                };
+                return updated;
+              }
+              return prev;
+            });
           }
+          break;
+        }
+
+        case "message_end": {
+          const currentId = streamingMsgIdRef.current;
+          streamingMsgIdRef.current = null;
+          setMessages((prev) => {
+            if (currentId) {
+              const idx = prev.findIndex((m) => m.id === currentId);
+              if (idx >= 0) {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], isLoading: false };
+                return updated;
+              }
+            }
+            const lastIdx = prev.length - 1;
+            if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
+              const updated = [...prev];
+              updated[lastIdx] = { ...updated[lastIdx], isLoading: false };
+              return updated;
+            }
+            return prev;
+          });
+          break;
+        }
+
+        case "tool": {
+          const label = getToolActionVerb(ev.functionName);
+          const toolMessage: Message = {
+            id: ev.callId,
+            type: "tool",
+            content: label,
+            timestamp: new Date(),
+            toolName: ev.functionName,
+            toolArgs: ev.args,
+            toolCallId: ev.callId,
+            toolStatus: ev.status,
+            isLoading: ev.status === "calling",
+          };
+          setMessages((prev) => {
+            const existingIdx = prev.findIndex((m) => m.id === ev.callId);
+            if (existingIdx >= 0) {
+              const updated = [...prev];
+              updated[existingIdx] = { ...updated[existingIdx], ...toolMessage };
+              return updated;
+            }
+            return [...prev, toolMessage];
+          });
+          break;
+        }
+
+        case "tool_stream": {
+          if (ev.callId) {
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === ev.callId);
+              if (idx >= 0) {
+                const updated = [...prev];
+                updated[idx] = {
+                  ...updated[idx],
+                  content: updated[idx].content + ev.chunk,
+                  isLoading: true,
+                };
+                return updated;
+              }
+              return prev;
+            });
+          }
+          break;
+        }
+
+        case "step": {
+          const stepContent =
+            ev.step?.description ||
+            ev.step?.title ||
+            "Processing...";
+          const stepMessage: Message = {
+            id: `msg-${Date.now()}`,
+            type: "step",
+            content: stepContent,
+            timestamp: new Date(),
+            isLoading: true,
+          };
+          addMessage(stepMessage);
+          break;
+        }
+
+        case "thinking": {
+          const thinkingMessage: Message = {
+            id: `msg-thinking-${Date.now()}`,
+            type: "thinking",
+            content: ev.text,
+            timestamp: new Date(),
+            isLoading: true,
+          };
+          addMessage(thinkingMessage);
+          break;
+        }
+
+        case "title": {
+          if (ev.title) {
+            const titleMessage: Message = {
+              id: `msg-title-${Date.now()}`,
+              type: "title",
+              content: ev.title,
+              timestamp: new Date(),
+            };
+            addMessage(titleMessage);
+          }
+          break;
+        }
+
+        case "notify": {
+          const notifyMessage: Message = {
+            id: `msg-notify-${Date.now()}`,
+            type: "assistant",
+            content: ev.text,
+            timestamp: new Date(),
+          };
+          addMessage(notifyMessage);
+          break;
+        }
+
+        case "vnc_stream_url": {
+          if (onVncUrl && ev.vncUrl) {
+            onVncUrl({ vncUrl: ev.vncUrl, sandboxId: ev.sandboxId, e2bSessionId: ev.e2bSessionId });
+          }
+          break;
+        }
+
+        case "screenshot": {
+          if (onBrowserEvent && ev.screenshotB64) {
+            onBrowserEvent({
+              screenshot_b64: ev.screenshotB64,
+              url: ev.url || "",
+              title: ev.title || "",
+            });
+          }
+          break;
+        }
+
+        case "plan": {
+          if (ev.plan) {
+            setAgentPlan({
+              title: ev.plan.title,
+              steps: (ev.plan.steps || []).map((s: any) => ({
+                id: s.id,
+                title: s.title || s.description || "",
+                status: s.status,
+              })),
+              status: ev.status || ev.plan.status,
+            });
+          }
+          break;
+        }
+
+        case "message_correct": {
+          if (ev.text) {
+            setMessages((prev) => {
+              const lastAssistantIdx = [...prev].reverse().findIndex((m) => m.type === "assistant");
+              if (lastAssistantIdx >= 0) {
+                const idx = prev.length - 1 - lastAssistantIdx;
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], content: ev.text, isLoading: false };
+                return updated;
+              }
+              return prev;
+            });
+          }
+          break;
+        }
+
+        case "files": {
+          if (ev.files.length > 0) {
+            const newFiles: AgentFile[] = ev.files.map((f) => ({
+              name: f.filename || "",
+              path: f.sandbox_path || "",
+              mime_type: f.mime,
+              download_url: f.download_url || "",
+            }));
+            setAgentFiles((prev) => {
+              const existingPaths = new Set(prev.map((f) => f.path));
+              const unique = newFiles.filter((f) => !existingPaths.has(f.path));
+              return [...prev, ...unique];
+            });
+          }
+          break;
+        }
+
+        case "error": {
+          setError(ev.message);
+          break;
+        }
+
+        case "unknown":
+        default:
+          break;
+      }
+    },
+    [addMessage, onVncUrl, onBrowserEvent]
+  );
+
+  const handleAgentChat = useCallback(
+    async (text: string, existingSessionId?: string, isContinuation?: boolean, attachments?: any[], currentMessages?: Message[]) => {
+      return new Promise<void>((resolve, reject) => {
+        const onEvent = (event: AgentEvent) => {
+          handleNormalizedEvent(processAgentEvent(event));
         };
 
         const onError = (error: Error) => {
@@ -355,7 +398,6 @@ export function useChat(
         };
 
         try {
-          // Build chat history from current messages (user/assistant only, no tool/step)
           const historyMessages = (currentMessages || [])
             .filter((m) => m.type === "user" || m.type === "assistant")
             .map((m) => ({
@@ -380,7 +422,7 @@ export function useChat(
         }
       });
     },
-    [addMessage]
+    [handleNormalizedEvent]
   );
 
   const sendMessage = useCallback(

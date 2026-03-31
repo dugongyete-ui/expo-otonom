@@ -5,6 +5,7 @@ import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
 import { AgentThinking } from "./AgentThinking";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
+import { processAgentEvent, AGENT_EVENT_TYPES } from "../lib/agent-event-processor";
 import { randomUUID } from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n, t as translate } from "@/lib/i18n";
