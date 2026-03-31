@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, Bot, User, AlertCircle, Paperclip, X } from "lucide-react";
+import { Loader2, Send, Bot, User, AlertCircle, Paperclip, X, LogOut } from "lucide-react";
+import { getToken, clearTokens, logoutApi } from "@/lib/auth";
 
 interface AgentEvent {
   type: string;
@@ -51,14 +52,6 @@ function getApiBase(): string {
   return "";
 }
 
-function getStoredToken(): string {
-  try {
-    return localStorage.getItem("dzeck_access_token") || "";
-  } catch {
-    return "";
-  }
-}
-
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -102,7 +95,7 @@ export default function ChatPage() {
     cancelRef.current = () => controller.abort();
 
     try {
-      const token = getStoredToken();
+      const token = getToken();
       const resp = await fetch(`${getApiBase()}/api/agent`, {
         method: "POST",
         headers: {
@@ -118,6 +111,11 @@ export default function ChatPage() {
       });
 
       if (!resp.ok) {
+        if (resp.status === 401) {
+          clearTokens();
+          window.location.reload();
+          return;
+        }
         const errData = await resp.json().catch(() => ({ error: "Request failed" }));
         throw new Error(errData.error || `HTTP ${resp.status}`);
       }
@@ -230,6 +228,20 @@ export default function ChatPage() {
               onClick={() => setMode("agent")}
             >
               Agent
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-red-400"
+              title="Logout"
+              onClick={async () => {
+                const token = getToken();
+                await logoutApi(token);
+                clearTokens();
+                window.location.reload();
+              }}
+            >
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </header>

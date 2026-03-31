@@ -42,6 +42,42 @@
     @keyframes splashDot{0%,80%,100%{transform:scale(.6);background:rgba(255,255,255,.2)}40%{transform:scale(1);background:rgba(255,255,255,.8)}}
   </style>
   <style>
+    /* ── Login Screen ── */
+    #login-screen{
+      position:fixed;inset:0;z-index:10000;
+      background:#0A0A0C;
+      display:flex;align-items:center;justify-content:center;
+      padding:24px;
+    }
+    #login-screen.hidden{display:none}
+    .login-wrap{width:100%;max-width:360px}
+    .login-logo{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:36px}
+    .login-logo-title{font-size:26px;font-weight:700;color:#fff;letter-spacing:-.03em;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-logo-sub{font-size:11px;color:#636366;letter-spacing:.15em;text-transform:uppercase;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-card{background:#1A1A20;border:1px solid #2C2C30;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px}
+    .login-title{font-size:18px;font-weight:700;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-error{display:none;flex-direction:row;align-items:center;gap:8px;background:#FF453A20;border:1px solid #FF453A40;border-radius:8px;padding:10px 12px;font-size:13px;color:#FF453A;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-error.show{display:flex}
+    .login-success{display:none;flex-direction:row;align-items:center;gap:8px;background:#30D15820;border:1px solid #30D15840;border-radius:8px;padding:10px 12px;font-size:13px;color:#30D158;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-success.show{display:flex}
+    .login-field{display:flex;flex-direction:column;gap:6px}
+    .login-label{font-size:13px;color:#8E8E93;font-weight:500;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-input{background:#0A0A0C;border:1px solid #2C2C30;border-radius:10px;padding:11px 14px;font-size:15px;color:#fff;outline:none;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transition:border-color .15s}
+    .login-input:focus{border-color:#6C5CE7}
+    .login-pw-wrap{position:relative}
+    .login-pw-wrap .login-input{padding-right:44px}
+    .login-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#636366;display:flex;align-items:center;padding:4px}
+    .login-eye:hover{color:#8E8E93}
+    .login-btn{background:#6C5CE7;color:#fff;border:none;border-radius:12px;padding:13px 0;font-size:15px;font-weight:600;cursor:pointer;width:100%;transition:background .15s;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;align-items:center;justify-content:center;gap:8px}
+    .login-btn:hover{background:#5a4dd4}
+    .login-btn:disabled{opacity:.55;cursor:not-allowed}
+    .login-switch{text-align:center;font-size:13px;color:#636366;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .login-switch a{color:#6C5CE7;font-weight:600;text-decoration:none;cursor:pointer}
+    .login-switch a:hover{text-decoration:underline}
+    .login-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:loginSpin .7s linear infinite}
+    @keyframes loginSpin{to{transform:rotate(360deg)}}
+  </style>
+  <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
       --bg:#edebe3;
@@ -645,6 +681,59 @@
 </head>
 <body>
 
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div id="login-screen" class="hidden">
+  <div class="login-wrap">
+    <div class="login-logo">
+      <img src="/assets/images/dzeck-logo-transparent.png" alt="Dzeck AI" style="width:56px;height:56px;object-fit:contain;filter:brightness(0) invert(1)" onerror="this.style.display='none'">
+      <div class="login-logo-title">Dzeck AI</div>
+      <div class="login-logo-sub">Autonomous AI Agent</div>
+    </div>
+    <div class="login-card">
+      <div class="login-title" id="login-card-title">Login ke Dzeck AI</div>
+      <div class="login-error" id="login-error">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="login-error-text"></span>
+      </div>
+      <div class="login-success" id="login-success">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span id="login-success-text"></span>
+      </div>
+      <!-- Register name field (only for password mode) -->
+      <div class="login-field" id="login-name-field" style="display:none">
+        <div class="login-label">Nama Lengkap</div>
+        <input type="text" class="login-input" id="login-fullname" placeholder="Masukkan nama lengkap" autocomplete="name">
+      </div>
+      <div class="login-field">
+        <div class="login-label">Email</div>
+        <input type="email" class="login-input" id="login-email" placeholder="Masukkan email" autocomplete="email">
+      </div>
+      <div class="login-field" id="login-pw-field">
+        <div class="login-label">Password</div>
+        <div class="login-pw-wrap">
+          <input type="password" class="login-input" id="login-password" placeholder="Masukkan password" autocomplete="current-password">
+          <button class="login-eye" id="login-eye-btn" type="button" onclick="toggleLoginPw()">
+            <svg id="login-eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="login-field" id="login-confirm-pw-field" style="display:none">
+        <div class="login-label">Konfirmasi Password</div>
+        <input type="password" class="login-input" id="login-confirm-password" placeholder="Masukkan password lagi">
+      </div>
+      <button class="login-btn" id="login-submit-btn" onclick="submitLogin()">
+        <span id="login-btn-text">Login</span>
+      </button>
+      <div class="login-switch" id="login-switch-row" style="display:none">
+        Belum punya akun? <a onclick="switchLoginScreen('register')">Register</a>
+      </div>
+      <div class="login-switch" id="register-switch-row" style="display:none">
+        Sudah punya akun? <a onclick="switchLoginScreen('login')">Login</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ SPLASH SCREEN ═══ -->
 <div id="splash">
   <div class="splash-logo">
@@ -714,6 +803,9 @@
       <button id="computer-btn" onclick="toggleComputerPanel()" title="Komputer Dzeck">
         <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         Komputer
+      </button>
+      <button id="logout-btn" class="header-btn" onclick="doLogout()" title="Logout" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
     </header>
 
@@ -922,8 +1014,238 @@
     if (typeof input === 'string' && input.startsWith('/')) {
       input = window.location.origin + input;
     }
+    // Auto-inject Authorization header for API calls
+    if (typeof input === 'string' && input.includes('/api/') && !input.includes('/api/auth/')) {
+      const token = _getWebToken();
+      if (token) {
+        init = init || {};
+        init.headers = Object.assign({ 'Authorization': 'Bearer ' + token }, init.headers || {});
+      }
+    }
     return _origFetch.call(this, input, init);
   };
+})();
+
+// ═══════════════════════════════════════════════════
+// AUTH — Token management & Login Screen
+// ═══════════════════════════════════════════════════
+const _AUTH_TOKEN_KEY = 'dzeck_access_token';
+const _AUTH_REFRESH_KEY = 'dzeck_refresh_token';
+
+function _getWebToken() {
+  try { return localStorage.getItem(_AUTH_TOKEN_KEY) || ''; } catch { return ''; }
+}
+function _setWebTokens(access, refresh) {
+  try { localStorage.setItem(_AUTH_TOKEN_KEY, access); localStorage.setItem(_AUTH_REFRESH_KEY, refresh || ''); } catch {}
+}
+function _clearWebTokens() {
+  try { localStorage.removeItem(_AUTH_TOKEN_KEY); localStorage.removeItem(_AUTH_REFRESH_KEY); } catch {}
+}
+function _isTokenValid(token) {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch { return false; }
+}
+
+// Current login screen state: 'login' | 'register'
+let _loginScreenMode = 'login';
+let _authMode = 'none'; // will be fetched from /api/auth/status
+
+function showLoginScreen() {
+  const el = document.getElementById('login-screen');
+  if (el) el.classList.remove('hidden');
+  // Focus email after small delay
+  setTimeout(() => { try { document.getElementById('login-email').focus(); } catch{} }, 100);
+}
+function hideLoginScreen() {
+  const el = document.getElementById('login-screen');
+  if (el) el.classList.add('hidden');
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn && _authMode !== 'none') logoutBtn.style.display = '';
+}
+function setLoginError(msg) {
+  const el = document.getElementById('login-error');
+  const txt = document.getElementById('login-error-text');
+  if (!el || !txt) return;
+  txt.textContent = msg;
+  el.classList.add('show');
+  document.getElementById('login-success')?.classList.remove('show');
+}
+function setLoginSuccess(msg) {
+  const el = document.getElementById('login-success');
+  const txt = document.getElementById('login-success-text');
+  if (!el || !txt) return;
+  txt.textContent = msg;
+  el.classList.add('show');
+  document.getElementById('login-error')?.classList.remove('show');
+}
+function clearLoginMessages() {
+  document.getElementById('login-error')?.classList.remove('show');
+  document.getElementById('login-success')?.classList.remove('show');
+}
+function setLoginLoading(loading) {
+  const btn = document.getElementById('login-submit-btn');
+  const txt = document.getElementById('login-btn-text');
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) {
+    txt.innerHTML = '<span class="login-spinner"></span>';
+  } else {
+    txt.textContent = _loginScreenMode === 'login' ? 'Login' : 'Register';
+  }
+}
+function toggleLoginPw() {
+  const inp = document.getElementById('login-password');
+  const inp2 = document.getElementById('login-confirm-password');
+  const icon = document.getElementById('login-eye-icon');
+  if (!inp) return;
+  const isText = inp.type === 'text';
+  inp.type = isText ? 'password' : 'text';
+  if (inp2) inp2.type = isText ? 'password' : 'text';
+  if (icon) {
+    icon.innerHTML = isText
+      ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+      : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  }
+}
+function switchLoginScreen(mode) {
+  _loginScreenMode = mode;
+  clearLoginMessages();
+  const title = document.getElementById('login-card-title');
+  const nameField = document.getElementById('login-name-field');
+  const confirmField = document.getElementById('login-confirm-pw-field');
+  const loginSwitch = document.getElementById('login-switch-row');
+  const registerSwitch = document.getElementById('register-switch-row');
+  const btnText = document.getElementById('login-btn-text');
+  if (mode === 'login') {
+    if (title) title.textContent = 'Login ke Dzeck AI';
+    if (nameField) nameField.style.display = 'none';
+    if (confirmField) confirmField.style.display = 'none';
+    if (loginSwitch) loginSwitch.style.display = _authMode === 'password' ? '' : 'none';
+    if (registerSwitch) registerSwitch.style.display = 'none';
+    if (btnText) btnText.textContent = 'Login';
+  } else {
+    if (title) title.textContent = 'Daftar Akun Baru';
+    if (nameField) nameField.style.display = '';
+    if (confirmField) confirmField.style.display = '';
+    if (loginSwitch) loginSwitch.style.display = 'none';
+    if (registerSwitch) registerSwitch.style.display = '';
+    if (btnText) btnText.textContent = 'Register';
+  }
+}
+
+async function submitLogin() {
+  clearLoginMessages();
+  const email = (document.getElementById('login-email')?.value || '').trim();
+  const password = document.getElementById('login-password')?.value || '';
+  if (_loginScreenMode === 'login') {
+    if (!email) { setLoginError('Email wajib diisi'); return; }
+    if (!password) { setLoginError('Password wajib diisi'); return; }
+    setLoginLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error || 'Login gagal'); return; }
+      _setWebTokens(data.access_token, data.refresh_token);
+      setLoginSuccess('Login berhasil!');
+      setTimeout(() => hideLoginScreen(), 500);
+    } catch(e) { setLoginError('Koneksi gagal. Coba lagi.'); }
+    finally { setLoginLoading(false); }
+  } else {
+    const fullname = (document.getElementById('login-fullname')?.value || '').trim();
+    const confirm = document.getElementById('login-confirm-password')?.value || '';
+    if (!fullname || fullname.length < 2) { setLoginError('Nama minimal 2 karakter'); return; }
+    if (!email || !email.includes('@')) { setLoginError('Email tidak valid'); return; }
+    if (password.length < 6) { setLoginError('Password minimal 6 karakter'); return; }
+    if (password !== confirm) { setLoginError('Password tidak cocok'); return; }
+    setLoginLoading(true);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, fullname }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error || 'Registrasi gagal'); return; }
+      _setWebTokens(data.access_token, data.refresh_token);
+      setLoginSuccess('Registrasi berhasil!');
+      setTimeout(() => hideLoginScreen(), 500);
+    } catch(e) { setLoginError('Koneksi gagal. Coba lagi.'); }
+    finally { setLoginLoading(false); }
+  }
+}
+// Allow Enter key in login form
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !document.getElementById('login-screen').classList.contains('hidden')) {
+    e.preventDefault();
+    submitLogin();
+  }
+});
+
+async function doLogout() {
+  try {
+    const token = _getWebToken();
+    if (token) {
+      await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(()=>{});
+    }
+  } catch{}
+  _clearWebTokens();
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.style.display = 'none';
+  showLoginScreen();
+}
+
+// ── Auth initialization: check token on page load
+(async function initAuth() {
+  try {
+    const statusRes = await fetch('/api/auth/status');
+    const statusData = await statusRes.json();
+    _authMode = statusData.auth_provider || 'none';
+  } catch { _authMode = 'none'; }
+
+  if (_authMode === 'none') {
+    // Auto-login: get token from server
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '', password: '' }),
+      });
+      const data = await res.json();
+      if (data.access_token) _setWebTokens(data.access_token, data.refresh_token || '');
+    } catch {}
+    // Hide logout button for auto-login mode
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    return;
+  }
+
+  // local or password mode
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.style.display = '';
+
+  // Setup register link visibility
+  if (_authMode === 'password') {
+    const loginSwitch = document.getElementById('login-switch-row');
+    if (loginSwitch) loginSwitch.style.display = '';
+  }
+
+  // Check stored token
+  const token = _getWebToken();
+  if (_isTokenValid(token)) {
+    // Already authenticated
+    return;
+  }
+
+  // Need to login
+  _clearWebTokens();
+  showLoginScreen();
 })();
 
 // ═══════════════════════════════════════════════════
@@ -2989,7 +3311,10 @@ async function doSend(text, attachments) {
       }),
       signal: S.abortCtrl.signal,
     });
-    if (!resp.ok) throw new Error(`${resp.status}`);
+    if (!resp.ok) {
+      if (resp.status === 401) { _clearWebTokens(); showLoginScreen(); return; }
+      throw new Error(`${resp.status}`);
+    }
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf='';
