@@ -106,11 +106,12 @@ function ToolChip({ event, isLast }: { event: AgentEvent; isLast: boolean }) {
   );
 }
 
-function StepCard({ step }: { step: AgentPlanStep }) {
+function StepBlock({ step }: { step: AgentPlanStep }) {
   const [expanded, setExpanded] = useState(step.status === "running");
   const isRunning = step.status === "running";
   const isDone = step.status === "completed";
   const isFailed = step.status === "failed";
+  const isPending = step.status === "pending";
   const tools = step.tools || [];
 
   useEffect(() => {
@@ -118,57 +119,57 @@ function StepCard({ step }: { step: AgentPlanStep }) {
     else if (isDone || isFailed) setExpanded(false);
   }, [step.status, isRunning, isDone, isFailed]);
 
-  const iconColor = isDone ? "#16a34a" : isFailed ? "#dc2626" : isRunning ? "#2563eb" : "#ccc8be";
+  const borderColor = isDone ? "#16a34a" : isFailed ? "#dc2626" : isRunning ? "#2563eb" : "#ccc8be";
+  const bgColor = isDone ? "#16a34a" : "transparent";
 
   return (
-    <View style={styles.stepCard}>
-      <TouchableOpacity
-        style={styles.stepCardHeader}
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.stepCheckCircle, { borderColor: iconColor, backgroundColor: isDone ? "#16a34a" : "transparent" }]}>
-          {isDone ? (
-            <Ionicons name="checkmark" size={10} color="#ffffff" />
-          ) : isFailed ? (
-            <Ionicons name="close" size={10} color="#dc2626" />
-          ) : null}
-        </View>
-        <Text
-          style={[
-            styles.stepCardTitle,
-            isDone && styles.stepCardTitleDone,
-            isFailed && styles.stepCardTitleFailed,
-            step.status === "pending" && styles.stepCardTitlePending,
-          ]}
-          numberOfLines={2}
+    <View style={styles.stepBlock}>
+      <View style={styles.stepCard}>
+        <TouchableOpacity
+          style={styles.stepCardHeader}
+          onPress={() => setExpanded(!expanded)}
+          activeOpacity={0.7}
         >
-          {step.description}
-        </Text>
-        {isRunning && <PulsingDot />}
-        <Ionicons
-          name={expanded ? "chevron-up" : "chevron-down"}
-          size={13}
-          color="#ccc8be"
-          style={{ marginLeft: 2 }}
-        />
-      </TouchableOpacity>
-
-      {expanded && tools.length > 0 && (
-        <View style={styles.stepCardBody}>
-          <View style={styles.toolsList}>
-            {tools.map((tool, i) => (
-              <ToolChip key={tool.tool_call_id || i} event={tool} isLast={i === tools.length - 1} />
-            ))}
+          <View style={[styles.stepCheckCircle, { borderColor, backgroundColor: bgColor }]}>
+            {isDone && <Ionicons name="checkmark" size={10} color="#ffffff" />}
+            {isFailed && <Ionicons name="close" size={9} color="#dc2626" />}
           </View>
-        </View>
-      )}
+          <Text
+            style={[
+              styles.stepCardTitle,
+              isDone && styles.stepCardTitleDone,
+              isFailed && styles.stepCardTitleFailed,
+              isPending && styles.stepCardTitlePending,
+            ]}
+            numberOfLines={2}
+          >
+            {step.description}
+          </Text>
+          {isRunning && <PulsingDot />}
+          <Ionicons
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={13}
+            color="#ccc8be"
+            style={{ marginLeft: 2 }}
+          />
+        </TouchableOpacity>
 
-      {expanded && isDone && step.result ? (
-        <View style={styles.stepResultRow}>
-          <Text style={styles.stepResultText} numberOfLines={4}>{step.result}</Text>
-        </View>
-      ) : null}
+        {expanded && tools.length > 0 && (
+          <View style={styles.stepCardBody}>
+            <View style={styles.toolsList}>
+              {tools.map((tool, i) => (
+                <ToolChip key={tool.tool_call_id || i} event={tool} isLast={i === tools.length - 1} />
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+
+      {step.result && (isDone || isRunning) && (
+        <Text style={styles.stepResultText} numberOfLines={4}>
+          {step.result}
+        </Text>
+      )}
     </View>
   );
 }
@@ -177,7 +178,7 @@ export function AgentPlanView({ plan }: AgentPlanViewProps) {
   return (
     <View style={styles.container}>
       {plan.steps.map((step, index) => (
-        <StepCard key={step.id || index} step={step} />
+        <StepBlock key={step.id || index} step={step} />
       ))}
     </View>
   );
@@ -185,6 +186,9 @@ export function AgentPlanView({ plan }: AgentPlanViewProps) {
 
 const styles = StyleSheet.create({
   container: {
+    gap: 10,
+  },
+  stepBlock: {
     gap: 6,
   },
   stepCard: {
@@ -306,17 +310,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexShrink: 0,
   },
-  stepResultRow: {
-    borderTopWidth: 1,
-    borderTopColor: "#f0ede7",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
   stepResultText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     color: "#8a8780",
     lineHeight: 17,
     letterSpacing: -0.1,
+    paddingHorizontal: 4,
   },
 });

@@ -107,6 +107,7 @@ export function ChatPage({
   const [e2bStatus, setE2bStatus] = useState<"checking" | "connected" | "error">("checking");
   const [taskCompleted, setTaskCompleted] = useState(false);
   const [taskCompletedExpanded, setTaskCompletedExpanded] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState<Array<{ id: string; description: string }>>([]);
 
   const flatListRef = useRef<FlatList>(null);
   const activeSessionIdRef = useRef<string>(externalSessionId || randomUUID());
@@ -608,6 +609,11 @@ export function ChatPage({
         setThinking({ active: false, label: "", stepLabel: undefined });
         setIsLoading(false);
         if (isAgentMode) {
+          const steps = currentPlanRef.current?.steps || [];
+          const doneSteps = steps
+            .filter(s => s.status === "completed" || s.status === "failed")
+            .map(s => ({ id: s.id, description: s.description }));
+          setCompletedSteps(doneSteps.length > 0 ? doneSteps : steps.map(s => ({ id: s.id, description: s.description })));
           setTaskCompleted(true);
           setTaskCompletedExpanded(false);
         }
@@ -854,6 +860,7 @@ export function ChatPage({
     setTools([]);
     setTaskCompleted(false);
     setTaskCompletedExpanded(false);
+    setCompletedSteps([]);
     if (!wasContinuation) {
       setStepHistory([]);
       planMsgIdRef.current = null;
@@ -1293,16 +1300,8 @@ export function ChatPage({
         }}
         contentContainerStyle={styles.messageList}
         ListFooterComponent={
-          <>
-            {thinking.active && (
-              <View style={styles.thinkingRow}>
-                <View style={styles.thinkingDotWrap}>
-                  <View style={[styles.thinkingDot, styles.thinkingDotPulse]} />
-                </View>
-                <Text style={styles.thinkingLabel} numberOfLines={1}>{thinking.label}</Text>
-              </View>
-            )}
-            {taskCompleted && !thinking.active && (
+          taskCompleted && !thinking.active ? (
+            <View style={styles.taskCompletedWrap}>
               <TouchableOpacity
                 style={styles.taskCompletedBanner}
                 onPress={() => setTaskCompletedExpanded(!taskCompletedExpanded)}
@@ -1318,8 +1317,20 @@ export function ChatPage({
                   color="#16a34a"
                 />
               </TouchableOpacity>
-            )}
-          </>
+              {taskCompletedExpanded && completedSteps.length > 0 && (
+                <View style={styles.taskCompletedSteps}>
+                  {completedSteps.map((step, i) => (
+                    <View key={step.id || i} style={styles.taskCompletedStepRow}>
+                      <Ionicons name="checkmark-circle" size={13} color="#16a34a" />
+                      <Text style={styles.taskCompletedStepText} numberOfLines={2}>
+                        {step.description}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : null
         }
       />
 
