@@ -762,27 +762,6 @@ export function ChatPage({
   const handleStop = useCallback(() => {
     const sid = activeSessionIdRef.current;
 
-    // Step 1: Send Redis graceful stop signal (plan_act.py checks this each iteration)
-    if (sid) {
-      const base = getApiBaseUrl();
-      const token = getStoredToken();
-      fetch(`${base}/api/sessions/${sid}/stop`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      }).catch(() => {});
-
-      // Step 2: SIGTERM fallback after 3s if process is still alive
-      setTimeout(() => {
-        fetch(`${base}/api/agent/stop/${sid}`, {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }).catch(() => {});
-      }, 3000);
-    }
-
     // Cancel the SSE stream immediately on the client side
     if (cancelRef.current) {
       cancelRef.current();
@@ -790,6 +769,34 @@ export function ChatPage({
     }
     setIsLoading(false);
     setThinking({ active: false, label: "" });
+
+    if (!sid) return;
+
+    const base = getApiBaseUrl();
+    const token = getStoredToken();
+    const authHdr: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+    // Step 1: Send Redis graceful stop signal (plan_act.py checks this each iteration)
+    fetch(`${base}/api/sessions/${sid}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHdr },
+    }).catch(() => {});
+
+    // Step 2: SIGTERM fallback after 3s — only if agent session is still alive
+    setTimeout(() => {
+      fetch(`${base}/api/agent/status/${sid}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          // Only send SIGTERM if the session exists and hasn't finished gracefully
+          if (data && data.exists && !data.done) {
+            fetch(`${base}/api/agent/stop/${sid}`, {
+              method: "POST",
+              headers: authHdr,
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }, 3000);
   }, []);
 
   return (

@@ -729,30 +729,46 @@ export async function registerRoutes(app: any): Promise<Server> {
   // GET /api/sessions/:sessionId/messages
   // Reads from MongoDB session_events collection (event_type = "message" | "message_chunk" | "ask")
   // and reconstructs user/assistant messages for display when switching sessions.
+  // Authorization is fail-closed: deny if ownership cannot be verified.
   app.get("/api/sessions/:sessionId/messages", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
 
-    // Enforce ownership
+    // ── Enforce ownership — fail-closed (deny by default if unverifiable) ──
     const liveSession = activeAgentSessions.get(sessionId);
     if (liveSession) {
+      // Live session — _userId MUST be present (stamped at session creation)
       const sessionOwner: string = (liveSession as any)._userId || "";
-      if (sessionOwner && requestingUserId !== sessionOwner) {
+      if (!sessionOwner || requestingUserId !== sessionOwner) {
         return res.status(403).json({ error: "Access denied" });
       }
     } else {
+      // Historical session — look up ownership in MongoDB; fail closed on any error
+      let ownerVerified = false;
       try {
         const sc = await getCollection("sessions");
         if (sc) {
           const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
           if (sd) {
             const owner: string = sd.user_id || "";
-            if (owner && requestingUserId !== owner) {
+            if (!owner) {
+              // Legacy record with no user_id — deny to prevent enumeration
               return res.status(403).json({ error: "Access denied" });
             }
+            if (requestingUserId !== owner) {
+              return res.status(403).json({ error: "Access denied" });
+            }
+            ownerVerified = true;
           }
         }
-      } catch {}
+      } catch (err: any) {
+        console.warn("[session_messages] Ownership check failed:", err.message);
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (!ownerVerified) {
+        // Session not found in any store — deny to prevent enumeration
+        return res.status(403).json({ error: "Access denied" });
+      }
     }
 
     const messages: Array<{ id: string; role: string; content: string; timestamp: string }> = [];
