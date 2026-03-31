@@ -725,6 +725,131 @@ export async function registerRoutes(app: any): Promise<Server> {
     return res.status(404).json({ error: "Shared session not found" });
   });
 
+  // ─── Session messages endpoint — returns chat history for a session ─────
+  // GET /api/sessions/:sessionId/messages
+  // Reads from MongoDB session_events collection (event_type = "message" | "message_chunk" | "ask")
+  // and reconstructs user/assistant messages for display when switching sessions.
+  app.get("/api/sessions/:sessionId/messages", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+
+    // Enforce ownership
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const sessionOwner: string = (liveSession as any)._userId || "";
+      if (sessionOwner && requestingUserId !== sessionOwner) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+    } else {
+      try {
+        const sc = await getCollection("sessions");
+        if (sc) {
+          const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+          if (sd) {
+            const owner: string = sd.user_id || "";
+            if (owner && requestingUserId !== owner) {
+              return res.status(403).json({ error: "Access denied" });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const messages: Array<{ id: string; role: string; content: string; timestamp: string }> = [];
+
+    try {
+      const col = await getCollection("session_events");
+      if (col) {
+        const docs = await (col as any)
+          .find(
+            { session_id: sessionId, event_type: { $in: ["message", "message_start", "message_end", "message_chunk", "ask", "notify"] } },
+            { projection: { _id: 0 }, sort: { timestamp: 1 } },
+          )
+          .toArray();
+
+        // Reconstruct messages by replaying events in order
+        let currentMsg: { id: string; role: string; content: string; timestamp: string } | null = null;
+        for (const doc of docs) {
+          const d = doc.data || {};
+          if (doc.event_type === "message_start") {
+            const role = d.role === "ask" ? "assistant" : (d.role || "assistant");
+            currentMsg = {
+              id: `hist_${doc.timestamp}_${Math.random()}`,
+              role,
+              content: d.content || "",
+              timestamp: doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString(),
+            };
+          } else if (doc.event_type === "message_chunk" && currentMsg) {
+            currentMsg.content += (d.chunk || d.content || "");
+          } else if (doc.event_type === "message_end" && currentMsg) {
+            if (currentMsg.content.trim()) messages.push(currentMsg);
+            currentMsg = null;
+          } else if (doc.event_type === "message") {
+            const content = d.content || d.message || "";
+            if (content.trim()) {
+              messages.push({
+                id: `hist_${doc.timestamp}_${Math.random()}`,
+                role: d.role || "assistant",
+                content,
+                timestamp: doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString(),
+              });
+            }
+          } else if (doc.event_type === "ask") {
+            const content = d.text || d.content || d.message || "";
+            if (content.trim()) {
+              messages.push({
+                id: `hist_${doc.timestamp}_${Math.random()}`,
+                role: "assistant",
+                content,
+                timestamp: doc.timestamp ? new Date(doc.timestamp).toISOString() : new Date().toISOString(),
+              });
+            }
+          }
+        }
+        // Flush any incomplete streaming message
+        if (currentMsg && currentMsg.content.trim()) messages.push(currentMsg);
+      }
+    } catch (err: any) {
+      console.warn("[session_messages] MongoDB fetch failed:", err.message);
+    }
+
+    // If no events in MongoDB, try to reconstruct from sessions collection chat_history
+    if (messages.length === 0) {
+      try {
+        const sc = await getCollection("sessions");
+        if (sc) {
+          const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { chat_history: 1, user_message: 1 } });
+          if (sd) {
+            if (sd.user_message) {
+              messages.push({
+                id: `hist_user_${sessionId}`,
+                role: "user",
+                content: sd.user_message,
+                timestamp: new Date().toISOString(),
+              });
+            }
+            if (Array.isArray(sd.chat_history)) {
+              for (const m of sd.chat_history) {
+                if (m.role && m.content) {
+                  messages.push({
+                    id: `hist_${Date.now()}_${Math.random()}`,
+                    role: m.role,
+                    content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+                    timestamp: new Date().toISOString(),
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn("[session_messages] chat_history fallback failed:", err.message);
+      }
+    }
+
+    res.json({ session_id: sessionId, messages });
+  });
+
   // ─── Session files endpoint (files tracked in MongoDB session_files) ─────
   app.get("/api/sessions/:sessionId/files", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;

@@ -154,6 +154,7 @@ export function ChatPage({
   }, [isAgentMode]);
 
   // Sync session when externalSessionId changes (e.g. sidebar session switch)
+  // Also loads historical messages from the server for the selected session
   useEffect(() => {
     if (externalSessionId && externalSessionId !== activeSessionIdRef.current) {
       if (cancelRef.current) {
@@ -173,6 +174,30 @@ export function ChatPage({
       setIsLoading(false);
       setIsWaitingForUser(false);
       isWaitingRef.current = false;
+
+      // Fetch historical messages for the selected session
+      const base = getApiBaseUrl();
+      const token = getStoredToken();
+      fetch(`${base}/api/sessions/${externalSessionId}/messages`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null)
+        .then((data) => {
+          if (!data || !Array.isArray(data.messages)) return;
+          if (activeSessionIdRef.current !== externalSessionId) return;
+          const restored: ChatMessage[] = data.messages
+            .filter((m: any) => m.role && m.content)
+            .map((m: any) => ({
+              id: m.id || `hist_${Date.now()}_${Math.random()}`,
+              role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+              content: m.content,
+              timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
+            }));
+          if (restored.length > 0) {
+            setMessages(restored);
+          }
+        });
     }
   }, [externalSessionId]);
 
@@ -735,6 +760,30 @@ export function ChatPage({
   }, [inputMessage, isAgentMode, messages, attachments, isWaitingForUser, handleEvent]);
 
   const handleStop = useCallback(() => {
+    const sid = activeSessionIdRef.current;
+
+    // Step 1: Send Redis graceful stop signal (plan_act.py checks this each iteration)
+    if (sid) {
+      const base = getApiBaseUrl();
+      const token = getStoredToken();
+      fetch(`${base}/api/sessions/${sid}/stop`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }).catch(() => {});
+
+      // Step 2: SIGTERM fallback after 3s if process is still alive
+      setTimeout(() => {
+        fetch(`${base}/api/agent/stop/${sid}`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }).catch(() => {});
+      }, 3000);
+    }
+
+    // Cancel the SSE stream immediately on the client side
     if (cancelRef.current) {
       cancelRef.current();
       cancelRef.current = null;

@@ -36,6 +36,18 @@ export const TOOL_FUNCTION_MAP: Record<string, string> = {
   browser_console_exec: "Executing JS code",
   browser_console_view: "Viewing console output",
   browser_save_image: "Saving image",
+  browser_screenshot: "Taking screenshot",
+  browser_tab_list: "Listing browser tabs",
+  browser_tab_new: "Opening new tab",
+  browser_tab_close: "Closing tab",
+  browser_tab_switch: "Switching tab",
+  browser_drag: "Dragging element",
+  browser_file_upload: "Uploading file",
+
+  // Desktop tools
+  desktop_open_app: "Opening application",
+  desktop_app_type: "Typing in application",
+  desktop_app_screenshot: "Taking desktop screenshot",
 
   // Search tools
   web_search: "Searching web",
@@ -59,6 +71,19 @@ export const TOOL_FUNCTION_MAP: Record<string, string> = {
   task_create: "Creating task",
   task_complete: "Completing task",
   task_list: "Listing tasks",
+
+  // Multimedia tools
+  export_pdf: "Exporting PDF",
+  render_diagram: "Rendering diagram",
+  speech_to_text: "Transcribing speech",
+  export_slides: "Exporting slides",
+  upload_file: "Uploading file",
+
+  // Email tools
+  send_email: "Sending email",
+
+  // Idle tool
+  idle: "Waiting",
 };
 
 // ─── Tool Function → Primary Argument Key ──────────────────────────────────
@@ -87,6 +112,16 @@ export const TOOL_FUNCTION_ARG_MAP: Record<string, string> = {
   browser_console_exec: "javascript",
   browser_console_view: "console",
   browser_save_image: "save_dir",
+  browser_screenshot: "",
+  browser_tab_list: "",
+  browser_tab_new: "url",
+  browser_tab_close: "tab_id",
+  browser_tab_switch: "tab_id",
+  browser_drag: "element",
+  browser_file_upload: "element",
+  desktop_open_app: "app_name",
+  desktop_app_type: "text",
+  desktop_app_screenshot: "",
   web_search: "query",
   web_browse: "url",
   info_search_web: "query",
@@ -100,6 +135,13 @@ export const TOOL_FUNCTION_ARG_MAP: Record<string, string> = {
   task_create: "description",
   task_complete: "task_id",
   task_list: "",
+  export_pdf: "file",
+  render_diagram: "code",
+  speech_to_text: "audio_file",
+  export_slides: "file",
+  upload_file: "file",
+  send_email: "to",
+  idle: "duration",
 };
 
 // ─── Tool Category → Display Name ──────────────────────────────────────────
@@ -107,6 +149,7 @@ export const TOOL_NAME_MAP: Record<string, string> = {
   shell: "Terminal",
   file: "File Editor",
   browser: "Browser",
+  desktop: "Desktop",
   search: "Web Search",
   info: "Information",
   message: "Message",
@@ -114,6 +157,9 @@ export const TOOL_NAME_MAP: Record<string, string> = {
   todo: "Todo",
   task: "Task",
   image: "Image Viewer",
+  multimedia: "Multimedia",
+  email: "Email",
+  idle: "Idle",
 };
 
 // ─── Tool Category → Ionicons Icon Name ────────────────────────────────────
@@ -121,6 +167,7 @@ export const TOOL_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   shell: "terminal-outline",
   file: "document-text-outline",
   browser: "globe-outline",
+  desktop: "desktop-outline",
   search: "search-outline",
   info: "information-circle-outline",
   message: "chatbubble-outline",
@@ -128,6 +175,9 @@ export const TOOL_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   todo: "checkmark-circle-outline",
   task: "list-circle-outline",
   image: "image-outline",
+  multimedia: "film-outline",
+  email: "mail-outline",
+  idle: "time-outline",
 };
 
 // ─── Tool Category → Color ─────────────────────────────────────────────────
@@ -135,6 +185,7 @@ export const TOOL_COLOR_MAP: Record<string, string> = {
   shell: "#34C759",
   file: "#FFD60A",
   browser: "#FF9F0A",
+  desktop: "#6E4FF6",
   search: "#5AC8FA",
   info: "#5AC8FA",
   message: "#BF5AF2",
@@ -142,6 +193,9 @@ export const TOOL_COLOR_MAP: Record<string, string> = {
   todo: "#30D158",
   task: "#0A84FF",
   image: "#FF9F0A",
+  multimedia: "#FF6B6B",
+  email: "#1E90FF",
+  idle: "#8E8E93",
 };
 
 // ─── Tool Function → Detailed Display Info ─────────────────────────────────
@@ -166,7 +220,7 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayInfo> = {
   file_str_replace:       { icon: "create-outline",           color: "#FFD60A", label: "File Editor",    argKey: "file" },
   file_find_by_name:      { icon: "folder-open-outline",      color: "#FFD60A", label: "File Editor",    argKey: "path" },
   file_find_in_content:   { icon: "search-outline",           color: "#FFD60A", label: "File Editor",    argKey: "file" },
-  image_view:             { icon: "image-outline",            color: "#FF9F0A", label: "Image Viewer",  argKey: "image" },
+  image_view:             { icon: "image-outline",            color: "#FF9F0A", label: "Image Viewer",   argKey: "image" },
 
   // Browser tools
   browser_navigate:       { icon: "globe-outline",            color: "#FF9F0A", label: "Browser",        argKey: "url" },
@@ -182,6 +236,18 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayInfo> = {
   browser_press_key:      { icon: "keypad-outline",           color: "#FF9F0A", label: "Browser",        argKey: "key" },
   browser_select_option:  { icon: "list-outline",             color: "#FF9F0A", label: "Browser",        argKey: "option" },
   browser_restart:        { icon: "refresh-outline",          color: "#FF9F0A", label: "Browser",        argKey: "" },
+  browser_screenshot:     { icon: "camera-outline",           color: "#FF9F0A", label: "Browser",        argKey: "" },
+  browser_tab_list:       { icon: "browsers-outline",         color: "#FF9F0A", label: "Browser",        argKey: "" },
+  browser_tab_new:        { icon: "add-circle-outline",       color: "#FF9F0A", label: "Browser",        argKey: "url" },
+  browser_tab_close:      { icon: "close-circle-outline",     color: "#FF9F0A", label: "Browser",        argKey: "tab_id" },
+  browser_tab_switch:     { icon: "swap-horizontal-outline",  color: "#FF9F0A", label: "Browser",        argKey: "tab_id" },
+  browser_drag:           { icon: "move-outline",             color: "#FF9F0A", label: "Browser",        argKey: "element" },
+  browser_file_upload:    { icon: "cloud-upload-outline",     color: "#FF9F0A", label: "Browser",        argKey: "element" },
+
+  // Desktop tools
+  desktop_open_app:       { icon: "desktop-outline",          color: "#6E4FF6", label: "Desktop",        argKey: "app_name" },
+  desktop_app_type:       { icon: "create-outline",           color: "#6E4FF6", label: "Desktop",        argKey: "text" },
+  desktop_app_screenshot: { icon: "camera-outline",           color: "#6E4FF6", label: "Desktop",        argKey: "" },
 
   // Search tools
   web_search:             { icon: "search-outline",           color: "#5AC8FA", label: "Web Search",     argKey: "query" },
@@ -205,6 +271,19 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayInfo> = {
   task_create:            { icon: "list-circle-outline",      color: "#0A84FF", label: "Task",           argKey: "description" },
   task_complete:          { icon: "list-circle-outline",      color: "#0A84FF", label: "Task",           argKey: "task_id" },
   task_list:              { icon: "list-circle-outline",      color: "#0A84FF", label: "Task",           argKey: "" },
+
+  // Multimedia tools
+  export_pdf:             { icon: "document-outline",         color: "#FF6B6B", label: "Multimedia",     argKey: "file" },
+  render_diagram:         { icon: "git-branch-outline",       color: "#FF6B6B", label: "Multimedia",     argKey: "code" },
+  speech_to_text:         { icon: "mic-outline",              color: "#FF6B6B", label: "Multimedia",     argKey: "audio_file" },
+  export_slides:          { icon: "easel-outline",            color: "#FF6B6B", label: "Multimedia",     argKey: "file" },
+  upload_file:            { icon: "cloud-upload-outline",     color: "#FF6B6B", label: "Multimedia",     argKey: "file" },
+
+  // Email tools
+  send_email:             { icon: "mail-outline",             color: "#1E90FF", label: "Email",          argKey: "to" },
+
+  // Idle tool
+  idle:                   { icon: "time-outline",             color: "#8E8E93", label: "Idle",           argKey: "duration" },
 };
 
 // ─── Helper Functions ──────────────────────────────────────────────────────
@@ -217,6 +296,13 @@ export function getToolCategory(functionName: string): string {
   if (functionName.startsWith("mcp_")) return "mcp";
   // Handle image_view specifically
   if (functionName === "image_view") return "image";
+  // Handle idle specifically
+  if (functionName === "idle") return "idle";
+  // Handle email
+  if (functionName === "send_email") return "email";
+  // Handle multimedia tools
+  const multimediaTools = ["export_pdf", "render_diagram", "speech_to_text", "export_slides", "upload_file"];
+  if (multimediaTools.includes(functionName)) return "multimedia";
   // Handle standard tool names
   const parts = functionName.split("_");
   if (parts.length >= 2) {
