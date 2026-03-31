@@ -369,6 +369,40 @@ class SessionStore:
             "result": result,
         })
 
+    async def delete_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+    ) -> bool:
+        """Delete a session and its events from MongoDB.
+
+        If user_id is provided, enforces ownership (IDOR prevention) — only
+        deletes if the session's user_id matches.  Returns True on success.
+        """
+        if not self._connected:
+            return False
+        try:
+            query: Dict[str, Any] = {"session_id": session_id}
+            if user_id:
+                query["user_id"] = user_id
+            result = await self._sessions.delete_one(query)
+            if result.deleted_count == 0:
+                logger.warning(
+                    "[SessionStore] delete_session: no document matched (session=%s user=%s)",
+                    session_id, user_id,
+                )
+                return False
+            # Also purge related events (best-effort)
+            try:
+                await self._events.delete_many({"session_id": session_id})
+            except Exception as ev_err:
+                logger.warning("[SessionStore] delete_session event purge failed: %s", ev_err)
+            logger.info("[SessionStore] Deleted session %s", session_id)
+            return True
+        except Exception as e:
+            logger.error("[SessionStore] delete_session error: %s", e)
+            return False
+
     async def close(self) -> None:
         """Close the MongoDB connection."""
         if self._client:

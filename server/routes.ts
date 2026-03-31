@@ -530,15 +530,27 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   // ─── Session list endpoint ────────────────────────────────────────────────
   // Merges in-memory active sessions with MongoDB history
-  app.get("/api/sessions", requireAuth, async (_req: any, res: any) => {
-    const activeSessions = Array.from(activeAgentSessions.entries()).map(([sid, session]) => ({
-      session_id: sid,
-      done: session.done,
-      startedAt: session.startedAt,
-      eventCount: session.eventQueue.length,
-      is_running: !session.done,
-      source: "active",
-    }));
+  app.get("/api/sessions", requireAuth, async (req: any, res: any) => {
+    const requestingUserId: string = req.user?.id || "";
+
+    const activeSessions = Array.from(activeAgentSessions.entries())
+      .filter(([, session]) => {
+        const owner: string = (session as any)._userId || "";
+        return !owner || !requestingUserId || owner === requestingUserId;
+      })
+      .map(([sid, session]) => ({
+        session_id: sid,
+        done: session.done,
+        startedAt: session.startedAt,
+        created_at: session.startedAt,
+        eventCount: session.eventQueue.length,
+        message_count: session.eventQueue.filter((e: string) => e.includes('"type":"message_end"')).length,
+        is_running: !session.done,
+        status: session.done ? "completed" : "running",
+        source: "active",
+        title: (session as any)._title || null,
+        user_message: (session as any)._userMessage || null,
+      }));
 
     const activeIds = new Set(activeAgentSessions.keys());
     let historySessions: any[] = [];
@@ -546,22 +558,38 @@ export async function registerRoutes(app: any): Promise<Server> {
     try {
       const col = await getCollection("sessions");
       if (col) {
+        const query: Record<string, any> = {};
+        if (requestingUserId) query.user_id = requestingUserId;
         const cursor = col.find(
-          {},
-          { projection: { _id: 0 }, sort: { startedAt: -1 }, limit: 50 } as any,
+          query,
+          {
+            projection: { _id: 0, session_id: 1, user_message: 1, status: 1, created_at: 1,
+                          updated_at: 1, title: 1, chat_history: 1 },
+            sort: { created_at: -1 },
+            limit: 50,
+          } as any,
         );
         const docs = await (cursor as any).toArray();
         historySessions = docs
           .filter((d: any) => !activeIds.has(d.session_id))
-          .map((d: any) => ({
-            session_id: d.session_id,
-            done: d.done ?? true,
-            startedAt: d.startedAt,
-            eventCount: d.eventCount ?? 0,
-            is_running: false,
-            source: "history",
-            user_message: d.user_message,
-          }));
+          .map((d: any) => {
+            const chatHistory = Array.isArray(d.chat_history) ? d.chat_history : [];
+            const messageCount = chatHistory.filter((m: any) => m.role === "user" || m.role === "assistant").length;
+            return {
+              session_id: d.session_id,
+              done: d.status === "completed" || d.status === "failed",
+              startedAt: d.created_at,
+              created_at: d.created_at,
+              updated_at: d.updated_at,
+              eventCount: 0,
+              message_count: messageCount,
+              is_running: d.status === "running" || d.status === "resuming",
+              status: d.status || "completed",
+              source: "history",
+              title: d.title || null,
+              user_message: d.user_message,
+            };
+          });
       }
     } catch (err: any) {
       console.warn("[sessions] MongoDB history fetch failed:", err.message);
@@ -915,20 +943,52 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   // ─── Delete a session ─────────────────────────────────────────────────────
-  app.delete("/api/sessions/:sessionId", requireAuth, (req: any, res: any) => {
+  app.delete("/api/sessions/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+
+    // Kill the live session if it's still running
     const session = activeAgentSessions.get(sessionId);
-    if (!session) {
-      return res.status(404).json({ error: "Session not found" });
+    if (session) {
+      // Enforce ownership on live sessions
+      const sessionOwner: string = (session as any)._userId || "";
+      if (sessionOwner && requestingUserId && requestingUserId !== sessionOwner) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (!session.done) {
+        try { session.proc.kill("SIGTERM"); } catch {}
+        session.done = true;
+        _broadcastToSession(session, `data: ${JSON.stringify({ type: "error", error: "Session dihentikan." })}\n\n`);
+        _broadcastToSession(session, "data: [DONE]\n\n");
+        for (const client of session.clients) { try { client.end(); } catch {} }
+      }
+      activeAgentSessions.delete(sessionId);
     }
-    if (!session.done) {
-      try { session.proc.kill("SIGTERM"); } catch {}
-      session.done = true;
-      _broadcastToSession(session, `data: ${JSON.stringify({ type: "error", error: "Session dihentikan." })}\n\n`);
-      _broadcastToSession(session, "data: [DONE]\n\n");
-      for (const client of session.clients) { try { client.end(); } catch {} }
+
+    // Also delete from MongoDB (best-effort, with ownership check)
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        const query: Record<string, any> = { session_id: sessionId };
+        if (requestingUserId) query.user_id = requestingUserId;
+        const result = await (col as any).deleteOne(query);
+        if (!session && result.deletedCount === 0) {
+          // Neither in-memory nor MongoDB — session not found
+          return res.status(404).json({ error: "Session not found" });
+        }
+      }
+      // Purge session events too (best-effort)
+      const eventsCol = await getCollection("session_events");
+      if (eventsCol) {
+        await (eventsCol as any).deleteMany({ session_id: sessionId });
+      }
+    } catch (err: any) {
+      console.warn("[sessions] MongoDB delete failed:", err.message);
+      if (!session) {
+        return res.status(500).json({ error: "Failed to delete session" });
+      }
     }
-    activeAgentSessions.delete(sessionId);
+
     res.json({ deleted: true, session_id: sessionId });
   });
 
@@ -1106,6 +1166,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     (session as any)._sessionId = sid;
     (session as any)._sandboxId = dzeckSandboxId || null;
     (session as any)._userId = userId;
+    (session as any)._userMessage = message || (messages && messages.length > 0 ? messages[messages.length - 1]?.content : "") || null;
     activeAgentSessions.set(sid, session);
 
     // Activity-based inactivity watchdog: force-close if no SSE events are emitted
@@ -1196,6 +1257,9 @@ export async function registerRoutes(app: any): Promise<Server> {
           _broadcastToSession(session, "data: [DONE]\n\n");
           for (const client of session.clients) { try { client.end(); } catch {} }
         } else {
+          if (parsed.type === "title" && parsed.title) {
+            (session as any)._title = parsed.title;
+          }
           if (parsed.type === "vnc_stream_url" && parsed.vnc_url) {
             console.log(`[Agent] VNC stream URL received from Python sandbox: ${parsed.vnc_url}`);
             if (parsed.sandbox_id) {

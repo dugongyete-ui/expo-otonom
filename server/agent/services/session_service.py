@@ -315,6 +315,27 @@ class SessionService:
         except Exception as e:
             logger.warning("[SessionService] Failed to clear waiting state for %s: %s", session_id, e)
 
+    async def delete_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+    ) -> bool:
+        """Delete a session from MongoDB (with optional ownership check).
+
+        Invalidates the Redis cache for the session after deletion.
+        Returns True if a document was deleted, False otherwise.
+        """
+        store = await self._get_session_store()
+        deleted = await store.delete_session(session_id, user_id=user_id)
+        if deleted:
+            try:
+                cache = await self._get_cache_store()
+                await cache.invalidate_session(session_id)
+            except Exception:
+                pass
+            logger.info("[SessionService] Deleted session: %s", session_id)
+        return deleted
+
     async def get_session_events(
         self,
         session_id: str,

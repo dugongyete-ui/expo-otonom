@@ -48,6 +48,7 @@ from server.agent.prompts.agents.web_agent import WEB_AGENT_SYSTEM_PROMPT, WEB_A
 from server.agent.prompts.agents.data_agent import DATA_AGENT_SYSTEM_PROMPT, DATA_AGENT_TOOLS
 from server.agent.prompts.agents.code_agent import CODE_AGENT_SYSTEM_PROMPT, CODE_AGENT_TOOLS
 from server.agent.prompts.agents.files_agent import FILES_AGENT_SYSTEM_PROMPT, FILES_AGENT_TOOLS
+from server.agent.prompts.agents.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_TOOLS
 
 from server.agent.domain.cerebras import (
     CEREBRAS_API_URL,
@@ -75,6 +76,7 @@ class FlowState(str, Enum):
 
 
 _AGENT_CONTEXT_MAP: Dict[str, tuple] = {
+    "orchestrator": (ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_TOOLS),
     "web": (WEB_AGENT_SYSTEM_PROMPT, WEB_AGENT_TOOLS),
     "data": (DATA_AGENT_SYSTEM_PROMPT, DATA_AGENT_TOOLS),
     "code": (CODE_AGENT_SYSTEM_PROMPT, CODE_AGENT_TOOLS),
@@ -83,6 +85,7 @@ _AGENT_CONTEXT_MAP: Dict[str, tuple] = {
 }
 
 _AGENT_DISPLAY_NAMES: Dict[str, str] = {
+    "orchestrator": "Orchestrator Agent (Routing & Coordination)",
     "web": "Web Agent (Browsing & Extraction)",
     "data": "Data Agent (Analysis & API)",
     "code": "Code Agent (Python & Automation)",
@@ -232,8 +235,18 @@ def _compact_exec_messages(messages: list) -> list:
     return result
 
 
-def safe_plan_dict(plan: Plan) -> Dict[str, Any]:
-    d = plan.to_dict()
+def safe_plan_dict(plan: Optional["Plan"]) -> Dict[str, Any]:
+    """Convert a Plan to a dict safe for JSON serialization.
+
+    Returns an empty-but-valid plan dict if plan is None, so callers
+    never receive a non-dict value (prevents frontend crashes on None plan).
+    """
+    if plan is None:
+        return {"title": "", "steps": [], "status": "creating"}
+    try:
+        d = plan.to_dict()
+    except Exception:
+        return {"title": "", "steps": [], "status": "creating"}
     d.pop("goal", None)
     return d
 
@@ -372,6 +385,60 @@ class DzeckAgent:
     def _parse_response(self, text: str) -> Dict[str, Any]:
         result, _ = self.parser.parse(text)
         return result if result is not None else {}
+
+    async def _route_with_orchestrator_async(self, user_message: str) -> str:
+        """Use a lightweight LLM call to determine the best agent_type for the task.
+
+        Returns one of: "web", "data", "code", "files", "orchestrator", "general".
+        Falls back to "general" on any error or ambiguity.
+        """
+        import urllib.request as _ur
+        valid_types = {"web", "data", "code", "files", "orchestrator", "general"}
+        sys_msg = {
+            "role": "system",
+            "content": (
+                "Kamu adalah router agent. Tentukan SATU agent type yang paling cocok "
+                "untuk mengerjakan task ini. Agent types yang tersedia:\n"
+                "- web: browsing internet, scraping, web search, visit URL\n"
+                "- data: analisis data, API calls, SQL, visualisasi\n"
+                "- code: tulis/jalankan kode Python, automation, file programming\n"
+                "- files: manajemen file, baca/tulis file, konversi dokumen\n"
+                "- orchestrator: task kompleks yang butuh koordinasi multi-agent\n"
+                "- general: task umum, pertanyaan, tugas sederhana\n\n"
+                "Jawab HANYA dengan JSON: {\"agent_type\": \"<type>\"}"
+            ),
+        }
+        messages = [
+            sys_msg,
+            {"role": "user", "content": "Task: {}".format(user_message[:600])},
+        ]
+        try:
+            loop = asyncio.get_event_loop()
+            body = _build_request_body(messages, stream=False)
+            body["max_tokens"] = 60
+            req = _make_cerebras_request(CEREBRAS_API_URL, body)
+
+            def _do_request() -> str:
+                try:
+                    with _ur.urlopen(req, timeout=10) as resp:
+                        parsed = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    choices = parsed.get("choices", [])
+                    content = choices[0].get("message", {}).get("content", "") if choices else ""
+                    content = content.strip()
+                    if content.startswith("```"):
+                        parts = content.split("```")
+                        content = parts[1] if len(parts) > 1 else content
+                        if content.startswith("json"):
+                            content = content[4:]
+                    result = json.loads(content)
+                    agent_type = str(result.get("agent_type", "general")).strip().lower()
+                    return agent_type if agent_type in valid_types else "general"
+                except Exception:
+                    return "general"
+
+            return await loop.run_in_executor(None, _do_request)
+        except Exception:
+            return "general"
 
     def _detect_language(self, text: str) -> str:
         id_words = [
@@ -680,6 +747,8 @@ class DzeckAgent:
             step.status = ExecutionStatus.PENDING
             step.success = False
             step.result = "Menunggu jawaban user: " + (text[:200] if text else "")
+            # Transition state machine to WAITING so callers can check self.state
+            self.state = FlowState.WAITING
             yield make_event("step", status=StepStatus.PENDING.value, step=step.to_dict())
             yield make_event("waiting_for_user", text=text or "Menunggu balasan Anda...")
             yield {"type": "__step_done__"}
@@ -1887,9 +1956,25 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                 except Exception:
                     pass
 
+            # Use orchestrator routing to determine the best agent_type for each step.
+            # This runs a quick LLM call before planning so the planner can generate
+            # steps with the correct agent_type already set.
+            _routed_agent_type = "general"
+            try:
+                _routed_agent_type = await self._route_with_orchestrator_async(user_message)
+            except Exception:
+                _routed_agent_type = "general"
+
             self.plan = await self.run_planner_async(
                 user_message, attachments, chat_history=self.chat_history
             )
+
+            # Apply routed agent type to steps that still use "general" fallback.
+            # Steps with an explicit non-general type from the planner are not overridden.
+            if _routed_agent_type and _routed_agent_type != "general":
+                for _step in self.plan.steps:
+                    if not _step.agent_type or _step.agent_type == "general":
+                        _step.agent_type = _routed_agent_type
 
             if self.session_id and svc:
                 try:
@@ -1901,6 +1986,15 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     )
 
             yield make_event("title", title=self.plan.title)
+
+            # Persist title to MongoDB so session list can display it
+            if self.session_id and svc and self.plan.title:
+                try:
+                    store = await svc._get_session_store()
+                    if store:
+                        await store.update_session(self.session_id, {"title": self.plan.title})
+                except Exception:
+                    pass
 
             if self.plan.message:
                 yield make_event("message_start", role="assistant")
