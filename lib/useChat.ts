@@ -63,34 +63,72 @@ export function useChat(
   }, []);
 
   const handleSimpleChat = useCallback(
-    async (text: string) => {
-      const chatMessages: ChatMessage[] = [
-        ...messages
-          .filter((m) => m.type === "user" || m.type === "assistant")
-          .map((m) => ({
-            role: m.type === "user" ? ("user" as const) : ("assistant" as const),
-            content: m.content,
-          })),
-        { role: "user" as const, content: text },
-      ];
+    (text: string) => {
+      return new Promise<void>((resolve, reject) => {
+        const chatMessages: ChatMessage[] = [
+          ...messages
+            .filter((m) => m.type === "user" || m.type === "assistant")
+            .map((m) => ({
+              role: m.type === "user" ? ("user" as const) : ("assistant" as const),
+              content: m.content,
+            })),
+          { role: "user" as const, content: text },
+        ];
 
-      try {
-        const response = await apiService.chat(chatMessages);
+        const msgId = `msg-${Date.now()}`;
+        let assistantContent = "";
 
-        if (response.type === "message" && response.content) {
-          const assistantMessage: Message = {
-            id: `msg-${Date.now()}`,
-            type: "assistant",
-            content: response.content,
-            timestamp: new Date(response.timestamp || new Date()),
-          };
-          addMessage(assistantMessage);
-        }
-      } catch (error) {
-        throw error;
-      }
+        const onMessage = (event: AgentEvent) => {
+          const chunkText = event.chunk || (event.type === "message_chunk" ? event.content : null);
+          if (event.type === "message_chunk" && chunkText) {
+            assistantContent += chunkText;
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === msgId);
+              if (existing) {
+                return prev.map((m) =>
+                  m.id === msgId ? { ...m, content: assistantContent } : m
+                );
+              }
+              return [...prev, {
+                id: msgId,
+                type: "assistant" as const,
+                content: assistantContent,
+                timestamp: new Date(),
+              }];
+            });
+          } else if (event.type === "message_start") {
+            assistantContent = "";
+          }
+        };
+
+        const onDone = () => {
+          if (assistantContent) {
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === msgId);
+              if (!existing && assistantContent) {
+                return [...prev, {
+                  id: msgId,
+                  type: "assistant" as const,
+                  content: assistantContent,
+                  timestamp: new Date(),
+                }];
+              }
+              return prev;
+            });
+          }
+          resolve();
+        };
+
+        const onError = (error: Error) => {
+          reject(error);
+        };
+
+        apiService.chat(chatMessages, { onMessage, onDone, onError }).then((cancel) => {
+          cancelRef.current = cancel;
+        }).catch(reject);
+      });
     },
-    [messages, addMessage]
+    [messages, setMessages]
   );
 
   // Build the callbacks for the shared reducer once, stable via useCallback

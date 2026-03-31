@@ -5,10 +5,14 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
  * Gets the base URL for the Express API server (e.g., "https://my-app.replit.dev")
  *
  * Resolution order:
- *   1. EXPO_PUBLIC_DOMAIN env var (explicit domain, e.g., your-project.replit.dev)
+ *   1. EXPO_PUBLIC_DOMAIN env var (explicit domain — set this in .env for Expo Go on
+ *      a physical device, e.g., your-project.username.repl.co or a Replit dev domain)
  *   2. Browser's window.location.origin — used in web/preview mode when running
  *      inside the Replit web preview iframe (relative URL makes sense)
- *   3. localhost:{EXPO_PUBLIC_API_PORT|5000} — local dev / Expo Go fallback
+ *   3. EXPO_PUBLIC_REPLIT_DEV_DOMAIN — Replit dev domain exposed via public env var
+ *      (useful as fallback when EXPO_PUBLIC_DOMAIN is not explicitly set)
+ *   4. localhost:{EXPO_PUBLIC_API_PORT|5000} — last-resort fallback for local dev
+ *      NOTE: This does NOT work for Expo Go on a physical device — set EXPO_PUBLIC_DOMAIN
  *
  * @returns {string} The API base URL with trailing slash
  */
@@ -16,7 +20,6 @@ export function getApiUrl(): string {
   const host = process.env.EXPO_PUBLIC_DOMAIN;
 
   if (host) {
-    // Use HTTPS for remote/Replit domains
     const url = new URL(`https://${host}`);
     return url.href;
   }
@@ -31,8 +34,23 @@ export function getApiUrl(): string {
     }
   }
 
-  // Fallback to localhost for local development and Expo Go (native)
+  // Fallback to Replit dev domain (available as a public env var if set)
+  const replitDevDomain = process.env.EXPO_PUBLIC_REPLIT_DEV_DOMAIN;
+  if (replitDevDomain) {
+    const url = new URL(`https://${replitDevDomain}`);
+    return url.href;
+  }
+
+  // Last-resort localhost fallback — does NOT work for physical-device Expo Go.
+  // Set EXPO_PUBLIC_DOMAIN in .env to enable physical-device connectivity.
   const port = process.env.EXPO_PUBLIC_API_PORT || "5000";
+  if (__DEV__) {
+    console.warn(
+      "[getApiUrl] EXPO_PUBLIC_DOMAIN is not set. " +
+      "Falling back to localhost — Expo Go on a physical device will NOT be able to connect. " +
+      "Set EXPO_PUBLIC_DOMAIN in .env to your Replit dev domain."
+    );
+  }
   return `http://localhost:${port}/`;
 }
 
