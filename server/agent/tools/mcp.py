@@ -247,8 +247,9 @@ class MCPClientManager:
         return ToolResult(
             success=False,
             message=(
-                "MCP tool '{}' tidak dapat dijalankan: belum ada MCP server yang dikonfigurasi. "
-                "{}".format(tool_name, configured_hint)
+                "MCP tool '{}' tidak dapat dijalankan: belum ada MCP server yang dikonfigurasi. {}".format(
+                    tool_name, configured_hint
+                )
             ),
             data={"tool_name": tool_name, "arguments": arguments, "configured": False},
         )
