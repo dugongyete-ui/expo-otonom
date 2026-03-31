@@ -9,15 +9,26 @@ if [ -z "$GITHUB_TOKEN" ]; then
   exit 1
 fi
 
-echo "Pushing ke GitHub..."
-
-# Use git credential helper — token TIDAK disimpan di URL (lebih aman)
+# Setup credential helper
 git config --local credential.helper \
   "!f() { echo username=x-token-auth; echo password=${GITHUB_TOKEN}; }; f"
 
 git remote set-url origin "https://github.com/${REPO}.git" 2>/dev/null || \
   git remote add origin "https://github.com/${REPO}.git"
 
+echo "Pull dulu dari GitHub (rebase)..."
+git pull --rebase origin main 2>&1
+PULL_CODE=$?
+
+if [ $PULL_CODE -ne 0 ]; then
+  echo ""
+  echo "Pull gagal. Kemungkinan ada konflik merge."
+  echo "Selesaikan konflik dulu, lalu jalankan push.sh lagi."
+  git config --local --unset credential.helper 2>/dev/null || true
+  exit 1
+fi
+
+echo "Pushing ke GitHub..."
 git push origin main 2>&1
 EXIT_CODE=$?
 
@@ -31,6 +42,6 @@ else
   echo "Push gagal. Kemungkinan penyebab:"
   echo "  1. Token sudah dicabut/expired — buat token baru di https://github.com/settings/tokens"
   echo "  2. GitHub Secret Scanning memblokir — kunjungi URL unblock yang diberikan GitHub"
-  echo "  3. Konflik — jalankan 'git pull origin main' dulu"
+  echo "  3. Konflik — selesaikan merge conflict dulu"
   exit 1
 fi
