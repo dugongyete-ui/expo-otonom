@@ -67,7 +67,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npx expo start --port 8083"
+args = "REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN npx expo start --port 8083"
 
 [userenv]
 
