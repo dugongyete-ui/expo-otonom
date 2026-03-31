@@ -334,8 +334,25 @@
               <div class="step-number">2</div>
               <h2 class="step-title">Scan QR Code</h2>
             </div>
-            <p class="step-description">Use your phone's camera or Expo Go</p>
+            <p class="step-description">Use your phone's camera or Expo Go app</p>
             <div class="qr-code" id="qr-code"></div>
+            <div id="expo-url-box" style="
+              background: rgba(255,255,255,0.07);
+              border: 1px solid rgba(255,255,255,0.15);
+              border-radius: 8px;
+              padding: 8px 12px;
+              margin: 10px 0;
+              font-family: monospace;
+              font-size: 11px;
+              color: #aaa;
+              word-break: break-all;
+              text-align: center;
+              cursor: pointer;
+              position: relative;
+            " onclick="copyExpoUrl()" title="Tap to copy">
+              exps://EXPS_URL_PLACEHOLDER
+              <span id="copy-hint" style="display:block;font-size:10px;color:#7c6fcd;margin-top:2px;">tap to copy</span>
+            </div>
             <a href="exps://EXPS_URL_PLACEHOLDER" class="open-button"
               >Open in Expo Go</a
             >
@@ -408,6 +425,21 @@
           }, 500);
         }
       })();
+
+      function copyExpoUrl() {
+        const url = document.getElementById("expo-url-box").innerText.trim().replace("tap to copy", "").trim();
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(url).then(function () {
+            const hint = document.getElementById("copy-hint");
+            hint.textContent = "copied!";
+            hint.style.color = "#00b894";
+            setTimeout(function () {
+              hint.textContent = "tap to copy";
+              hint.style.color = "#7c6fcd";
+            }, 2000);
+          });
+        }
+      }
     </script>
   </body>
 </html>
