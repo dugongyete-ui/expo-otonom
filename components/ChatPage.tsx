@@ -5,7 +5,7 @@ import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
 import { AgentThinking } from "./AgentThinking";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
-import { processAgentEvent, AGENT_EVENT_TYPES } from "../lib/agent-event-processor";
+import { processAgentEvent } from "../lib/agent-event-processor";
 import { randomUUID } from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n, t as translate } from "@/lib/i18n";
@@ -212,426 +212,390 @@ export function ChatPage({
     onBrowserEventChange?.(lastBrowserEvent);
   }, [lastBrowserEvent, onBrowserEventChange]);
 
+  /**
+   * handleEvent — primary event dispatcher for ChatPage.
+   * Calls processAgentEvent() (shared parser from agent-event-processor.ts) to normalize
+   * the raw AgentEvent, then applies ChatPage-specific UI updates (plan grouping,
+   * tool-content merging, thinking labels, VNC/browser panel propagation, etc.).
+   * useChat.ts uses the same processAgentEvent() parser with its simpler flat-message model.
+   */
   const handleEvent = useCallback((event: AgentEvent) => {
-    const { type } = event;
+    const ev = processAgentEvent(event);
 
-    if (type === "session" && event.session_id) {
-      activeSessionIdRef.current = event.session_id;
-      return;
-    }
+    switch (ev.kind) {
+      case "session": {
+        if (ev.sessionId) activeSessionIdRef.current = ev.sessionId;
+        return;
+      }
 
-    if (type === "plan") {
-      const planData = event.plan as AgentPlan | undefined;
-      const planStatus = event.status as string;
+      case "plan": {
+        const planData = ev.plan as AgentPlan | undefined;
+        const planStatus = ev.status as string | undefined;
 
-      if (planData && !planMsgIdRef.current) {
-        // First time plan is created
-        const planMsgId = `plan_${Date.now()}`;
-        planMsgIdRef.current = planMsgId;
-        currentPlanRef.current = planData;
-        const planMsg: ChatMessage = {
-          id: planMsgId,
-          role: "assistant",
-          content: "",
-          timestamp: Date.now(),
-          plan: planData,
+        if (planData && !planMsgIdRef.current) {
+          const planMsgId = `plan_${Date.now()}`;
+          planMsgIdRef.current = planMsgId;
+          currentPlanRef.current = planData;
+          const planMsg: ChatMessage = {
+            id: planMsgId,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            plan: planData,
+          };
+          setMessages(prev => [...prev, planMsg]);
+          setThinking({ active: true, label: planData.title || "Membuat rencana...", stepLabel: planData.title });
+        } else if (planData && planMsgIdRef.current) {
+          currentPlanRef.current = planData;
+          setMessages(prev => prev.map(m =>
+            m.id === planMsgIdRef.current ? { ...m, plan: planData } : m
+          ));
+          if (planStatus === "completed") {
+            setThinking({ active: false, label: "" });
+          }
+        } else if (!planData) {
+          setThinking({ active: true, label: "Membuat rencana...", stepLabel: (ev.plan as any)?.title });
+        }
+        return;
+      }
+
+      case "step": {
+        const step = ev.step as AgentPlanStep | undefined;
+        const status = ev.status;
+
+        if (step && planMsgIdRef.current && currentPlanRef.current) {
+          const updatedSteps = currentPlanRef.current.steps.map(s =>
+            s.id === step.id ? { ...s, ...step } : s
+          );
+          const updatedPlan: AgentPlan = { ...currentPlanRef.current, steps: updatedSteps };
+          currentPlanRef.current = updatedPlan;
+          setMessages(prev => prev.map(m =>
+            m.id === planMsgIdRef.current ? { ...m, plan: updatedPlan } : m
+          ));
+        }
+
+        if (status === "running" && step?.description) {
+          setStepHistory(prev => {
+            if (prev.length > 0 && prev[prev.length - 1] === step.description) return prev;
+            return [...prev, step.description];
+          });
+          setThinking({ active: true, label: step.description, stepLabel: step.description });
+        } else if (status === "completed" || status === "failed") {
+          setThinking({ active: true, label: "Menyelesaikan langkah..." });
+        }
+        return;
+      }
+
+      case "tool_stream": {
+        if (ev.callId && ev.chunk) {
+          setTools(prev => {
+            const idx = prev.findIndex(t => t.tool_call_id === ev.callId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              const existing = updated[idx].output || "";
+              updated[idx] = { ...updated[idx], output: existing + ev.chunk };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        return;
+      }
+
+      case "tool": {
+        const { toolName, functionName, callId, status, args, result, toolContent } = ev;
+
+        const toolLabels: Record<string, string> = {
+          browser: "Membuka browser",
+          shell: "Menjalankan perintah",
+          file: "Membaca file",
+          search: "Mencari informasi",
+          mcp: "Memanggil MCP",
+          todo: "Mengatur todo",
+          task: "Mengelola tugas",
+          message: "Mengirim pesan",
         };
-        setMessages(prev => [...prev, planMsg]);
-        setThinking({ active: true, label: planData.title || "Membuat rencana...", stepLabel: planData.title });
-      } else if (planData && planMsgIdRef.current) {
-        // Update existing plan card
-        currentPlanRef.current = planData;
-        setMessages(prev => prev.map(m =>
-          m.id === planMsgIdRef.current ? { ...m, plan: planData } : m
-        ));
-        if (planStatus === "completed") {
+        const thinkLabel = toolLabels[toolName] || `Menggunakan ${toolName}`;
+
+        if (status === "calling") {
+          setThinking({ active: true, label: thinkLabel });
+          setTools(prev => {
+            const idx = prev.findIndex(t => t.tool_call_id === callId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], status: "calling", function_name: functionName };
+              return updated;
+            }
+            return [...prev, {
+              tool_call_id: callId,
+              name: toolName,
+              function_name: functionName,
+              status: "calling",
+              input: args,
+            }];
+          });
+        } else if (status === "called") {
+          setTools(prev => {
+            const idx = prev.findIndex(t => t.tool_call_id === callId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              const existing = updated[idx];
+              // Deep-merge tool_content: preserve screenshot_b64/url/title from prior
+              // browser_screenshot/desktop_screenshot events unless new payload provides them
+              const prevTc = existing.tool_content || {};
+              const newTc = toolContent || {};
+              const normalizeShot = (s: string) =>
+                s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
+              const newShot = normalizeShot(newTc.screenshot_b64 || "");
+              const mergedTc = {
+                ...prevTc,
+                ...newTc,
+                screenshot_b64: newShot || prevTc.screenshot_b64 || "",
+                url: newTc.url || prevTc.url || "",
+                title: newTc.title || prevTc.title || "",
+              };
+              updated[idx] = {
+                ...existing,
+                status: "called",
+                function_name: functionName,
+                output: result,
+                tool_content: mergedTc,
+              };
+              return updated;
+            }
+            return prev;
+          });
+        } else if (status === "error") {
+          setTools(prev => {
+            const idx = prev.findIndex(t => t.tool_call_id === callId);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], status: "error", function_name: functionName, error: result };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        return;
+      }
+
+      case "waiting_for_user": {
+        isWaitingRef.current = true;
+        setIsWaitingForUser(true);
+        setThinking({ active: false, label: "" });
+        return;
+      }
+
+      case "message_start": {
+        const role = ev.role === "ask" ? "ask" as const : "assistant" as const;
+        const newId = `msg_${Date.now()}_stream`;
+        streamingMsgIdRef.current = newId;
+        setStreamingContent("");
+        if (role === "ask") {
+          setThinking({ active: true, label: "AI mengajukan pertanyaan..." });
+        } else {
           setThinking({ active: false, label: "" });
         }
-      } else if (!planData) {
-        setThinking({ active: true, label: "Membuat rencana...", stepLabel: event.plan?.title });
-      }
-      return;
-    }
-
-    if (type === "step") {
-      const step = event.step as AgentPlanStep | undefined;
-      const status = event.status;
-
-      if (step && planMsgIdRef.current && currentPlanRef.current) {
-        const updatedSteps = currentPlanRef.current.steps.map(s =>
-          s.id === step.id ? { ...s, ...step } : s
-        );
-        const updatedPlan: AgentPlan = { ...currentPlanRef.current, steps: updatedSteps };
-        currentPlanRef.current = updatedPlan;
-        setMessages(prev => prev.map(m =>
-          m.id === planMsgIdRef.current ? { ...m, plan: updatedPlan } : m
-        ));
+        const msg: ChatMessage = {
+          id: newId,
+          role,
+          content: "",
+          timestamp: Date.now(),
+          isStreaming: true,
+        };
+        setMessages(prev => [...prev, msg]);
+        return;
       }
 
-      if (status === "running" && step?.description) {
-        setStepHistory(prev => {
-          if (prev.length > 0 && prev[prev.length - 1] === step.description) return prev;
-          return [...prev, step.description];
-        });
-        setThinking({ active: true, label: step.description, stepLabel: step.description });
-      } else if (status === "completed" || status === "failed") {
-        setThinking({ active: true, label: "Menyelesaikan langkah..." });
-      }
-      return;
-    }
-
-    if (type === "tool_stream") {
-      const callId = event.tool_call_id || "";
-      const chunk = event.chunk || "";
-      if (callId && chunk) {
-        setTools(prev => {
-          const idx = prev.findIndex(t => t.tool_call_id === callId);
-          if (idx >= 0) {
-            const updated = [...prev];
-            const existing = updated[idx].output || "";
-            updated[idx] = { ...updated[idx], output: existing + chunk };
-            return updated;
+      case "message_chunk": {
+        const chunk = ev.chunk;
+        if (chunk) {
+          setStreamingContent(prev => prev + chunk);
+          if (streamingMsgIdRef.current) {
+            setMessages(prev => prev.map(m =>
+              m.id === streamingMsgIdRef.current
+                ? { ...m, content: m.content + chunk }
+                : m
+            ));
+          } else {
+            const newId = `msg_${Date.now()}_stream`;
+            streamingMsgIdRef.current = newId;
+            setThinking({ active: false, label: "" });
+            setMessages(prev => [...prev, {
+              id: newId,
+              role: "assistant",
+              content: chunk,
+              timestamp: Date.now(),
+              isStreaming: true,
+            }]);
           }
-          return prev;
-        });
+        }
+        return;
       }
-      return;
-    }
 
-    if (type === "tool") {
-      const toolName = event.tool_name || event.function_name || "tool";
-      const functionName = event.function_name || event.tool_name || "";
-      const callId = event.tool_call_id || `tool_${Date.now()}`;
-      const status = event.status as "calling" | "called" | "error";
-
-      const toolLabels: Record<string, string> = {
-        browser: "Membuka browser",
-        shell: "Menjalankan perintah",
-        file: "Membaca file",
-        search: "Mencari informasi",
-        mcp: "Memanggil MCP",
-        todo: "Mengatur todo",
-        task: "Mengelola tugas",
-        message: "Mengirim pesan",
-      };
-      const thinkLabel = toolLabels[toolName] || `Menggunakan ${toolName}`;
-
-      if (status === "calling") {
-        setThinking({ active: true, label: thinkLabel });
-        setTools(prev => {
-          const idx = prev.findIndex(t => t.tool_call_id === callId);
-          if (idx >= 0) {
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], status: "calling", function_name: functionName };
-            return updated;
-          }
-          return [...prev, {
-            tool_call_id: callId,
-            name: toolName,
-            function_name: functionName,
-            status: "calling",
-            input: event.function_args,
-          }];
-        });
-      } else if (status === "called") {
-        setTools(prev => {
-          const idx = prev.findIndex(t => t.tool_call_id === callId);
-          if (idx >= 0) {
-            const updated = [...prev];
-            const existing = updated[idx];
-            // Deep-merge tool_content: preserve screenshot_b64/url/title from prior
-            // browser_screenshot/desktop_screenshot events unless new payload provides them
-            const prevTc = existing.tool_content || {};
-            const newTc = event.tool_content || {};
-            // Normalize screenshot_b64 to data URI format at merge time
-            const normalizeShot = (s: string) =>
-              s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
-            const newShot = normalizeShot(newTc.screenshot_b64 || "");
-            const mergedTc = {
-              ...prevTc,
-              ...newTc,
-              // Preserve existing normalized screenshot if new payload doesn't include one
-              screenshot_b64: newShot || prevTc.screenshot_b64 || "",
-              url: newTc.url || prevTc.url || "",
-              title: newTc.title || prevTc.title || "",
-            };
-            updated[idx] = {
-              ...existing,
-              status: "called",
-              function_name: functionName,
-              output: event.function_result,
-              tool_content: mergedTc,
-            };
-            return updated;
-          }
-          return prev;
-        });
-      } else if (status === "error") {
-        setTools(prev => {
-          const idx = prev.findIndex(t => t.tool_call_id === callId);
-          if (idx >= 0) {
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], status: "error", function_name: functionName, error: event.function_result };
-            return updated;
-          }
-          return prev;
-        });
-      }
-      return;
-    }
-
-    if (type === "waiting_for_user") {
-      isWaitingRef.current = true;
-      setIsWaitingForUser(true);
-      setThinking({ active: false, label: "" });
-      return;
-    }
-
-    if (type === "message_start") {
-      const role = event.role === "ask" ? "ask" as const : "assistant" as const;
-      const newId = `msg_${Date.now()}_stream`;
-      streamingMsgIdRef.current = newId;
-      setStreamingContent("");
-      if (role === "ask") {
-        setThinking({ active: true, label: "AI mengajukan pertanyaan..." });
-      } else {
-        setThinking({ active: false, label: "" });
-      }
-      const msg: ChatMessage = {
-        id: newId,
-        role,
-        content: "",
-        timestamp: Date.now(),
-        isStreaming: true,
-      };
-      setMessages(prev => [...prev, msg]);
-      return;
-    }
-
-    if (type === "message_chunk") {
-      const chunk = event.chunk || event.content || "";
-      if (chunk) {
-        setStreamingContent(prev => prev + chunk);
+      case "message_end": {
         if (streamingMsgIdRef.current) {
           setMessages(prev => prev.map(m =>
             m.id === streamingMsgIdRef.current
-              ? { ...m, content: m.content + chunk }
+              ? { ...m, isStreaming: false }
               : m
           ));
-        } else {
-          const newId = `msg_${Date.now()}_stream`;
-          streamingMsgIdRef.current = newId;
-          setThinking({ active: false, label: "" });
-          setMessages(prev => [...prev, {
-            id: newId,
-            role: "assistant",
-            content: chunk,
-            timestamp: Date.now(),
-            isStreaming: true,
-          }]);
+          streamingMsgIdRef.current = null;
+          setStreamingContent("");
         }
-      }
-      return;
-    }
-
-    if (type === "message_end" || type === "done") {
-      if (streamingMsgIdRef.current) {
-        setMessages(prev => prev.map(m =>
-          m.id === streamingMsgIdRef.current
-            ? { ...m, isStreaming: false }
-            : m
-        ));
-        streamingMsgIdRef.current = null;
-        setStreamingContent("");
-      }
-      if (type === "done") {
-        streamingMsgIdRef.current = null;
-        setStreamingContent("");
-        setThinking({ active: false, label: "", stepLabel: undefined });
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    if (type === "message") {
-      const content = event.content || event.message || "";
-      if (!content) return;
-      setThinking({ active: false, label: "" });
-      const msg: ChatMessage = {
-        id: `msg_${Date.now()}`,
-        role: "assistant",
-        content,
-        timestamp: Date.now(),
-      };
-      setMessages(prev => [...prev, msg]);
-      return;
-    }
-
-    if (type === "title" && event.title) {
-      setTitle(event.title);
-      return;
-    }
-
-    if (type === "thinking" && event.thinking) {
-      setThinking({ active: true, label: event.thinking });
-      return;
-    }
-
-    if (type === "message_correct") {
-      const correctedText = event.text || "";
-      if (correctedText) {
-        setMessages(prev => {
-          if (streamingMsgIdRef.current) {
-            return prev.map(m =>
-              m.id === streamingMsgIdRef.current
-                ? { ...m, content: correctedText }
-                : m
-            );
-          }
-          // No active stream ref — update the last assistant message
-          const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === "assistant");
-          if (lastAssistantIdx === -1) return prev;
-          const realIdx = prev.length - 1 - lastAssistantIdx;
-          return prev.map((m, i) => i === realIdx ? { ...m, content: correctedText } : m);
-        });
-      }
-      return;
-    }
-
-    if (type === "notify") {
-      const notifyText = event.text || event.message || "";
-      if (notifyText) {
-        setThinking({ active: true, label: notifyText });
-      }
-      // If notify event includes file attachments, show them as a chat message with download buttons
-      const notifyAttachments = event.attachments as Array<{ filename: string; download_url: string; sandbox_path?: string }> | undefined;
-      if (notifyAttachments && notifyAttachments.length > 0) {
-        filesShownViaNotifyRef.current = true;
-        const filesMsg: ChatMessage = {
-          id: `msg_${Date.now()}_notify_files`,
-          role: "assistant",
-          content: notifyText || "",
-          timestamp: Date.now(),
-          files: notifyAttachments.map(a => ({
-            filename: a.filename,
-            download_url: a.download_url,
-            sandbox_path: a.sandbox_path,
-          })),
-        };
-        setMessages(prev => [...prev, filesMsg]);
-      }
-      return;
-    }
-
-    if (type === "files") {
-      // Skip if files were already shown via a notify event (prevents duplicate cards)
-      if (filesShownViaNotifyRef.current) {
-        filesShownViaNotifyRef.current = false;
         return;
       }
-      const files = event.files as Array<{ filename: string; download_url: string; mime?: string; sandbox_path?: string }> | undefined;
-      if (files && files.length > 0) {
-        const fileMsg: ChatMessage = {
-          id: `msg_${Date.now()}_files`,
+
+      case "done": {
+        if (streamingMsgIdRef.current) {
+          setMessages(prev => prev.map(m =>
+            m.id === streamingMsgIdRef.current
+              ? { ...m, isStreaming: false }
+              : m
+          ));
+          streamingMsgIdRef.current = null;
+          setStreamingContent("");
+        }
+        setThinking({ active: false, label: "", stepLabel: undefined });
+        setIsLoading(false);
+        return;
+      }
+
+      case "message": {
+        if (!ev.content) return;
+        setThinking({ active: false, label: "" });
+        const msg: ChatMessage = {
+          id: `msg_${Date.now()}`,
+          role: "assistant",
+          content: ev.content,
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, msg]);
+        return;
+      }
+
+      case "title": {
+        if (ev.title) setTitle(ev.title);
+        return;
+      }
+
+      case "thinking": {
+        if (ev.text) setThinking({ active: true, label: ev.text });
+        return;
+      }
+
+      case "message_correct": {
+        if (ev.text) {
+          setMessages(prev => {
+            if (streamingMsgIdRef.current) {
+              return prev.map(m =>
+                m.id === streamingMsgIdRef.current
+                  ? { ...m, content: ev.text }
+                  : m
+              );
+            }
+            const lastAssistantIdx = [...prev].reverse().findIndex(m => m.role === "assistant");
+            if (lastAssistantIdx === -1) return prev;
+            const realIdx = prev.length - 1 - lastAssistantIdx;
+            return prev.map((m, i) => i === realIdx ? { ...m, content: ev.text } : m);
+          });
+        }
+        return;
+      }
+
+      case "notify": {
+        if (ev.text) {
+          setThinking({ active: true, label: ev.text });
+        }
+        if (ev.attachments && ev.attachments.length > 0) {
+          filesShownViaNotifyRef.current = true;
+          const filesMsg: ChatMessage = {
+            id: `msg_${Date.now()}_notify_files`,
+            role: "assistant",
+            content: ev.text || "",
+            timestamp: Date.now(),
+            files: ev.attachments.map(a => ({
+              filename: a.filename,
+              download_url: a.download_url,
+              sandbox_path: a.sandbox_path,
+            })),
+          };
+          setMessages(prev => [...prev, filesMsg]);
+        }
+        return;
+      }
+
+      case "files": {
+        if (filesShownViaNotifyRef.current) {
+          filesShownViaNotifyRef.current = false;
+          return;
+        }
+        if (ev.files.length > 0) {
+          const fileMsg: ChatMessage = {
+            id: `msg_${Date.now()}_files`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            files: ev.files,
+          };
+          setMessages(prev => [...prev, fileMsg]);
+        }
+        return;
+      }
+
+      case "screenshot": {
+        const { screenshotB64, source, callId, url, title } = ev;
+        if (screenshotB64) {
+          if (source === "browser") {
+            setLastBrowserEvent({ screenshot_b64: screenshotB64, url: url || "", title: title || "" });
+          } else {
+            setLastBrowserEvent({ screenshot_b64: screenshotB64 });
+          }
+          setTools(prev => {
+            const idx = callId ? prev.findIndex(t => t.tool_call_id === callId) : prev.length - 1;
+            if (idx >= 0) {
+              const updated = [...prev];
+              const existing = updated[idx].tool_content || {};
+              updated[idx] = {
+                ...updated[idx],
+                tool_content: {
+                  ...existing,
+                  type: existing.type || "browser",
+                  screenshot_b64: screenshotB64,
+                  ...(source === "browser" ? { url: url || existing.url || "", title: title || existing.title || "" } : {}),
+                },
+              };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        return;
+      }
+
+      case "vnc_stream_url": {
+        if (ev.vncUrl && ev.sandboxId) {
+          onVncSessionChange?.({ sandboxId: ev.sandboxId, vncUrl: ev.vncUrl, e2bSessionId: ev.e2bSessionId });
+        }
+        return;
+      }
+
+      case "error": {
+        setThinking({ active: false, label: "" });
+        const errMsg: ChatMessage = {
+          id: `msg_${Date.now()}_err`,
           role: "assistant",
           content: "",
           timestamp: Date.now(),
-          files,
+          error: ev.message || "Terjadi kesalahan",
         };
-        setMessages(prev => [...prev, fileMsg]);
+        setMessages(prev => [...prev, errMsg]);
+        setIsLoading(false);
+        return;
       }
-      return;
-    }
 
-    if (type === "browser_screenshot") {
-      const scr = event.screenshot_b64 || "";
-      if (scr) {
-        setLastBrowserEvent({
-          screenshot_b64: scr,
-          url: event.url || event.vnc_url || "",
-          title: event.title || "",
-        });
-        // Attach screenshot inline to the relevant tool card by tool_call_id
-        const callId = event.tool_call_id || "";
-        const normalizedScr = scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`;
-        setTools(prev => {
-          const idx = callId ? prev.findIndex(t => t.tool_call_id === callId) : prev.length - 1;
-          if (idx >= 0) {
-            const updated = [...prev];
-            const existing = updated[idx].tool_content || {};
-            updated[idx] = {
-              ...updated[idx],
-              tool_content: {
-                ...existing,
-                type: existing.type || "browser",
-                screenshot_b64: normalizedScr,
-                url: event.url || existing.url || "",
-                title: event.title || existing.title || "",
-              },
-            };
-            return updated;
-          }
-          return prev;
-        });
-      }
-      return;
-    }
-
-    if (type === "desktop_screenshot") {
-      const scr = event.screenshot_b64 || "";
-      if (scr) {
-        setLastBrowserEvent({ screenshot_b64: scr });
-        // Attach screenshot inline to the most recent tool card
-        const callId = event.tool_call_id || "";
-        const normalizedScr = scr.startsWith("data:") ? scr : `data:image/png;base64,${scr}`;
-        setTools(prev => {
-          const idx = callId ? prev.findIndex(t => t.tool_call_id === callId) : prev.length - 1;
-          if (idx >= 0) {
-            const updated = [...prev];
-            const existing = updated[idx].tool_content || {};
-            updated[idx] = {
-              ...updated[idx],
-              tool_content: {
-                ...existing,
-                type: existing.type || "browser",
-                screenshot_b64: normalizedScr,
-              },
-            };
-            return updated;
-          }
-          return prev;
-        });
-      }
-      return;
-    }
-
-    // Handle VNC stream URL from agent sandbox — notify parent to show desktop
-    if (type === "vnc_stream_url") {
-      const vncUrl = event.vnc_url || "";
-      const sandboxId = event.sandbox_id || "";
-      const e2bSessionId = event.e2b_session_id || "";
-      if (vncUrl && sandboxId) {
-        onVncSessionChange?.({
-          sandboxId,
-          vncUrl,
-          e2bSessionId,
-        });
-      }
-      return;
-    }
-
-    if (type === "error") {
-      setThinking({ active: false, label: "" });
-      const errMsg: ChatMessage = {
-        id: `msg_${Date.now()}_err`,
-        role: "assistant",
-        content: "",
-        timestamp: Date.now(),
-        error: event.error || "Terjadi kesalahan",
-      };
-      setMessages(prev => [...prev, errMsg]);
-      setIsLoading(false);
-      return;
+      default:
+        return;
     }
   }, [onVncSessionChange]);
 

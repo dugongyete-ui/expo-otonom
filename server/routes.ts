@@ -743,22 +743,35 @@ export async function registerRoutes(app: any): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
     } else {
-      // Historical session — look up ownership in MongoDB; fail closed on any error
+      // Historical session — check primary 'sessions' collection first, then legacy
+      // 'agent_sessions' collection. Fail-closed on any error or missing user_id.
       let ownerVerified = false;
       try {
+        // Primary: sessions collection (current write path)
         const sc = await getCollection("sessions");
         if (sc) {
           const sd = await (sc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
           if (sd) {
             const owner: string = sd.user_id || "";
-            if (!owner) {
-              // Legacy record with no user_id — deny to prevent enumeration
-              return res.status(403).json({ error: "Access denied" });
-            }
-            if (requestingUserId !== owner) {
+            if (!owner || requestingUserId !== owner) {
               return res.status(403).json({ error: "Access denied" });
             }
             ownerVerified = true;
+          }
+        }
+
+        // Fallback: agent_sessions collection (legacy write path, same pattern as nearby endpoints)
+        if (!ownerVerified) {
+          const asc = await getCollection("agent_sessions");
+          if (asc) {
+            const asd = await (asc as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+            if (asd) {
+              const owner: string = asd.user_id || "";
+              if (!owner || requestingUserId !== owner) {
+                return res.status(403).json({ error: "Access denied" });
+              }
+              ownerVerified = true;
+            }
           }
         }
       } catch (err: any) {
