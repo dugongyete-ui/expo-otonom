@@ -11,6 +11,7 @@ import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { CodeBlock } from "@/components/CodeBlock";
 import type { ChatMessage as ChatMessageType } from "@/lib/chat";
+import { COLORS } from "@/lib/theme";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -46,7 +47,7 @@ function parseContent(text: string): Segment[] {
 }
 
 function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
-  const textColor = isUser ? "#1a1916" : "#1a1916";
+  const textColor = isUser ? COLORS.textUser : COLORS.textAi;
 
   const parts = useMemo(() => {
     const result: React.ReactNode[] = [];
@@ -57,7 +58,6 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
         result.push(<Text key={`br-${lineIndex}`}>{"\n"}</Text>);
       }
 
-      // Handle headings
       const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
       if (headingMatch) {
         const level = headingMatch[1].length;
@@ -78,7 +78,6 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
         return;
       }
 
-      // Handle list items
       const listMatch = line.match(/^[\s]*[-*]\s+(.+)/);
       if (listMatch) {
         result.push(
@@ -90,7 +89,6 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
         return;
       }
 
-      // Handle numbered lists
       const numListMatch = line.match(/^[\s]*(\d+)\.\s+(.+)/);
       if (numListMatch) {
         result.push(
@@ -102,7 +100,6 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
         return;
       }
 
-      // Regular text
       result.push(
         <Text key={`t-${lineIndex}`}>
           {renderInline(line, textColor)}
@@ -125,7 +122,6 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
 
 function renderInline(text: string, color: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
-  // Match bold, inline code, italic
   const regex = /(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(.+?)\*)/g;
   let lastIdx = 0;
   let match;
@@ -141,7 +137,6 @@ function renderInline(text: string, color: string): React.ReactNode[] {
     }
 
     if (match[2]) {
-      // Bold
       nodes.push(
         <Text
           key={`bold-${key++}`}
@@ -151,14 +146,13 @@ function renderInline(text: string, color: string): React.ReactNode[] {
         </Text>,
       );
     } else if (match[4]) {
-      // Inline code
       nodes.push(
         <Text
           key={`icode-${key++}`}
           style={{
             fontFamily: "monospace",
-            backgroundColor: "#f0ede7",
-            color: "#4a4740",
+            backgroundColor: "#1f2937",
+            color: "#93c5fd",
             fontSize: 12,
             paddingHorizontal: 5,
             borderRadius: 4,
@@ -168,7 +162,6 @@ function renderInline(text: string, color: string): React.ReactNode[] {
         </Text>,
       );
     } else if (match[6]) {
-      // Italic
       nodes.push(
         <Text
           key={`italic-${key++}`}
@@ -243,7 +236,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
 
           {message.error && (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={14} color="#FF453A" />
+              <Ionicons name="alert-circle" size={14} color={COLORS.errorText} />
               <Text style={styles.errorText}>{message.error}</Text>
             </View>
           )}
@@ -258,7 +251,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
             <Ionicons
               name={copied ? "checkmark" : "copy-outline"}
               size={14}
-              color={copied ? "#30D158" : "#636366"}
+              color={copied ? "#4ade80" : COLORS.iconMuted}
             />
           </TouchableOpacity>
         )}
@@ -285,12 +278,12 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "#1a1916",
+    backgroundColor: COLORS.avatarAi,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarAsk: {
-    backgroundColor: "#d97706",
+    backgroundColor: COLORS.avatarAsk,
   },
   bubbleWrapper: {
     maxWidth: "85%",
@@ -305,15 +298,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userBubble: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.bgUserBubble,
     borderBottomRightRadius: 4,
-    borderWidth: 1,
-    borderColor: "#ddd9d0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   aiBubble: {
     backgroundColor: "transparent",
@@ -357,7 +343,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#dc2626",
+    color: COLORS.errorText,
   },
   actionButton: {
     paddingHorizontal: 8,

@@ -123,9 +123,7 @@ export function useChat(
           reject(error);
         };
 
-        apiService.chat(chatMessages, { onMessage, onDone, onError }).then((cancel) => {
-          cancelRef.current = cancel;
-        }).catch(reject);
+        cancelRef.current = apiService.chat(chatMessages, { onMessage, onDone, onError });
       });
     },
     [messages, setMessages]
@@ -192,7 +190,7 @@ export function useChat(
               content: m.content,
             }));
 
-          apiService.agent(
+          cancelRef.current = apiService.agent(
             {
               message: text,
               messages: historyMessages,
@@ -201,9 +199,7 @@ export function useChat(
               is_continuation: isContinuation || false,
             },
             { onMessage: onEvent, onError, onDone: onComplete }
-          ).then((cancel) => {
-            cancelRef.current = cancel;
-          });
+          );
         } catch (error) {
           reject(error);
         }

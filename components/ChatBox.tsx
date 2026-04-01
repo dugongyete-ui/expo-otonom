@@ -11,7 +11,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
+import { COLORS } from "@/lib/theme";
 
 interface ChatBoxProps {
   value: string;
@@ -37,6 +39,7 @@ export function ChatBox({
   onAttachmentsChange,
 }: ChatBoxProps) {
   const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
 
   const inputEditable = true;
   const canSend = (!isLoading || isWaitingForUser) && (value.trim().length > 0 || attachments.length > 0);
@@ -78,8 +81,12 @@ export function ChatBox({
     onAttachmentsChange?.(attachments.filter((_, i) => i !== index));
   }, [attachments, onAttachmentsChange]);
 
+  const bottomPad = Platform.OS === "ios"
+    ? Math.max(insets.bottom, 16)
+    : Math.max(insets.bottom + 8, 12);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: bottomPad }]}>
       {/* Attachment previews */}
       {attachments.length > 0 && (
         <ScrollView
@@ -95,7 +102,7 @@ export function ChatBox({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <Ionicons name="close-circle" size={18} color="#dc2626" />
+                <Ionicons name="close-circle" size={18} color="#f87171" />
               </TouchableOpacity>
             </View>
           ))}
@@ -107,7 +114,7 @@ export function ChatBox({
           ref={inputRef}
           style={styles.input}
           placeholder={placeholder}
-          placeholderTextColor={isWaitingForUser ? "#92400e" : "#8a8780"}
+          placeholderTextColor={isWaitingForUser ? "#92400e" : COLORS.textPlaceholder}
           value={value}
           onChangeText={onChangeText}
           multiline
@@ -120,13 +127,12 @@ export function ChatBox({
 
       <View style={styles.toolbar}>
         <View style={styles.toolbarLeft}>
-          {/* Attachment button */}
           <TouchableOpacity
             onPress={handleAttachImage}
             style={styles.toolbarBtn}
             activeOpacity={0.6}
           >
-            <Ionicons name="image-outline" size={20} color="#8a8780" />
+            <Ionicons name="image-outline" size={20} color={COLORS.iconMuted} />
           </TouchableOpacity>
           {isAgentMode && (
             <Ionicons name="flash" size={18} color="#d97706" style={styles.modeIcon} />
@@ -147,7 +153,7 @@ export function ChatBox({
           ) : isLoading && !isWaitingForUser ? (
             <TouchableOpacity onPress={onStop} style={styles.toolbarBtn} activeOpacity={0.6}>
               <View style={styles.stopIcon}>
-                <Ionicons name="stop" size={14} color="#4a4740" />
+                <Ionicons name="stop" size={14} color={COLORS.stopIcon} />
               </View>
             </TouchableOpacity>
           ) : (
@@ -169,9 +175,10 @@ export function ChatBox({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#edebe3",
-    paddingBottom: Platform.OS === "ios" ? 20 : 8,
+    backgroundColor: COLORS.bgToolbar,
     paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   attachmentBar: {
     maxHeight: 80,
@@ -194,23 +201,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6,
     right: -6,
-    backgroundColor: "#edebe3",
+    backgroundColor: COLORS.bgToolbar,
     borderRadius: 9,
   },
   inputWrapper: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.bgInput,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: COLORS.bgInputBorder,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
     maxHeight: 120,
     marginBottom: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
+    marginTop: 8,
   },
   inputWrapperWaiting: {
     borderColor: "rgba(234,179,8,0.4)",
@@ -218,7 +221,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 14,
-    color: "#1a1916",
+    color: COLORS.text,
     maxHeight: 100,
     lineHeight: 20,
   },
@@ -253,26 +256,21 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 9,
-    backgroundColor: "#1a1916",
+    backgroundColor: COLORS.accent,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   sendIconDisabled: {
-    backgroundColor: "#ccc8be",
-    opacity: 0.35,
+    backgroundColor: COLORS.sendDisabled,
+    opacity: 0.5,
   },
   stopIcon: {
     width: 32,
     height: 32,
     borderRadius: 9,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: COLORS.stopBg,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: COLORS.stopBorder,
     alignItems: "center",
     justifyContent: "center",
   },

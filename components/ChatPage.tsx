@@ -934,7 +934,7 @@ export function ChatPage({
           clearActiveSessionId().catch(() => {});
         };
 
-        const cancel = await apiService.agent(
+        cancelRef.current = apiService.agent(
           {
             message: msgText,
             messages: historyMsgs,
@@ -945,7 +945,6 @@ export function ChatPage({
           },
           { onMessage: _sseOnMessage, onError: _sseOnError, onDone: _sseOnDone }
         );
-        cancelRef.current = cancel;
       } else {
         const historyMsgs = messages.map(m => ({
           role: m.role === "ask" ? "assistant" as const : m.role,
@@ -953,7 +952,7 @@ export function ChatPage({
         }));
         historyMsgs.push({ role: "user" as const, content: msgText });
 
-        const cancel = await apiService.chat(
+        cancelRef.current = apiService.chat(
           { messages: historyMsgs },
           {
             onMessage: handleEvent,
@@ -965,7 +964,6 @@ export function ChatPage({
             },
           }
         );
-        cancelRef.current = cancel;
       }
     } catch (err: any) {
       console.error("Submit error:", err);
@@ -1433,14 +1431,14 @@ export function ChatPage({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#030712",
   },
   header: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#111827",
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1448,7 +1446,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1916",
+    color: "#f9fafb",
     flex: 1,
   },
   headerRight: {
@@ -1462,33 +1460,33 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   agentModeActive: {
-    backgroundColor: "#fef3c7",
+    backgroundColor: "rgba(234,179,8,0.15)",
   },
   settingsOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
     paddingBottom: 40,
     paddingHorizontal: 16,
   },
   settingsPanel: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 16,
     padding: 20,
     gap: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 10,
   },
   settingsPanelTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1a1916",
+    color: "#f9fafb",
     marginBottom: 4,
   },
   settingsSection: {
@@ -1496,7 +1494,7 @@ const styles = StyleSheet.create({
   },
   settingsSectionTitle: {
     fontSize: 13,
-    color: "#8a8780",
+    color: "#6b7280",
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1510,16 +1508,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     alignItems: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   langBtnActive: {
-    backgroundColor: "#1a1916",
-    borderColor: "#1a1916",
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
   langBtnText: {
-    color: "#6a6762",
+    color: "#9ca3af",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1532,10 +1530,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f5f3ee",
+    borderTopColor: "#1f2937",
   },
   logoutBtnText: {
-    color: "#dc2626",
+    color: "#f87171",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1549,18 +1547,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   e2bConnected: {
-    backgroundColor: "#d1f5d3",
+    backgroundColor: "rgba(22,163,74,0.15)",
   },
   e2bError: {
-    backgroundColor: "#fde8e8",
+    backgroundColor: "rgba(220,38,38,0.15)",
   },
   e2bChecking: {
-    backgroundColor: "#f0efea",
+    backgroundColor: "#1f2937",
   },
   e2bBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#1a1916",
+    color: "#9ca3af",
     letterSpacing: 0.3,
   },
   fileCardContainer: {
@@ -1630,14 +1628,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 7,
-    backgroundColor: "#1a1916",
+    backgroundColor: "#1e40af",
     alignItems: "center",
     justifyContent: "center",
   },
   agentTurnName: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: "#1a1916",
+    color: "#f9fafb",
     letterSpacing: -0.2,
   },
   agentTurnBadgeRunning: {
@@ -1736,16 +1734,16 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "#8a8780",
+    backgroundColor: "#4b5563",
   },
   thinkingDotPulse: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#3b82f6",
   },
   thinkingLabel: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#8a8780",
+    color: "#6b7280",
     fontStyle: "italic",
   },
   taskCompletedWrap: {
@@ -1765,7 +1763,7 @@ const styles = StyleSheet.create({
   taskCompletedStepText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4a4740",
+    color: "#9ca3af",
     flex: 1,
     lineHeight: 17,
   },
@@ -1817,14 +1815,14 @@ const styles = StyleSheet.create({
   welcomeGreeting: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: "#1a1916",
+    color: "#f9fafb",
     letterSpacing: -0.5,
     lineHeight: 34,
   },
   welcomeSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 16,
-    color: "#8a8780",
+    color: "#9ca3af",
     lineHeight: 22,
   },
   suggestionScrollView: {
@@ -1837,22 +1835,17 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     width: 160,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#1f2937",
     paddingHorizontal: 14,
     paddingVertical: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
   },
   suggestionChipText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 18,
   },
   toolsBadge: {

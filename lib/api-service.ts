@@ -1,5 +1,141 @@
 import { getApiUrl } from "./query-client";
 import { getMemoryToken, setMemoryToken } from "./token-store";
+import { Platform } from "react-native";
+
+/**
+ * Checks whether the fetch Response has a readable body stream.
+ * React Native's built-in fetch does NOT expose response.body, so we must
+ * fall back to XMLHttpRequest for streaming SSE-style responses.
+ */
+function hasReadableBody(response: Response): boolean {
+  return !!(response.body && typeof response.body.getReader === "function");
+}
+
+/**
+ * Stream a POST request using XMLHttpRequest with onprogress.
+ * This is necessary for React Native where fetch().body is null.
+ *
+ * @param url       Full request URL
+ * @param headers   Request headers (Authorization, Content-Type, etc.)
+ * @param body      Request body as JSON string
+ * @param onChunk   Called with each new incremental text chunk
+ * @param onDone    Called when the request completes
+ * @param onError   Called on network or HTTP error
+ * @returns cancel  Function to abort the request
+ */
+function streamWithXHR(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (err: Error) => void
+): () => void {
+  const xhr = new XMLHttpRequest();
+  let consumed = 0;
+  let aborted = false;
+
+  xhr.open("POST", url, true);
+  xhr.responseType = "text";
+
+  Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+
+  xhr.onprogress = () => {
+    if (aborted) return;
+    const text = xhr.responseText;
+    if (text.length > consumed) {
+      onChunk(text.slice(consumed));
+      consumed = text.length;
+    }
+  };
+
+  xhr.onload = () => {
+    if (aborted) return;
+    // Flush any remaining text
+    const text = xhr.responseText;
+    if (text.length > consumed) {
+      onChunk(text.slice(consumed));
+    }
+    if (xhr.status >= 200 && xhr.status < 300) {
+      onDone();
+    } else {
+      onError(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+    }
+  };
+
+  xhr.onerror = () => {
+    if (!aborted) onError(new Error("Network error"));
+  };
+
+  xhr.ontimeout = () => {
+    if (!aborted) onError(new Error("Request timed out"));
+  };
+
+  xhr.send(body);
+
+  return () => {
+    aborted = true;
+    xhr.abort();
+  };
+}
+
+/**
+ * Stream a GET request using XMLHttpRequest with onprogress.
+ * Used for SSE reconnect / Redis stream endpoints.
+ */
+function streamGetWithXHR(
+  url: string,
+  headers: Record<string, string>,
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (err: Error) => void
+): () => void {
+  const xhr = new XMLHttpRequest();
+  let consumed = 0;
+  let aborted = false;
+
+  xhr.open("GET", url, true);
+  xhr.responseType = "text";
+
+  Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+
+  xhr.onprogress = () => {
+    if (aborted) return;
+    const text = xhr.responseText;
+    if (text.length > consumed) {
+      onChunk(text.slice(consumed));
+      consumed = text.length;
+    }
+  };
+
+  xhr.onload = () => {
+    if (aborted) return;
+    const text = xhr.responseText;
+    if (text.length > consumed) {
+      onChunk(text.slice(consumed));
+    }
+    if (xhr.status >= 200 && xhr.status < 300) {
+      onDone();
+    } else {
+      onError(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+    }
+  };
+
+  xhr.onerror = () => {
+    if (!aborted) onError(new Error("Network error"));
+  };
+
+  xhr.ontimeout = () => {
+    if (!aborted) onError(new Error("Request timed out"));
+  };
+
+  xhr.send(null);
+
+  return () => {
+    aborted = true;
+    xhr.abort();
+  };
+}
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -104,215 +240,114 @@ class ApiService {
     }
   }
 
-  async chat(
+  chat(
     payload: ChatMessage[] | { messages: ChatMessage[] },
     callbacks: AgentCallbacks = {}
-  ): Promise<() => void> {
+  ): () => void {
     const { onMessage, onError, onDone } = callbacks;
+    const messages = Array.isArray(payload) ? payload : payload.messages;
+    const url = `${this.baseUrl}/api/chat`;
+    const body = JSON.stringify({ messages });
+    const hdrs = authHeaders();
     let isClosed = false;
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let buffer = "";
 
-    try {
-      const messages = Array.isArray(payload) ? payload : payload.messages;
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ messages }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const processSSELine = (line: string): boolean => {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data: ")) return false;
+      const data = trimmed.slice(6);
+      if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
+      try {
+        const event: AgentEvent = JSON.parse(data);
+        if (event.type === "message_end") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
+        onMessage?.(event);
+      } catch (e) {
+        console.error("Failed to parse SSE event:", e);
       }
+      return false;
+    };
 
-      reader = response.body?.getReader() || null;
-      if (!reader) {
-        throw new Error("Response body is not readable");
+    const processChunk = (chunk: string) => {
+      if (isClosed) return;
+      buffer += chunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) { if (processSSELine(line)) return; }
+    };
+
+    const cancel = streamWithXHR(
+      url, hdrs, body,
+      processChunk,
+      () => {
+        if (isClosed) return;
+        if (buffer.trim()) processSSELine(buffer);
+        if (!isClosed) { isClosed = true; onDone?.(); }
+      },
+      (err) => {
+        if (!isClosed) { isClosed = true; onError?.(err); }
       }
+    );
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      const processSSELine = (line: string): boolean => {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data: ")) return false;
-
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") {
-          isClosed = true;
-          onDone?.();
-          return true;
-        }
-
-        try {
-          const event: AgentEvent = JSON.parse(data);
-          if (event.type === "message_end") {
-            isClosed = true;
-            onDone?.();
-            return true;
-          }
-          onMessage?.(event);
-        } catch (e) {
-          console.error("Failed to parse SSE event:", e);
-        }
-        return false;
-      };
-
-      const processStream = async () => {
-        try {
-          while (!isClosed) {
-            const { done, value } = await reader!.read();
-
-            if (done) {
-              // Process any remaining fragment in buffer (stream ended without trailing newline)
-              if (buffer.trim()) {
-                processSSELine(buffer);
-                buffer = "";
-              }
-              if (!isClosed) {
-                isClosed = true;
-                onDone?.();
-              }
-              break;
-            }
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (processSSELine(line)) break;
-            }
-          }
-        } catch (error) {
-          if (!isClosed) {
-            isClosed = true;
-            onError?.(error instanceof Error ? error : new Error(String(error)));
-          }
-        }
-      };
-
-      processStream();
-
-      return () => {
-        isClosed = true;
-        reader?.cancel().catch(() => {});
-      };
-    } catch (error) {
-      console.error("Chat API error:", error);
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-      return () => { isClosed = true; };
-    }
+    return () => { isClosed = true; cancel(); };
   }
 
-  async agent(
+  agent(
     request: AgentRequest,
     callbacks: AgentCallbacks = {}
-  ): Promise<() => void> {
+  ): () => void {
     const { onMessage, onError, onDone } = callbacks;
+    const url = `${this.baseUrl}/api/agent`;
+    const body = JSON.stringify({
+      message: request.message,
+      messages: request.messages || [],
+      model: request.model || "qwen-3-235b-a22b-instruct-2507",
+      attachments: request.attachments || [],
+      session_id: request.session_id,
+      is_continuation: request.is_continuation || false,
+    });
+    const hdrs = authHeaders();
     let isClosed = false;
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let buffer = "";
+    let lastSeenId = "";
 
-    try {
-      const response = await fetch(`${this.baseUrl}/api/agent`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          message: request.message,
-          messages: request.messages || [],
-          model: request.model || "qwen-3-235b-a22b-instruct-2507",
-          attachments: request.attachments || [],
-          session_id: request.session_id,
-          is_continuation: request.is_continuation || false,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const processAgentLine = (line: string): boolean => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("id: ")) { lastSeenId = trimmed.slice(4).trim(); return false; }
+      if (!trimmed || !trimmed.startsWith("data: ")) return false;
+      const data = trimmed.slice(6);
+      if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
+      try {
+        const event: AgentEvent = JSON.parse(data);
+        if (lastSeenId) event._streamId = lastSeenId;
+        onMessage?.(event);
+      } catch (e) {
+        console.error("Failed to parse SSE event:", e);
       }
+      return false;
+    };
 
-      reader = response.body?.getReader() || null;
-      if (!reader) {
-        throw new Error("Response body is not readable");
+    const processChunk = (chunk: string) => {
+      if (isClosed) return;
+      buffer += chunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) { if (processAgentLine(line)) return; }
+    };
+
+    const cancel = streamWithXHR(
+      url, hdrs, body,
+      processChunk,
+      () => {
+        if (isClosed) return;
+        if (buffer.trim()) processAgentLine(buffer);
+        if (!isClosed) { isClosed = true; onDone?.(); }
+      },
+      (err) => {
+        if (!isClosed) { isClosed = true; onError?.(err); }
       }
+    );
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let lastSeenId = "";
-
-      const processAgentLine = (line: string): boolean => {
-        const trimmed = line.trim();
-
-        // Track SSE id: field for stream cursor / reconnect
-        if (trimmed.startsWith("id: ")) {
-          lastSeenId = trimmed.slice(4).trim();
-          return false;
-        }
-
-        if (!trimmed || !trimmed.startsWith("data: ")) return false;
-
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") {
-          isClosed = true;
-          onDone?.();
-          return true;
-        }
-
-        try {
-          const event: AgentEvent = JSON.parse(data);
-          // Attach the last seen stream ID so callers can track cursor
-          if (lastSeenId) event._streamId = lastSeenId;
-          onMessage?.(event);
-        } catch (e) {
-          console.error("Failed to parse SSE event:", e);
-        }
-        return false;
-      };
-
-      const processStream = async () => {
-        try {
-          while (!isClosed) {
-            const { done, value } = await reader!.read();
-
-            if (done) {
-              // Process any remaining fragment (stream ended without trailing newline)
-              if (buffer.trim()) {
-                processAgentLine(buffer);
-                buffer = "";
-              }
-              if (!isClosed) {
-                isClosed = true;
-                onDone?.();
-              }
-              break;
-            }
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (processAgentLine(line)) break;
-            }
-          }
-        } catch (error) {
-          if (!isClosed) {
-            isClosed = true;
-            onError?.(error instanceof Error ? error : new Error(String(error)));
-          }
-        }
-      };
-
-      processStream();
-
-      return () => {
-        isClosed = true;
-        reader?.cancel().catch(() => {});
-      };
-    } catch (error) {
-      console.error("Agent API error:", error);
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-      return () => { isClosed = true; };
-    }
+    return () => { isClosed = true; cancel(); };
   }
 
   /**
@@ -320,77 +355,54 @@ class ApiService {
    * Uses GET /api/agent/stream/:sid?replay=true&last_id=<cursor>
    * Safe to call on transient disconnect — will not duplicate the agent run.
    */
-  async agentStreamReconnect(
+  agentStreamReconnect(
     sessionId: string,
     lastEventId: string,
     callbacks: AgentCallbacks = {}
-  ): Promise<() => void> {
+  ): () => void {
     const { onMessage, onError, onDone } = callbacks;
+    const url = `${this.baseUrl}/api/agent/stream/${encodeURIComponent(sessionId)}?replay=true&last_id=${encodeURIComponent(lastEventId)}`;
+    const hdrs = authHeaders({ Accept: "text/event-stream" });
     let isClosed = false;
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let buffer = "";
+    let lastSeenId = "";
 
-    try {
-      const url = `${this.baseUrl}/api/agent/stream/${encodeURIComponent(sessionId)}?replay=true&last_id=${encodeURIComponent(lastEventId)}`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: authHeaders({ Accept: "text/event-stream" }),
-      });
+    const processLine = (line: string): boolean => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("id: ")) { lastSeenId = trimmed.slice(4).trim(); return false; }
+      if (!trimmed || !trimmed.startsWith("data: ")) return false;
+      const data = trimmed.slice(6);
+      if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
+      try {
+        const event: AgentEvent = JSON.parse(data);
+        if (lastSeenId) event._streamId = lastSeenId;
+        onMessage?.(event);
+      } catch {}
+      return false;
+    };
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const processChunk = (chunk: string) => {
+      if (isClosed) return;
+      buffer += chunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) { if (processLine(line)) return; }
+    };
+
+    const cancel = streamGetWithXHR(
+      url, hdrs,
+      processChunk,
+      () => {
+        if (isClosed) return;
+        if (buffer.trim()) processLine(buffer);
+        if (!isClosed) { isClosed = true; onDone?.(); }
+      },
+      (err) => {
+        if (!isClosed) { isClosed = true; onError?.(err); }
       }
+    );
 
-      reader = response.body?.getReader() || null;
-      if (!reader) throw new Error("Response body is not readable");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let lastSeenId = "";
-
-      const processLine = (line: string): boolean => {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("id: ")) {
-          lastSeenId = trimmed.slice(4).trim();
-          return false;
-        }
-        if (!trimmed || !trimmed.startsWith("data: ")) return false;
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") { isClosed = true; onDone?.(); return true; }
-        try {
-          const event: AgentEvent = JSON.parse(data);
-          if (lastSeenId) event._streamId = lastSeenId;
-          onMessage?.(event);
-        } catch {}
-        return false;
-      };
-
-      const processStream = async () => {
-        try {
-          while (!isClosed) {
-            const { done, value } = await reader!.read();
-            if (done) {
-              if (buffer.trim()) { processLine(buffer); buffer = ""; }
-              if (!isClosed) { isClosed = true; onDone?.(); }
-              break;
-            }
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-            for (const line of lines) { if (processLine(line)) break; }
-          }
-        } catch (error) {
-          if (!isClosed) { isClosed = true; onError?.(error instanceof Error ? error : new Error(String(error))); }
-        }
-      };
-
-      processStream();
-
-      return () => { isClosed = true; reader?.cancel().catch(() => {}); };
-    } catch (error) {
-      console.error("Agent stream reconnect error:", error);
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-      return () => { isClosed = true; };
-    }
+    return () => { isClosed = true; cancel(); };
   }
 
   async test(): Promise<any> {
@@ -421,8 +433,8 @@ class ApiService {
 
   /**
    * Connect to an existing agent session SSE stream with automatic reconnect.
-   * Uses Redis XRANGE replay (via /api/sessions/:sessionId/stream?last_event_id=...)
-   * to replay missed events after a disconnection.
+   * Uses Redis XRANGE replay (via /api/agent/stream-redis/:sessionId?last_id=...)
+   * Uses XHR-based streaming for React Native compatibility.
    *
    * Returns a stop function. Call it to permanently stop reconnecting.
    */
@@ -434,102 +446,76 @@ class ApiService {
     const { onMessage, onError, onDone, onReconnect } = callbacks;
     let stopped = false;
     let lastEventId = initialLastEventId;
-    let retryDelay = 1500;
     let retryCount = 0;
     const MAX_RETRIES = 10;
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let cancelCurrent: (() => void) | null = null;
 
     const stop = () => {
       stopped = true;
-      reader?.cancel().catch(() => {});
+      cancelCurrent?.();
     };
 
-    const connect = async () => {
+    const processSSEBuffer = (buffer: string, remaining: string): { buffer: string; done: boolean } => {
+      const lines = (buffer + remaining).split("\n");
+      const newBuffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith("id: ")) { lastEventId = trimmed.slice(4).trim(); continue; }
+        if (!trimmed.startsWith("data: ")) continue;
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") { onDone?.(); return { buffer: newBuffer, done: true }; }
+        try {
+          const event: AgentEvent = JSON.parse(data);
+          onMessage?.(event);
+        } catch {}
+      }
+      return { buffer: newBuffer, done: false };
+    };
+
+    const connect = () => {
       if (stopped) return;
 
-      try {
-        // Use the Redis-backed stream endpoint which supports last_id for replay
-        const url = `${this.baseUrl}/api/agent/stream-redis/${encodeURIComponent(sessionId)}?last_id=${encodeURIComponent(lastEventId)}`;
-        const response = await fetch(url, { headers: authHeaders() });
+      let buffer = "";
+      let isDone = false;
+      const url = `${this.baseUrl}/api/agent/stream-redis/${encodeURIComponent(sessionId)}?last_id=${encodeURIComponent(lastEventId)}`;
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            onError?.(new Error(`Session ${sessionId} not found`));
-            return;
+      cancelCurrent = streamGetWithXHR(
+        url,
+        authHeaders(),
+        (chunk) => {
+          if (stopped || isDone) return;
+          const result = processSSEBuffer(buffer, chunk);
+          buffer = result.buffer;
+          if (result.done) { isDone = true; }
+        },
+        () => {
+          if (stopped) return;
+          if (!isDone) {
+            if (buffer.trim()) processSSEBuffer(buffer, "");
+            onDone?.();
           }
-          throw new Error(`HTTP ${response.status}`);
+        },
+        (err: Error) => {
+          if (stopped) return;
+          const status = (err.message || "").match(/HTTP (\d+)/)?.[1];
+          if (status === "404") { onError?.(new Error(`Session ${sessionId} not found`)); return; }
+          scheduleReconnect();
         }
-
-        retryCount = 0;
-        retryDelay = 1500;
-        reader = response.body?.getReader() || null;
-        if (!reader) throw new Error("Response body not readable");
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let isClosed = false;
-
-        while (!stopped && !isClosed) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            if (buffer.trim()) {
-              processLine(buffer);
-              buffer = "";
-            }
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-
-            if (trimmed.startsWith("id: ")) {
-              lastEventId = trimmed.slice(4).trim();
-              continue;
-            }
-
-            if (!trimmed.startsWith("data: ")) continue;
-            const data = trimmed.slice(6);
-
-            if (data === "[DONE]") {
-              isClosed = true;
-              onDone?.();
-              return;
-            }
-
-            processLine(trimmed);
-          }
-        }
-      } catch (err: any) {
-        if (stopped) return;
-        reader = null;
-      }
-
-      if (!stopped) {
-        retryCount++;
-        if (retryCount > MAX_RETRIES) {
-          onError?.(new Error(`SSE: max reconnect attempts (${MAX_RETRIES}) exceeded for session ${sessionId}`));
-          return;
-        }
-        onReconnect?.(retryCount);
-        const delay = Math.min(retryDelay * Math.pow(1.5, retryCount - 1), 30000);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        connect();
-      }
+      );
     };
 
-    function processLine(line: string) {
-      const trimmed = line.startsWith("data: ") ? line.slice(6) : line;
-      try {
-        const event: AgentEvent = JSON.parse(trimmed);
-        onMessage?.(event);
-      } catch {}
-    }
+    const scheduleReconnect = () => {
+      if (stopped) return;
+      retryCount++;
+      if (retryCount > MAX_RETRIES) {
+        onError?.(new Error(`SSE: max reconnect attempts (${MAX_RETRIES}) exceeded`));
+        return;
+      }
+      onReconnect?.(retryCount);
+      const delay = Math.min(1500 * Math.pow(1.5, retryCount - 1), 30000);
+      setTimeout(connect, delay);
+    };
 
     connect();
     return stop;
