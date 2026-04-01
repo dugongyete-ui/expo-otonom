@@ -11,6 +11,9 @@ module.exports = ({ config }) => ({
       },
     ],
     "expo-font",
+    "expo-localization",
+    "expo-secure-store",
+    "expo-web-browser",
   ],
   extra: {
     ...config.extra,

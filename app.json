@@ -30,12 +30,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://dzeck-ai.app/"
-        }
-      ],
+      "expo-router",
       "expo-font"
     ],
     "experiments": {
