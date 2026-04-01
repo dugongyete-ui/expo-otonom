@@ -13,6 +13,7 @@ import { randomBytes } from "node:crypto";
   const envPath = path.resolve(process.cwd(), ".env");
   if (!fs.existsSync(envPath)) return;
   const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+  const domainKeys = new Set(["APP_DOMAIN", "EXPO_PUBLIC_DOMAIN", "CORS_ORIGINS"]);
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -20,11 +21,19 @@ import { randomBytes } from "node:crypto";
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
     const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
-    if (key && !(key in process.env)) {
+    if (key && (!(key in process.env) || domainKeys.has(key))) {
       process.env[key] = val;
     }
   }
 })();
+
+// Always force domain-related env vars to use REPLIT_DEV_DOMAIN when available,
+// overriding any potentially stale hardcoded values from userenv or .env.
+if (process.env.REPLIT_DEV_DOMAIN) {
+  process.env.APP_DOMAIN = process.env.REPLIT_DEV_DOMAIN;
+  process.env.EXPO_PUBLIC_DOMAIN = process.env.REPLIT_DEV_DOMAIN;
+  process.env.CORS_ORIGINS = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+}
 
 // Diagnostic: confirm critical env vars loaded from .env
 if (process.env.E2B_API_KEY) {
@@ -286,13 +295,15 @@ async function proxyManifestFromMetro(
     const manifest = await metroRes.json() as Record<string, unknown>;
 
     // Determine the public HTTPS base URL for this server (Express backend on port 80)
-    // Priority: APP_DOMAIN env var > EXPO_PUBLIC_DOMAIN env var > x-forwarded-host > req.host
+    // Priority: REPLIT_DEV_DOMAIN (always current) > APP_DOMAIN > EXPO_PUBLIC_DOMAIN > x-forwarded-host > req.host
     //
     // IMPORTANT: x-forwarded-host is NOT reliable for Expo Go connections — Replit routes
     // Expo Go requests through a different proxy path and may send a different host header.
-    // APP_DOMAIN is set by update-domain.sh at startup and is always the correct public domain.
+    // REPLIT_DEV_DOMAIN is automatically set by Replit to the current active domain and is the
+    // most reliable source. APP_DOMAIN is set by update-domain.sh but may be stale if hardcoded.
     const forwardedProto = "https";
     const forwardedHost =
+      process.env.REPLIT_DEV_DOMAIN ||
       process.env.APP_DOMAIN ||
       process.env.EXPO_PUBLIC_DOMAIN ||
       req.header("x-forwarded-host") ||

@@ -11,10 +11,6 @@ localPort = 3002
 externalPort = 3002
 
 [[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
 localPort = 8082
 externalPort = 3000
 
@@ -71,7 +67,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash scripts/update-domain.sh && REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN npx expo start --port 3002"
+args = "bash scripts/update-domain.sh && EXPO_PACKAGER_PROXY_URL=https://$REPLIT_DEV_DOMAIN REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN npx expo start --port 3002"
 waitForPort = 3002
 
 [userenv]
@@ -92,9 +88,6 @@ SEARCH_PROVIDER = "tavily"
 LOG_LEVEL = "INFO"
 MAX_CONCURRENT_AGENTS_PER_USER = "1"
 EXPO_PUBLIC_API_PORT = "5000"
-EXPO_PUBLIC_DOMAIN = "b1eb567d-faed-41f9-a561-0bf4f8d6c067-00-2gkk56zll7yiu.pike.replit.dev"
-APP_DOMAIN = "b1eb567d-faed-41f9-a561-0bf4f8d6c067-00-2gkk56zll7yiu.pike.replit.dev"
-CORS_ORIGINS = "https://b1eb567d-faed-41f9-a561-0bf4f8d6c067-00-2gkk56zll7yiu.pike.replit.dev"
 MCP_CONFIG_PATH = "mcp.json"
 EMAIL_PORT = "587"
 LOCAL_USER_EMAIL = "admin@example.com"
