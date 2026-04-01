@@ -302,7 +302,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 onPress={handleCloseToolsModal}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={20} color="#9ca3af" />
+                <Ionicons name="close" size={20} color="#8a8780" />
               </TouchableOpacity>
             </View>
 
@@ -351,35 +351,35 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#edebe3",
   },
   mainContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#030712",
+    backgroundColor: "#edebe3",
   },
   leftPanel: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRightWidth: 1,
-    borderRightColor: "#1f2937",
+    borderRightColor: "#ddd9d0",
     overflow: "hidden",
   },
   chatArea: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#edebe3",
     minWidth: 0,
   },
   toolPanel: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderLeftWidth: 1,
-    borderLeftColor: "#1f2937",
+    borderLeftColor: "#ddd9d0",
     overflow: "hidden",
   },
   panelSwitcher: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
-    backgroundColor: "#111827",
+    borderTopColor: "#ddd9d0",
+    backgroundColor: "#ffffff",
   },
   switchTab: {
     flex: 1,
@@ -388,27 +388,27 @@ const styles = StyleSheet.create({
   },
   switchTabActive: {
     borderTopWidth: 2,
-    borderTopColor: "#3b82f6",
+    borderTopColor: "#2563eb",
   },
   switchTabText: {
     fontSize: 11,
-    color: "#6b7280",
+    color: "#8a8780",
   },
   switchTabTextActive: {
-    color: "#f9fafb",
+    color: "#1a1916",
   },
   toolsModalContainer: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   toolsModalHeader: {
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#ddd9d0",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   toolsModalTabs: {
     flex: 1,
@@ -421,15 +421,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalTabActive: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f5f3ee",
   },
   modalTabText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#6b7280",
+    color: "#8a8780",
   },
   modalTabTextActive: {
-    color: "#f9fafb",
+    color: "#1a1916",
   },
   toolsModalClose: {
     width: 36,
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f5f3ee",
     marginLeft: 8,
   },
   toolsModalContent: {

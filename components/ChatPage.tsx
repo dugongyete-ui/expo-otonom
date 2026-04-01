@@ -1149,7 +1149,7 @@ export function ChatPage({
             <Ionicons
               name={isShared ? "share-social" : "share-social-outline"}
               size={18}
-              color={messages.length === 0 ? "#444" : isShared ? "#6C5CE7" : "#8a8780"}
+              color={messages.length === 0 ? "#ccc8be" : isShared ? "#6C5CE7" : "#8a8780"}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -1431,14 +1431,14 @@ export function ChatPage({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#edebe3",
   },
   header: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: "#111827",
+    backgroundColor: "#edebe3",
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#ddd9d0",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1446,7 +1446,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#f9fafb",
+    color: "#1a1916",
     flex: 1,
   },
   headerRight: {
@@ -1460,33 +1460,33 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f5f3ee",
   },
   agentModeActive: {
     backgroundColor: "rgba(234,179,8,0.15)",
   },
   settingsOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
     paddingBottom: 40,
     paddingHorizontal: 16,
   },
   settingsPanel: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 20,
     gap: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 10,
   },
   settingsPanelTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#f9fafb",
+    color: "#1a1916",
     marginBottom: 4,
   },
   settingsSection: {
@@ -1494,7 +1494,7 @@ const styles = StyleSheet.create({
   },
   settingsSectionTitle: {
     fontSize: 13,
-    color: "#6b7280",
+    color: "#8a8780",
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1508,16 +1508,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#ddd9d0",
     alignItems: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f5f3ee",
   },
   langBtnActive: {
     backgroundColor: "#2563eb",
     borderColor: "#2563eb",
   },
   langBtnText: {
-    color: "#9ca3af",
+    color: "#6a6762",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1530,10 +1530,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#ddd9d0",
   },
   logoutBtnText: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1553,12 +1553,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(220,38,38,0.15)",
   },
   e2bChecking: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f5f3ee",
   },
   e2bBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#9ca3af",
+    color: "#8a8780",
     letterSpacing: 0.3,
   },
   fileCardContainer: {
@@ -1635,7 +1635,7 @@ const styles = StyleSheet.create({
   agentTurnName: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: "#f9fafb",
+    color: "#1a1916",
     letterSpacing: -0.2,
   },
   agentTurnBadgeRunning: {
@@ -1734,16 +1734,16 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "#4b5563",
+    backgroundColor: "#ccc8be",
   },
   thinkingDotPulse: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#2563eb",
   },
   thinkingLabel: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#6b7280",
+    color: "#8a8780",
     fontStyle: "italic",
   },
   taskCompletedWrap: {
@@ -1763,7 +1763,7 @@ const styles = StyleSheet.create({
   taskCompletedStepText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#8a8780",
     flex: 1,
     lineHeight: 17,
   },
@@ -1815,14 +1815,14 @@ const styles = StyleSheet.create({
   welcomeGreeting: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: "#f9fafb",
+    color: "#1a1916",
     letterSpacing: -0.5,
     lineHeight: 34,
   },
   welcomeSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 16,
-    color: "#9ca3af",
+    color: "#6a6762",
     lineHeight: 22,
   },
   suggestionScrollView: {
@@ -1835,17 +1835,17 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     width: 160,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#ddd9d0",
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   suggestionChipText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#d1d5db",
+    color: "#4a4740",
     lineHeight: 18,
   },
   toolsBadge: {

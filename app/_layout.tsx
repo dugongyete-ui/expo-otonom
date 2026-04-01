@@ -18,6 +18,7 @@ import {
   Text,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { KeyboardProviderWrapper } from "@/components/KeyboardProviderWrapper";
 import { queryClient } from "@/lib/query-client";
@@ -171,16 +172,18 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView>
-          <KeyboardProviderWrapper>
-            <AuthProvider>
-              <View style={layoutStyles.root}>
-                <StatusBar style="dark" />
-                <AuthGate>
-                  <RootLayoutNav />
-                </AuthGate>
-              </View>
-            </AuthProvider>
-          </KeyboardProviderWrapper>
+          <SafeAreaProvider>
+            <KeyboardProviderWrapper>
+              <AuthProvider>
+                <View style={layoutStyles.root}>
+                  <StatusBar style="dark" />
+                  <AuthGate>
+                    <RootLayoutNav />
+                  </AuthGate>
+                </View>
+              </AuthProvider>
+            </KeyboardProviderWrapper>
+          </SafeAreaProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </ErrorBoundary>
