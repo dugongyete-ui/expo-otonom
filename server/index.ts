@@ -225,8 +225,21 @@ const METRO_PORT = 3002;
  * Used for bundle and asset downloads so they go through Express (port 80/HTTPS)
  * rather than directly to Metro's port (which Replit's proxy can't handle for large bundles).
  */
+const METRO_PROXY_MAX_RETRIES = 2;
+const METRO_PROXY_RETRY_DELAY_MS = 1500;
+
+/**
+ * Proxy a request to Metro bundler and stream the response back.
+ * Retries up to METRO_PROXY_MAX_RETRIES times on timeout or transient connection
+ * errors (ECONNRESET, ECONNREFUSED) before returning an error to the client.
+ * Only retries are performed before response headers are sent.
+ */
 function proxyToMetro(req: Request, res: Response) {
   const metroPath = req.url.replace(/^\/metro-proxy/, "");
+  // Bundle requests can take a long time to compile — use a generous timeout.
+  const isBundle = metroPath.endsWith(".bundle") || req.path.endsWith(".bundle");
+  const socketTimeout = isBundle ? 120_000 : 30_000;
+
   const options: http.RequestOptions = {
     hostname: "localhost",
     port: METRO_PORT,
@@ -238,19 +251,93 @@ function proxyToMetro(req: Request, res: Response) {
     },
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode ?? 200, proxyRes.headers as Record<string, string>);
-    proxyRes.pipe(res, { end: true });
+  // Buffer the request body so we can replay it on retries (req stream can only be read once).
+  const bodyChunks: Buffer[] = [];
+  const bodyReady = new Promise<Buffer>((resolve, reject) => {
+    req.on("data", (chunk: Buffer) => bodyChunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(bodyChunks)));
+    req.on("error", reject);
   });
 
-  proxyReq.on("error", (err) => {
-    log(`[Expo] Metro proxy error: ${err.message}`);
-    if (!res.headersSent) {
-      res.status(502).json({ error: "Metro bundler proxy error" });
+  function attempt(attemptsLeft: number): void {
+    // Guard: ensure only one of (timeout, error) triggers a retry/response for this attempt.
+    let settled = false;
+    const settle = () => {
+      if (settled) return false;
+      settled = true;
+      return true;
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      if (res.headersSent) return;
+      res.writeHead(proxyRes.statusCode ?? 200, proxyRes.headers as Record<string, string>);
+      proxyRes.pipe(res, { end: true });
+    });
+
+    proxyReq.setTimeout(socketTimeout, () => {
+      if (!settle()) return;
+      log(`[Expo] Metro proxy timeout after ${socketTimeout}ms for ${metroPath} (attempts left: ${attemptsLeft})`);
+      proxyReq.destroy();
+      if (res.headersSent) return;
+      if (attemptsLeft > 0) {
+        setTimeout(() => attempt(attemptsLeft - 1), METRO_PROXY_RETRY_DELAY_MS);
+      } else {
+        res.status(504).json({ error: "Metro bundler timed out after retries. Bundle is still compiling — please retry." });
+      }
+    });
+
+    const isTransient = (code?: string) =>
+      code === "ECONNRESET" || code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "ETIMEDOUT";
+
+    proxyReq.on("error", (err: NodeJS.ErrnoException) => {
+      if (!settle()) return;
+      log(`[Expo] Metro proxy error: ${err.message} (attempts left: ${attemptsLeft})`);
+      if (res.headersSent) return;
+      if (attemptsLeft > 0 && isTransient(err.code)) {
+        setTimeout(() => attempt(attemptsLeft - 1), METRO_PROXY_RETRY_DELAY_MS);
+      } else {
+        res.status(502).json({ error: `Metro bundler proxy error: ${err.message}` });
+      }
+    });
+
+    // Write buffered body (or nothing for GET requests) and close the request.
+    bodyReady.then((body) => {
+      if (body.length > 0) proxyReq.write(body);
+      proxyReq.end();
+    }).catch((err) => {
+      log(`[Expo] Metro proxy body read error: ${err.message}`);
+      proxyReq.destroy();
+      if (!res.headersSent) res.status(500).json({ error: "Failed to read request body for Metro proxy" });
+    });
+  }
+
+  attempt(METRO_PROXY_MAX_RETRIES);
+}
+
+/**
+ * Poll Metro's /__metro/ping endpoint until it responds 200 or the deadline passes.
+ * Returns true if Metro is ready, false if timed out.
+ */
+async function waitForMetroReady(metroPort: number, waitMs: number = 60_000): Promise<boolean> {
+  const deadline = Date.now() + waitMs;
+  const pollInterval = 1500;
+
+  while (Date.now() < deadline) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2000);
+      const pingRes = await fetch(`http://localhost:${metroPort}/__metro/ping`, {
+        signal: ctrl.signal,
+      }).finally(() => clearTimeout(t));
+      if (pingRes.ok) {
+        return true;
+      }
+    } catch {
+      // Metro not up yet — keep polling
     }
-  });
-
-  req.pipe(proxyReq, { end: true });
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  }
+  return false;
 }
 
 async function proxyManifestFromMetro(
@@ -260,6 +347,17 @@ async function proxyManifestFromMetro(
   metroPort: number = METRO_PORT,
 ) {
   try {
+    // Wait for Metro to be ready before trying to fetch the manifest.
+    // This prevents Expo Go from seeing "Packager is not running" while Metro is still
+    // compiling the bundle for the first time.
+    const isReady = await waitForMetroReady(metroPort, 60_000);
+    if (!isReady) {
+      log("[Expo] Metro did not become ready within 60s — aborting manifest request");
+      return res.status(503).json({
+        error: "Metro bundler is still starting. Please wait a moment and try again.",
+      });
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
 
@@ -311,12 +409,31 @@ async function proxyManifestFromMetro(
       "";
     const backendBase = `${forwardedProto}://${forwardedHost}`;
 
-    // Rewrite Metro's http://domain:3002/... URLs to go through Express backend
-    // so that Expo Go downloads bundles via HTTPS on port 80 (no Replit proxy issues)
-    let manifestStr = JSON.stringify(manifest).replace(
-      /http:\/\/[^"]+:(\d+)\//g,
+    // Rewrite Metro's bundle URLs to go through Express backend so that Expo Go
+    // downloads bundles via HTTPS on port 80 (no Replit proxy issues).
+    //
+    // Two patterns to cover:
+    //  1. URLs with an explicit port: http://host:3002/...  (original Metro internal URLs)
+    //  2. URLs without an explicit port: https://domain.replit.dev/...
+    //     These appear when app.config.js sets `origin` to the public HTTPS domain,
+    //     causing Metro to embed portless HTTPS URLs directly in the manifest.
+    let manifestStr = JSON.stringify(manifest);
+
+    // Pattern 1: http(s)://host:port/ — replace entire origin+port
+    manifestStr = manifestStr.replace(
+      /https?:\/\/[^"/:]+:\d+\//g,
       `${backendBase}/metro-proxy/`,
     );
+
+    // Pattern 2: https://public-domain/ (no port) — only rewrite if it matches the
+    // known public domain, to avoid accidentally rewriting unrelated HTTPS URLs.
+    if (forwardedHost) {
+      const escapedHost = forwardedHost.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      manifestStr = manifestStr.replace(
+        new RegExp(`https?://${escapedHost}/`, "g"),
+        `${backendBase}/metro-proxy/`,
+      );
+    }
 
     // Also rewrite hostUri and debuggerHost (format: "host:port") so that
     // hot-reload WebSocket connections also go through the Express proxy domain
