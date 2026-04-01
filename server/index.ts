@@ -462,6 +462,40 @@ function configureExpoAndLanding(app: express.Application) {
       return proxyToMetro(req, res);
     }
 
+    // Catch-all Metro proxy: forward bundle/asset/Metro-specific paths to Metro bundler.
+    // Expo Go requests bundle URLs like /index.bundle?platform=android which Express has
+    // no static handler for. Forward these directly to Metro on port 3002.
+    //
+    // NOTE: This project uses the catch-all approach rather than rewriting bundle URLs
+    // in app.config.js. Because app.config.js sets `origin` to the HTTPS Replit domain,
+    // Metro injects that domain directly into manifest bundle URLs (bypassing the
+    // http://localhost rewrite regex in proxyManifestFromMetro). The catch-all here
+    // intercepts those direct-to-Express HTTPS requests and forwards them to Metro.
+    // If new Metro endpoints appear (symbolication, /reload, etc.), add them below.
+    const isMetroPath =
+      req.path.endsWith(".bundle") ||
+      req.path.endsWith(".map") ||
+      req.path.startsWith("/__metro") ||
+      req.path.startsWith("/__debugger") ||
+      req.path.startsWith("/debugger-ui") ||
+      req.path.startsWith("/hot") ||
+      req.path === "/reload" ||
+      req.path === "/symbolicate" ||
+      (req.path.startsWith("/assets/") && req.query["platform"] !== undefined) ||
+      req.query["bundleType"] !== undefined;
+
+    if (isMetroPath) {
+      log(`[Expo] Catch-all Metro proxy: ${req.method} ${req.path}`);
+      // Reuse proxyToMetro but the path is already correct (no /metro-proxy prefix to strip)
+      // We temporarily rewrite req.url so proxyToMetro strips nothing meaningful
+      const savedUrl = req.url;
+      req.url = `/metro-proxy${req.url}`;
+      // proxyToMetro strips /metro-proxy prefix, leaving the original path intact
+      proxyToMetro(req, res);
+      req.url = savedUrl;
+      return;
+    }
+
     next();
   });
 
