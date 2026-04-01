@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image, Share, Alert } from "react-native";
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image, Share, Alert, ScrollView } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
@@ -1068,8 +1068,13 @@ export function ChatPage({
             : isAgentMode ? "What do you want to accomplish?" : "What do you want to ask?"}
         </Text>
       </View>
-      <View style={styles.suggestionRow}>
-        {SUGGESTIONS.slice(0, 2).map(s => (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.suggestionScrollView}
+        contentContainerStyle={styles.suggestionScrollContent}
+      >
+        {SUGGESTIONS.map(s => (
           <TouchableOpacity
             key={s.id}
             style={styles.suggestionChip}
@@ -1079,19 +1084,7 @@ export function ChatPage({
             <Text style={styles.suggestionChipText} numberOfLines={2}>{s.label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
-      <View style={styles.suggestionRow}>
-        {SUGGESTIONS.slice(2, 4).map(s => (
-          <TouchableOpacity
-            key={s.id}
-            style={styles.suggestionChip}
-            onPress={() => handleSuggestion(s.label)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.suggestionChipText} numberOfLines={2}>{s.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -1271,6 +1264,7 @@ export function ChatPage({
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
+        style={styles.flatList}
         renderItem={({ item }) => {
           // Screenshot message — display inline image
           if (item.screenshotB64) {
@@ -1804,14 +1798,18 @@ const styles = StyleSheet.create({
     color: "#16a34a",
     letterSpacing: -0.2,
   },
-  messageListEmpty: {
+  flatList: {
     flex: 1,
+  },
+  messageListEmpty: {
+    flexGrow: 1,
   },
   welcomeContainer: {
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 48,
     gap: 20,
+    justifyContent: "flex-start",
   },
   welcomeContent: {
     gap: 6,
@@ -1829,12 +1827,16 @@ const styles = StyleSheet.create({
     color: "#8a8780",
     lineHeight: 22,
   },
-  suggestionRow: {
-    flexDirection: "row",
+  suggestionScrollView: {
+    flexGrow: 0,
+  },
+  suggestionScrollContent: {
+    paddingRight: 20,
     gap: 10,
+    flexDirection: "row",
   },
   suggestionChip: {
-    flex: 1,
+    width: 160,
     backgroundColor: "#ffffff",
     borderRadius: 14,
     borderWidth: 1,

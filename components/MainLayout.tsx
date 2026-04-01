@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   Platform,
   SafeAreaView,
   TouchableOpacity,
   Modal,
+  useWindowDimensions,
 } from "react-native";
 import { LeftPanel } from "./LeftPanel";
 import { ChatPage } from "./ChatPage";
@@ -37,7 +37,7 @@ interface MainLayoutProps {
 }
 
 const TOOL_PANEL_WIDTH = 280;
-const NARROW_BREAKPOINT = 600;
+const NARROW_BREAKPOINT = 768;
 
 export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentModeProp = false }: MainLayoutProps) {
   const [isLeftPanelShow, setIsLeftPanelShow] = useState(false);
@@ -51,17 +51,10 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
   const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
   const [showToolsModal, setShowToolsModal] = useState(false);
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get("window").width);
+  const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const isNarrowScreen = screenWidth < NARROW_BREAKPOINT;
-
-  useEffect(() => {
-    const sub = Dimensions.addEventListener("change", ({ window }) => {
-      setScreenWidth(window.width);
-    });
-    return () => sub?.remove();
-  }, []);
 
   const toggleLeftPanel = useCallback(() => {
     setIsLeftPanelShow(v => !v);

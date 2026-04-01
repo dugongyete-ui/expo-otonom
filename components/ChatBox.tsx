@@ -44,7 +44,7 @@ export function ChatBox({
   const placeholder = isWaitingForUser
     ? "Ketik balasan Anda..."
     : isAgentMode
-      ? "Pesan untuk Agent AI..."
+      ? "Berikan tugas untuk Dzeck AI..."
       : "Kirim pesan ke Dzeck AI...";
 
   const handleAttachImage = useCallback(async () => {
