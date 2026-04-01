@@ -7,6 +7,7 @@ import {
   Platform,
   SafeAreaView,
   TouchableOpacity,
+  Modal,
 } from "react-native";
 import { LeftPanel } from "./LeftPanel";
 import { ChatPage } from "./ChatPage";
@@ -15,6 +16,7 @@ import { BrowserPanel } from "./BrowserPanel";
 import { FilePanel } from "./FilePanel";
 import { TakeOverView } from "./TakeOverView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { getToolCategory } from "@/lib/tool-constants";
 import type { VncSessionInfo } from "./ChatPage";
 
@@ -35,6 +37,7 @@ interface MainLayoutProps {
 }
 
 const TOOL_PANEL_WIDTH = 280;
+const NARROW_BREAKPOINT = 600;
 
 export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentModeProp = false }: MainLayoutProps) {
   const [isLeftPanelShow, setIsLeftPanelShow] = useState(false);
@@ -47,7 +50,18 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
   const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
+  const [showToolsModal, setShowToolsModal] = useState(false);
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get("window").width);
   const insets = useSafeAreaInsets();
+
+  const isNarrowScreen = screenWidth < NARROW_BREAKPOINT;
+
+  useEffect(() => {
+    const sub = Dimensions.addEventListener("change", ({ window }) => {
+      setScreenWidth(window.width);
+    });
+    return () => sub?.remove();
+  }, []);
 
   const toggleLeftPanel = useCallback(() => {
     setIsLeftPanelShow(v => !v);
@@ -64,28 +78,27 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const handleBrowserEventChange = useCallback((event: { url?: string; screenshot_b64?: string; title?: string } | null) => {
     if (event?.screenshot_b64) {
       setLiveBrowserEvent(event);
-      setRightPanelMode("browser");
-      setIsToolPanelVisible(true);
+      if (!isNarrowScreen) {
+        setRightPanelMode("browser");
+        setIsToolPanelVisible(true);
+      }
     }
-  }, []);
+  }, [isNarrowScreen]);
 
-  // Auto-switch to browser panel when a browser tool starts executing
   const prevToolsLenRef = useRef(0);
   useEffect(() => {
     if (tools.length > prevToolsLenRef.current) {
       const latestTool = tools[tools.length - 1];
       const fnName = latestTool.function_name || latestTool.name;
       const category = getToolCategory(fnName);
-      if (category === "browser" && latestTool.status === "calling") {
-        // Auto-switch to browser panel when browser tool is invoked
+      if (category === "browser" && latestTool.status === "calling" && !isNarrowScreen) {
         setRightPanelMode("browser");
         setIsToolPanelVisible(true);
       }
     }
     prevToolsLenRef.current = tools.length;
-  }, [tools]);
+  }, [tools, isNarrowScreen]);
 
-  // Get latest browser event from tools for BrowserPanel (final tool_content on completion)
   const toolBrowserEvent = tools
     .filter(t => {
       const fn = t.function_name || t.name;
@@ -93,26 +106,22 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     })
     .pop()?.tool_content || null;
 
-  // Prefer live real-time browser screenshot (from browser_screenshot SSE event) over tool_content
   const lastBrowserEvent = liveBrowserEvent ?? toolBrowserEvent;
 
   const handleSwitchToBrowser = useCallback(() => {
     setRightPanelMode("browser");
-    setIsToolPanelVisible(true);
-  }, []);
+    if (!isNarrowScreen) setIsToolPanelVisible(true);
+  }, [isNarrowScreen]);
 
   const handleVncSessionChange = useCallback((info: VncSessionInfo | null) => {
     setVncSession(info);
-    if (info) {
-      // Auto-switch to browser panel when agent creates a desktop sandbox
+    if (info && !isNarrowScreen) {
       setRightPanelMode("browser");
       setIsToolPanelVisible(true);
     }
-  }, []);
+  }, [isNarrowScreen]);
 
   const handleTakeOver = useCallback((e2bSessionId: string) => {
-    // e2bSessionId is the E2B desktop session ID used for VNC connection.
-    // agentSessionId (sessionId state) is used for pause/resume API calls.
     setTakeOverE2bSessionId(e2bSessionId || undefined);
     setShowTakeOver(true);
   }, []);
@@ -121,13 +130,22 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     setShowTakeOver(false);
   }, []);
 
-  const screenWidth = Dimensions.get("window").width;
+  const handleOpenTools = useCallback(() => {
+    setShowToolsModal(true);
+  }, []);
+
+  const handleCloseToolsModal = useCallback(() => {
+    setShowToolsModal(false);
+  }, []);
 
   const leftPanelWidth = isLeftPanelShow ? (Platform.OS === "web" ? 260 : Math.min(280, screenWidth * 0.75)) : 0;
   const toolPanelWidth = isToolPanelVisible ? TOOL_PANEL_WIDTH : 32;
 
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
+
+  const activeToolsCount = tools.filter(t => t.status === "calling").length;
+  const totalToolsCount = tools.length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -156,7 +174,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
           </View>
         )}
 
-        {/* Chat Area */}
+        {/* Chat Area - full width on narrow screens */}
         <View style={styles.chatArea}>
           <ChatPage
             sessionId={sessionId}
@@ -167,80 +185,163 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
             onToolsChange={handleToolsChange}
             onVncSessionChange={handleVncSessionChange}
             onBrowserEventChange={handleBrowserEventChange}
+            onOpenTools={isNarrowScreen ? handleOpenTools : undefined}
+            toolsCount={totalToolsCount}
+            activeToolsCount={activeToolsCount}
           />
         </View>
 
-        {/* Right Panel - Tools or Browser */}
-        <View style={[styles.toolPanel, { width: toolPanelWidth }]}>
-          {rightPanelMode === "tools" ? (
-            <ToolPanel
-              tools={tools}
-              isVisible={isToolPanelVisible}
-              onToggleVisible={() => setIsToolPanelVisible(v => !v)}
-              sessionId={sessionId}
-              onSwitchToBrowser={handleSwitchToBrowser}
-            />
-          ) : rightPanelMode === "browser" ? (
-            <BrowserPanel
-              isVisible={isToolPanelVisible}
-              onToggleVisible={() => setIsToolPanelVisible(v => !v)}
-              agentSessionId={sessionId}
-              lastBrowserEvent={lastBrowserEvent}
-              onTakeOver={handleTakeOver}
-              agentVncSession={vncSession}
-              vncViewerActive={Platform.OS !== "web" && !!vncSession}
-            />
-          ) : (
-            <FilePanel
-              sessionId={sessionId}
-              isVisible={isToolPanelVisible}
-            />
-          )}
-          {isToolPanelVisible && (
-            <View style={styles.panelSwitcher}>
+        {/* Right Panel - only on wide screens */}
+        {!isNarrowScreen && (
+          <View style={[styles.toolPanel, { width: toolPanelWidth }]}>
+            {rightPanelMode === "tools" ? (
+              <ToolPanel
+                tools={tools}
+                isVisible={isToolPanelVisible}
+                onToggleVisible={() => setIsToolPanelVisible(v => !v)}
+                sessionId={sessionId}
+                onSwitchToBrowser={handleSwitchToBrowser}
+              />
+            ) : rightPanelMode === "browser" ? (
+              <BrowserPanel
+                isVisible={isToolPanelVisible}
+                onToggleVisible={() => setIsToolPanelVisible(v => !v)}
+                agentSessionId={sessionId}
+                lastBrowserEvent={lastBrowserEvent}
+                onTakeOver={handleTakeOver}
+                agentVncSession={vncSession}
+                vncViewerActive={Platform.OS !== "web" && !!vncSession}
+              />
+            ) : (
+              <FilePanel
+                sessionId={sessionId}
+                isVisible={isToolPanelVisible}
+              />
+            )}
+            {isToolPanelVisible && (
+              <View style={styles.panelSwitcher}>
+                <TouchableOpacity
+                  style={[
+                    styles.switchTab,
+                    rightPanelMode === "tools" && styles.switchTabActive,
+                  ]}
+                  onPress={() => setRightPanelMode("tools")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.switchTabText,
+                    rightPanelMode === "tools" && styles.switchTabTextActive,
+                  ]}>Tools</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.switchTab,
+                    rightPanelMode === "browser" && styles.switchTabActive,
+                  ]}
+                  onPress={() => setRightPanelMode("browser")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.switchTabText,
+                    rightPanelMode === "browser" && styles.switchTabTextActive,
+                  ]}>Browser</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.switchTab,
+                    rightPanelMode === "files" && styles.switchTabActive,
+                  ]}
+                  onPress={() => setRightPanelMode("files")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.switchTabText,
+                    rightPanelMode === "files" && styles.switchTabTextActive,
+                  ]}>Files</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Tools Modal for narrow screens */}
+      {isNarrowScreen && (
+        <Modal
+          visible={showToolsModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleCloseToolsModal}
+        >
+          <SafeAreaView style={styles.toolsModalContainer}>
+            <View style={styles.toolsModalHeader}>
+              <View style={styles.toolsModalTabs}>
+                <TouchableOpacity
+                  style={[styles.modalTab, rightPanelMode === "tools" && styles.modalTabActive]}
+                  onPress={() => setRightPanelMode("tools")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalTabText, rightPanelMode === "tools" && styles.modalTabTextActive]}>
+                    Tools{totalToolsCount > 0 ? ` (${totalToolsCount})` : ""}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalTab, rightPanelMode === "browser" && styles.modalTabActive]}
+                  onPress={() => setRightPanelMode("browser")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalTabText, rightPanelMode === "browser" && styles.modalTabTextActive]}>
+                    Browser
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalTab, rightPanelMode === "files" && styles.modalTabActive]}
+                  onPress={() => setRightPanelMode("files")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalTabText, rightPanelMode === "files" && styles.modalTabTextActive]}>
+                    Files
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
-                style={[
-                  styles.switchTab,
-                  rightPanelMode === "tools" && styles.switchTabActive,
-                ]}
-                onPress={() => setRightPanelMode("tools")}
+                style={styles.toolsModalClose}
+                onPress={handleCloseToolsModal}
                 activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.switchTabText,
-                  rightPanelMode === "tools" && styles.switchTabTextActive,
-                ]}>Tools</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.switchTab,
-                  rightPanelMode === "browser" && styles.switchTabActive,
-                ]}
-                onPress={() => setRightPanelMode("browser")}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.switchTabText,
-                  rightPanelMode === "browser" && styles.switchTabTextActive,
-                ]}>Browser</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.switchTab,
-                  rightPanelMode === "files" && styles.switchTabActive,
-                ]}
-                onPress={() => setRightPanelMode("files")}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.switchTabText,
-                  rightPanelMode === "files" && styles.switchTabTextActive,
-                ]}>Files</Text>
+                <Ionicons name="close" size={20} color="#4a4740" />
               </TouchableOpacity>
             </View>
-          )}
-        </View>
-      </View>
+
+            <View style={styles.toolsModalContent}>
+              {rightPanelMode === "tools" ? (
+                <ToolPanel
+                  tools={tools}
+                  isVisible={true}
+                  sessionId={sessionId}
+                  onSwitchToBrowser={() => {
+                    setRightPanelMode("browser");
+                  }}
+                />
+              ) : rightPanelMode === "browser" ? (
+                <BrowserPanel
+                  isVisible={true}
+                  agentSessionId={sessionId}
+                  lastBrowserEvent={lastBrowserEvent}
+                  onTakeOver={handleTakeOver}
+                  agentVncSession={vncSession}
+                  vncViewerActive={Platform.OS !== "web" && !!vncSession}
+                />
+              ) : (
+                <FilePanel
+                  sessionId={sessionId}
+                  isVisible={true}
+                />
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
+      )}
 
       {/* TakeOver Overlay */}
       {showTakeOver && sessionId && (
@@ -302,5 +403,51 @@ const styles = StyleSheet.create({
   },
   switchTabTextActive: {
     color: "#1a1916",
+  },
+  toolsModalContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  toolsModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd9d0",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: "#ffffff",
+  },
+  toolsModalTabs: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 4,
+  },
+  modalTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  modalTabActive: {
+    backgroundColor: "#f5f3ee",
+  },
+  modalTabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#8a8780",
+  },
+  modalTabTextActive: {
+    color: "#1a1916",
+  },
+  toolsModalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f5f3ee",
+    marginLeft: 8,
+  },
+  toolsModalContent: {
+    flex: 1,
   },
 });

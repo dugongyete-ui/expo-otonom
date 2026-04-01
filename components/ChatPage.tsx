@@ -74,6 +74,9 @@ interface ChatPageProps {
   onToolsChange?: (tools: any[]) => void;
   onVncSessionChange?: (info: VncSessionInfo | null) => void;
   onBrowserEventChange?: (event: BrowserEventState | null) => void;
+  onOpenTools?: () => void;
+  toolsCount?: number;
+  activeToolsCount?: number;
 }
 
 export function ChatPage({
@@ -85,6 +88,9 @@ export function ChatPage({
   onToolsChange,
   onVncSessionChange,
   onBrowserEventChange,
+  onOpenTools,
+  toolsCount = 0,
+  activeToolsCount = 0,
 }: ChatPageProps = {}) {
   const { mode } = useLocalSearchParams<{ mode: string }>();
   const isAgentMode = agentModeProp ?? mode === "agent";
@@ -1032,6 +1038,63 @@ export function ChatPage({
     }
   }, [isShared]);
 
+  const handleSuggestion = useCallback((text: string) => {
+    setInputMessage(text);
+  }, []);
+
+  const SUGGESTIONS = isAgentMode
+    ? [
+        { id: "s1", label: "Cari berita terbaru" },
+        { id: "s2", label: "Buka browser Google" },
+        { id: "s3", label: "Buat script Python" },
+        { id: "s4", label: "Apa yang bisa kamu lakukan?" },
+      ]
+    : [
+        { id: "s1", label: "Apa yang bisa kamu lakukan?" },
+        { id: "s2", label: "Jelaskan sesuatu padaku" },
+        { id: "s3", label: "Tulis email profesional" },
+        { id: "s4", label: "Buat rencana belajar" },
+      ];
+
+  const WelcomeScreen = (
+    <View style={styles.welcomeContainer}>
+      <View style={styles.welcomeContent}>
+        <Text style={styles.welcomeGreeting}>
+          {locale === "id" ? "Halo, selamat datang" : "Hello, welcome"}
+        </Text>
+        <Text style={styles.welcomeSubtitle}>
+          {locale === "id"
+            ? isAgentMode ? "Apa yang ingin dikerjakan?" : "Apa yang ingin kamu tanyakan?"
+            : isAgentMode ? "What do you want to accomplish?" : "What do you want to ask?"}
+        </Text>
+      </View>
+      <View style={styles.suggestionRow}>
+        {SUGGESTIONS.slice(0, 2).map(s => (
+          <TouchableOpacity
+            key={s.id}
+            style={styles.suggestionChip}
+            onPress={() => handleSuggestion(s.label)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.suggestionChipText} numberOfLines={2}>{s.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.suggestionRow}>
+        {SUGGESTIONS.slice(2, 4).map(s => (
+          <TouchableOpacity
+            key={s.id}
+            style={styles.suggestionChip}
+            onPress={() => handleSuggestion(s.label)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.suggestionChipText} numberOfLines={2}>{s.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -1039,7 +1102,14 @@ export function ChatPage({
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{title}</Text>
+        <TouchableOpacity
+          onPress={onToggleLeftPanel}
+          style={styles.settingsBtn}
+          hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+        >
+          <Ionicons name="menu-outline" size={20} color="#8a8780" />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { marginLeft: 8 }]}>{title}</Text>
         <View style={styles.headerRight}>
           {isAgentMode && (
             <View style={[
@@ -1051,6 +1121,22 @@ export function ChatPage({
                 {e2bStatus === "connected" ? "● E2B" : e2bStatus === "error" ? "✕ E2B" : "… E2B"}
               </Text>
             </View>
+          )}
+          {onOpenTools && (
+            <TouchableOpacity
+              onPress={onOpenTools}
+              style={[styles.settingsBtn, activeToolsCount > 0 && styles.toolsBtnActive]}
+              hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+            >
+              <View>
+                <Ionicons name="terminal-outline" size={18} color={activeToolsCount > 0 ? "#6C5CE7" : "#8a8780"} />
+                {toolsCount > 0 && (
+                  <View style={styles.toolsBadge}>
+                    <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
           )}
           <TouchableOpacity
             onPress={() => onAgentModeChange?.(!isAgentMode)}
@@ -1298,7 +1384,8 @@ export function ChatPage({
             />
           );
         }}
-        contentContainerStyle={styles.messageList}
+        contentContainerStyle={[styles.messageList, messages.length === 0 && styles.messageListEmpty]}
+        ListEmptyComponent={WelcomeScreen}
         ListFooterComponent={
           taskCompleted && !thinking.active ? (
             <View style={styles.taskCompletedWrap}>
@@ -1667,6 +1754,27 @@ const styles = StyleSheet.create({
     color: "#8a8780",
     fontStyle: "italic",
   },
+  taskCompletedWrap: {
+    marginHorizontal: 12,
+    marginVertical: 4,
+  },
+  taskCompletedSteps: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  taskCompletedStepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  taskCompletedStepText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#4a4740",
+    flex: 1,
+    lineHeight: 17,
+  },
   taskCompletedBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1695,5 +1803,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#16a34a",
     letterSpacing: -0.2,
+  },
+  messageListEmpty: {
+    flex: 1,
+  },
+  welcomeContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    gap: 20,
+  },
+  welcomeContent: {
+    gap: 6,
+  },
+  welcomeGreeting: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 28,
+    color: "#1a1916",
+    letterSpacing: -0.5,
+    lineHeight: 34,
+  },
+  welcomeSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 16,
+    color: "#8a8780",
+    lineHeight: 22,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  suggestionChip: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#ddd9d0",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  suggestionChipText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#4a4740",
+    lineHeight: 18,
+  },
+  toolsBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#6C5CE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toolsBadgeText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  toolsBtnActive: {
+    backgroundColor: "rgba(108,92,231,0.1)",
   },
 });
