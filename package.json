@@ -7,7 +7,8 @@
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
-    "check": "tsc"
+    "check": "tsc",
+    "test": "vitest run"
   },
   "dependencies": {
     "@e2b/desktop": "^2.2.2",
@@ -48,6 +49,8 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/multer": "^2.1.0",
     "@types/nodemailer": "^7.0.11",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -98,10 +101,12 @@
     "react-native-web": "^0.21.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
+    "supertest": "^7.2.2",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "tw-animate-css": "^1.2.5",
     "vaul": "^1.1.2",
+    "vitest": "^4.1.2",
     "wouter": "^3.3.5",
     "ws": "^8.20.0",
     "zod": "^3.24.2",

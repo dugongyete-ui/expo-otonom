@@ -14,6 +14,13 @@ Architecture (matching ai-manus pattern):
   - VNC stream URL exposed for frontend to connect
   - Browser runs visibly on the desktop (DISPLAY is set)
   - All tools operate on the same environment
+
+SDK API (e2b-desktop ^2.3.0) — all options use snake_case:
+  Sandbox.create(api_key=..., timeout=<seconds>, resolution=(w, h))
+  sandbox.commands.run(cmd, timeout=<seconds>)  -> result.exit_code (not exitCode)
+  sandbox.stream.start(require_auth=False)       # not requireAuth
+  sandbox.stream.get_url(auto_connect=True, view_only=False, resize="scale")
+  Sandbox.connect(sandbox_id, api_key=...)
 """
 import os
 import json
@@ -547,24 +554,25 @@ def _create_sandbox() -> Optional[Any]:
             sb = Sandbox.create(api_key=api_key, timeout=3600, resolution=(1280, 720))
             logger.info("[E2B-Desktop] Desktop sandbox ready (id=%s). Setting up workspace...", sb.sandbox_id)
 
-            # Start VNC streaming so the desktop is accessible
+            # Start VNC streaming so the desktop is accessible.
+            # Failures are logged as errors and propagated to _vnc_stream_url = None
+            # so callers can detect that VNC is unavailable (no silent success assumed).
+            _vnc_stream_url = None
             try:
                 sb.stream.start(require_auth=False)
                 logger.info("[E2B-Desktop] VNC stream started successfully.")
+                try:
+                    vnc_url = sb.stream.get_url(
+                        auto_connect=True,
+                        view_only=False,
+                        resize="scale",
+                    )
+                    _vnc_stream_url = vnc_url
+                    logger.info("[E2B-Desktop] VNC stream URL: %s", vnc_url)
+                except Exception as vnc_err:
+                    logger.error("[E2B-Desktop] stream.get_url() failed — VNC unavailable: %s", vnc_err)
             except Exception as stream_start_err:
-                logger.warning("[E2B-Desktop] stream.start() failed: %s", stream_start_err)
-
-            try:
-                vnc_url = sb.stream.get_url(
-                    auto_connect=True,
-                    view_only=False,
-                    resize="scale",
-                )
-                _vnc_stream_url = vnc_url
-                logger.info("[E2B-Desktop] VNC stream URL: %s", vnc_url)
-            except Exception as vnc_err:
-                logger.warning("[E2B-Desktop] Failed to get VNC stream URL: %s", vnc_err)
-                _vnc_stream_url = None
+                logger.error("[E2B-Desktop] stream.start() failed — VNC unavailable: %s", stream_start_err)
 
             # Detect actual home directory before creating workspace dirs
             home_dir = _detect_sandbox_home(sb)

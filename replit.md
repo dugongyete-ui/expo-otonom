@@ -185,6 +185,17 @@ Replit only accepts HTTPS on external ports — plain HTTP (port 3002) is reject
 - `redis>=5.0.0` — Redis async
 - `tavily-python>=0.5.0`, `beautifulsoup4>=4.12.0`, `lxml>=4.9.0`
 
+## Testing
+### Python
+- `pytest server/agent/tests/ -v` — runs 38 unit tests for `e2b_sandbox.py` (no E2B API key needed)
+- Tests cover: `_is_sandbox_alive`, `_detect_sandbox_home`, `run_command`, file read/write, VNC stream params, `get_sandbox` deduplication, `_create_sandbox` retry logic, file cache, `_connect_existing_sandbox`, `get_session_workspace`
+- All tests use `unittest.mock` — no live sandbox required
+
+### TypeScript
+- `npx vitest run` — runs 19 unit tests for `e2b-desktop.ts` (no E2B API key needed)
+- Tests cover: SDK API method signatures (camelCase names), `execInSandbox` result mapping, `bootstrapDesktop` VNC stream params, `destroySession` cleanup, retry behavior
+- Config: `vitest.config.ts`
+
 ## Dependencies
 All packages tracked in `package.json`. Key:
 - `@e2b/desktop` — E2B sandbox SDK
@@ -192,3 +203,4 @@ All packages tracked in `package.json`. Key:
 - `ioredis`, `mongodb` — Database clients
 - `ws` — WebSocket server (VNC proxy)
 - `multer` — File upload handling
+- `vitest` (dev) — TypeScript unit test runner

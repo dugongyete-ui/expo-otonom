@@ -8,6 +8,13 @@
  *   3. @e2b/desktop SDK handles VNC streaming, screenshots, mouse/keyboard
  *   4. Client connects via noVNC (HTML5 Canvas) over WSS
  *
+ * SDK API (@e2b/desktop ^2.2.2) — all options use camelCase:
+ *   Sandbox.create({ apiKey, resolution: [w, h], dpi, timeoutMs })  // timeout in ms
+ *   sandbox.commands.run(cmd, { timeoutMs })                         // result.exitCode
+ *   sandbox.stream.start({ requireAuth: false })
+ *   sandbox.stream.getUrl({ autoConnect, viewOnly, resize })
+ *   Sandbox.connect(sandboxId, { apiKey })
+ *
  * Endpoints:
  *   POST   /api/e2b/sessions          - Create a new desktop sandbox session
  *   GET    /api/e2b/sessions           - List active sessions
