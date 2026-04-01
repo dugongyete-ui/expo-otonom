@@ -192,6 +192,7 @@ export interface AgentRequest {
   attachments?: any[];
   session_id?: string;
   is_continuation?: boolean;
+  mode?: string;
 }
 
 export interface AgentCallbacks {
@@ -255,14 +256,14 @@ class ApiService {
     const processSSELine = (line: string): boolean => {
       const trimmed = line.trim();
       if (!trimmed || !trimmed.startsWith("data: ")) return false;
-      const data = trimmed.slice(6);
+      const data = trimmed.slice(6).trim();
       if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
       try {
         const event: AgentEvent = JSON.parse(data);
         if (event.type === "message_end") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
         onMessage?.(event);
       } catch (e) {
-        console.error("Failed to parse SSE event:", e);
+        console.error("Failed to parse SSE event:", e, "raw data:", data);
       }
       return false;
     };
@@ -271,8 +272,17 @@ class ApiService {
       if (isClosed) return;
       buffer += chunk;
       const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) { if (processSSELine(line)) return; }
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (processSSELine(line)) return;
+      }
+    };
+
+    const flushBuffer = () => {
+      if (buffer.trim()) {
+        processSSELine(buffer);
+        buffer = "";
+      }
     };
 
     const cancel = streamWithXHR(
@@ -280,7 +290,7 @@ class ApiService {
       processChunk,
       () => {
         if (isClosed) return;
-        if (buffer.trim()) processSSELine(buffer);
+        flushBuffer();
         if (!isClosed) { isClosed = true; onDone?.(); }
       },
       (err) => {
@@ -297,14 +307,16 @@ class ApiService {
   ): () => void {
     const { onMessage, onError, onDone } = callbacks;
     const url = `${this.baseUrl}/api/agent`;
-    const body = JSON.stringify({
+    const bodyObj: Record<string, any> = {
       message: request.message,
       messages: request.messages || [],
       model: request.model || "qwen-3-235b-a22b-instruct-2507",
       attachments: request.attachments || [],
       session_id: request.session_id,
       is_continuation: request.is_continuation || false,
-    });
+    };
+    if (request.mode) bodyObj.mode = request.mode;
+    const body = JSON.stringify(bodyObj);
     const hdrs = authHeaders();
     let isClosed = false;
     let buffer = "";
@@ -314,14 +326,14 @@ class ApiService {
       const trimmed = line.trim();
       if (trimmed.startsWith("id: ")) { lastSeenId = trimmed.slice(4).trim(); return false; }
       if (!trimmed || !trimmed.startsWith("data: ")) return false;
-      const data = trimmed.slice(6);
+      const data = trimmed.slice(6).trim();
       if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
       try {
         const event: AgentEvent = JSON.parse(data);
         if (lastSeenId) event._streamId = lastSeenId;
         onMessage?.(event);
       } catch (e) {
-        console.error("Failed to parse SSE event:", e);
+        console.error("Failed to parse SSE event:", e, "raw data:", data);
       }
       return false;
     };
@@ -330,8 +342,17 @@ class ApiService {
       if (isClosed) return;
       buffer += chunk;
       const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) { if (processAgentLine(line)) return; }
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (processAgentLine(line)) return;
+      }
+    };
+
+    const flushBuffer = () => {
+      if (buffer.trim()) {
+        processAgentLine(buffer);
+        buffer = "";
+      }
     };
 
     const cancel = streamWithXHR(
@@ -339,7 +360,7 @@ class ApiService {
       processChunk,
       () => {
         if (isClosed) return;
-        if (buffer.trim()) processAgentLine(buffer);
+        flushBuffer();
         if (!isClosed) { isClosed = true; onDone?.(); }
       },
       (err) => {
@@ -371,7 +392,7 @@ class ApiService {
       const trimmed = line.trim();
       if (trimmed.startsWith("id: ")) { lastSeenId = trimmed.slice(4).trim(); return false; }
       if (!trimmed || !trimmed.startsWith("data: ")) return false;
-      const data = trimmed.slice(6);
+      const data = trimmed.slice(6).trim();
       if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
       try {
         const event: AgentEvent = JSON.parse(data);
@@ -385,8 +406,17 @@ class ApiService {
       if (isClosed) return;
       buffer += chunk;
       const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) { if (processLine(line)) return; }
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (processLine(line)) return;
+      }
+    };
+
+    const flushBuffer = () => {
+      if (buffer.trim()) {
+        processLine(buffer);
+        buffer = "";
+      }
     };
 
     const cancel = streamGetWithXHR(
@@ -394,7 +424,7 @@ class ApiService {
       processChunk,
       () => {
         if (isClosed) return;
-        if (buffer.trim()) processLine(buffer);
+        flushBuffer();
         if (!isClosed) { isClosed = true; onDone?.(); }
       },
       (err) => {

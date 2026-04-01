@@ -950,15 +950,21 @@ export function ChatPage({
           role: m.role === "ask" ? "assistant" as const : m.role,
           content: m.content,
         }));
-        historyMsgs.push({ role: "user" as const, content: msgText });
 
-        cancelRef.current = apiService.chat(
-          { messages: historyMsgs },
+        cancelRef.current = apiService.agent(
+          {
+            message: msgText,
+            messages: historyMsgs,
+            model: activeModel,
+            attachments: [],
+            session_id: activeSessionIdRef.current,
+            mode: "chat",
+          },
           {
             onMessage: handleEvent,
             onError: (err) => handleEvent({ type: "error", error: err.message }),
             onDone: () => {
-              handleEvent({ type: "message_end" });
+              handleEvent({ type: "done" });
               setIsLoading(false);
               cancelRef.current = null;
             },
