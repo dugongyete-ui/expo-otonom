@@ -315,28 +315,34 @@ function proxyToMetro(req: Request, res: Response) {
 }
 
 /**
- * Poll Metro's /__metro/ping endpoint until it responds 200 or the deadline passes.
- * Returns true if Metro is ready, false if timed out.
+ * Poll Metro's health endpoints until one responds 200 or the deadline passes.
+ * Tries /__metro/ping first (fastest, no bundle compilation), then falls back
+ * to /status. Returns true if Metro is ready, false if timed out.
  */
 async function waitForMetroReady(metroPort: number, waitMs: number = 60_000): Promise<boolean> {
   const deadline = Date.now() + waitMs;
   const pollInterval = 1500;
+  const startTime = Date.now();
 
   while (Date.now() < deadline) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 2000);
-      const pingRes = await fetch(`http://localhost:${metroPort}/__metro/ping`, {
-        signal: ctrl.signal,
-      }).finally(() => clearTimeout(t));
-      if (pingRes.ok) {
-        return true;
+    for (const endpoint of [`http://localhost:${metroPort}/__metro/ping`, `http://localhost:${metroPort}/status`]) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2000);
+        const pingRes = await fetch(endpoint, {
+          signal: ctrl.signal,
+        }).finally(() => clearTimeout(t));
+        if (pingRes.ok) {
+          log(`[Expo] Metro is ready after ${Date.now() - startTime}ms (endpoint: ${endpoint})`);
+          return true;
+        }
+      } catch {
+        // Metro not up yet — keep polling
       }
-    } catch {
-      // Metro not up yet — keep polling
     }
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
+  log(`[Expo] Metro did not become ready within ${waitMs}ms`);
   return false;
 }
 
@@ -596,8 +602,10 @@ function configureExpoAndLanding(app: express.Application) {
       req.path.startsWith("/__debugger") ||
       req.path.startsWith("/debugger-ui") ||
       req.path.startsWith("/hot") ||
+      req.path.startsWith("/inspect") ||
       req.path === "/reload" ||
       req.path === "/symbolicate" ||
+      req.path === "/status" ||
       (req.path.startsWith("/assets/") && req.query["platform"] !== undefined) ||
       req.query["bundleType"] !== undefined;
 
