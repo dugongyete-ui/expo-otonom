@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -3,
     right: -3,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#4a4a4a",
     borderRadius: 7,
     width: 14,
     height: 14,

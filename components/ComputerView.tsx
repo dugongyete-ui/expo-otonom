@@ -13,7 +13,7 @@ import {
   Image,
 } from "react-native";
 import { WebView } from "react-native-webview";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon, CloseIcon } from "@/components/icons/SvgIcon";
 import { getApiUrl } from "@/lib/query-client";
 import type { AgentPlan } from "@/lib/chat";
 

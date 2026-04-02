@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   },
   switchTabActive: {
     borderTopWidth: 2,
-    borderTopColor: "#4a7cf0",
+    borderTopColor: "#555555",
   },
   switchTabText: {
     fontSize: 11,
