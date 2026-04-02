@@ -62,7 +62,7 @@ const dotStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#1a1916",
+    backgroundColor: "#9ca3af",
   },
 });
 
@@ -80,7 +80,7 @@ export function AgentThinking({ thinking }: AgentThinkingProps) {
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <View style={styles.iconContainer}>
-        <Ionicons name="bulb-outline" size={12} color="#4a4740" />
+        <Ionicons name="bulb-outline" size={12} color="#2563eb" />
       </View>
       <Text style={styles.text} numberOfLines={3}>
         {thinking}
@@ -114,24 +114,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#111827",
+    backgroundColor: "#f9fafb",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginVertical: 2,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.04,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 1,
   },
   iconContainer: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#1f2937",
+    backgroundColor: "rgba(37,99,235,0.1)",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#d1d5db",
+    color: "#6b7280",
     lineHeight: 18,
   },
   workingRow: {
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   workingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#d1d5db",
+    color: "#6b7280",
     fontStyle: "italic",
   },
 });

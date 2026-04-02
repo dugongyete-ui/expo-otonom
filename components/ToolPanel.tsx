@@ -42,7 +42,7 @@ function getToolColor(name: string): string {
 
 function getStatusColor(status: ToolItem["status"]): string {
   switch (status) {
-    case "calling": return "#6C5CE7";
+    case "calling": return "#2563eb";
     case "called": return "#30D158";
     case "error": return "#FF453A";
   }
@@ -92,7 +92,7 @@ export function ToolPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="terminal-outline" size={14} color="#6C5CE7" />
+          <Ionicons name="terminal-outline" size={14} color="#2563eb" />
           <Text style={styles.headerTitle}>Tools</Text>
           {tools.length > 0 && (
             <View style={styles.badge}>
@@ -153,7 +153,7 @@ export function ToolPanel({
                   </Text>
                   <View style={styles.toolStatusRow}>
                     {tool.status === "calling" && (
-                      <ActivityIndicator size="small" color="#6C5CE7" style={styles.spinner} />
+                      <ActivityIndicator size="small" color="#2563eb" style={styles.spinner} />
                     )}
                     <Text style={[styles.toolStatus, { color: getStatusColor(tool.status) }]}>
                       {getStatusLabel(tool.status)}

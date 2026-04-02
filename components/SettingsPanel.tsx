@@ -320,7 +320,7 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
 
         {isLoading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color="#6C5CE7" />
+            <ActivityIndicator size="large" color="#2563eb" />
             <Text style={styles.loadingText}>Loading settings...</Text>
           </View>
         ) : (
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4, marginRight: 12 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: "#FFFFFF" },
-  saveBtn: { backgroundColor: "#6C5CE7", paddingVertical: 7, paddingHorizontal: 16, borderRadius: 8 },
+  saveBtn: { backgroundColor: "#2563eb", paddingVertical: 7, paddingHorizontal: 16, borderRadius: 8 },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
   errorBanner: {
@@ -399,9 +399,9 @@ const styles = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 12,
     backgroundColor: "#1A1A20", borderWidth: 1, borderColor: "#2C2C30", borderRadius: 8,
   },
-  optionChipActive: { backgroundColor: "rgba(108,92,231,0.15)", borderColor: "#6C5CE7" },
+  optionChipActive: { backgroundColor: "rgba(37,99,235,0.1)", borderColor: "#2563eb" },
   optionChipText: { color: "#636366", fontSize: 12, fontWeight: "500" },
-  optionChipTextActive: { color: "#6C5CE7", fontWeight: "600" },
+  optionChipTextActive: { color: "#2563eb", fontWeight: "600" },
   statusRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#1A1A20",

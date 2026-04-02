@@ -17,6 +17,7 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { CodeBlock } from "@/components/CodeBlock";
 import { MarkdownText } from "@/components/MarkdownText";
@@ -67,6 +68,7 @@ export function FilePanel({
   onClose,
   onFileSelect,
 }: FilePanelProps) {
+  const insets = useSafeAreaInsets();
   const [files, setFiles] = useState<SessionFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -284,7 +286,11 @@ export function FilePanel({
         </View>
       </View>
 
-      <ScrollView style={styles.fileList} showsVerticalScrollIndicator>
+      <ScrollView
+        style={styles.fileList}
+        showsVerticalScrollIndicator
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
+      >
         {loading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator size="small" color="#FFD60A" />
@@ -347,9 +353,9 @@ export function FilePanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderLeftWidth: 1,
-    borderLeftColor: "#1f2937",
+    borderLeftColor: "#e5e7eb",
   },
   header: {
     flexDirection: "row",
@@ -358,7 +364,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e5e7eb",
   },
   headerLeft: {
     flexDirection: "row",
@@ -368,7 +374,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#f3f4f6",
+    color: "#111827",
   },
   headerRight: {
     flexDirection: "row",
@@ -409,12 +415,12 @@ const styles = StyleSheet.create({
   fileName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#f3f4f6",
+    color: "#111827",
   },
   fileSize: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   eyeIcon: {
     marginHorizontal: 2,
@@ -425,7 +431,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
   },
   downloadBtnSmall: {
     width: 24,
@@ -433,7 +439,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
   },
   loadingState: {
     alignItems: "center",
@@ -443,7 +449,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   errorState: {
     alignItems: "center",
@@ -465,7 +471,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   backBtn: {
     flexDirection: "row",
@@ -477,7 +483,7 @@ const styles = StyleSheet.create({
   backBtnText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#636366",
+    color: "#6b7280",
   },
   previewHeaderCenter: {
     flex: 1,
@@ -487,7 +493,7 @@ const styles = StyleSheet.create({
   previewFileName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#f3f4f6",
+    color: "#111827",
   },
   previewArea: {
     flex: 1,
@@ -496,7 +502,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     padding: 12,
     alignItems: "center",
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   previewImage: {
     width: "100%",
@@ -508,16 +514,16 @@ const styles = StyleSheet.create({
   },
   markdownPreviewContainer: {
     padding: 16,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   textPreviewContainer: {
     padding: 16,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   previewText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#f3f4f6",
+    color: "#111827",
     lineHeight: 22,
   },
 });

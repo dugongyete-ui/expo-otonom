@@ -10,6 +10,7 @@ import {
   Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiService, getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { t } from "@/lib/i18n";
 
@@ -28,6 +29,7 @@ interface LeftPanelProps {
 }
 
 export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
+  const insets = useSafeAreaInsets();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -185,7 +187,11 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
           <ActivityIndicator size="small" color="#8a8780" />
         </View>
       ) : sessions.length > 0 ? (
-        <ScrollView style={styles.sessionsList} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.sessionsList}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
+        >
           {sessions.map((session) => (
             <SessionItem
               key={session.session_id}
@@ -341,7 +347,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -3,
     right: -3,
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#2563eb",
     borderRadius: 7,
     width: 14,
     height: 14,

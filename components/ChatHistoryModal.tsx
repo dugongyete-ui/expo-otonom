@@ -45,7 +45,7 @@ function SessionItem({
         <Ionicons
           name={session.mode === "agent" ? "rocket" : "chatbubble"}
           size={14}
-          color={session.mode === "agent" ? "#6C5CE7" : "#5AC8FA"}
+          color={session.mode === "agent" ? "#2563eb" : "#5AC8FA"}
         />
       </View>
       <View style={styles.sessionContent}>
@@ -240,7 +240,7 @@ export function ChatHistoryModal({
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color="#6C5CE7" />
+            <ActivityIndicator color="#2563eb" />
           </View>
         ) : sessions.length === 0 ? (
           <View style={styles.emptyState}>
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     color: "#5AC8FA",
   },
   modeBadgeTextAgent: {
-    color: "#6C5CE7",
+    color: "#2563eb",
   },
   sessionTime: {
     fontFamily: "Inter_400Regular",

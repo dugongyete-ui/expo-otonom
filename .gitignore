@@ -17,3 +17,6 @@ expo-env.d.ts
 .replit
 .replit.nix
 .local/
+
+# Expo web cache build artifacts
+.expo/web/cache/

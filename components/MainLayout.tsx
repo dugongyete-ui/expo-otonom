@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   Platform,
-  SafeAreaView,
   TouchableOpacity,
   Modal,
   useWindowDimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LeftPanel } from "./LeftPanel";
 import { ChatPage } from "./ChatPage";
 import { ToolPanel } from "./ToolPanel";
@@ -141,7 +141,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const totalToolsCount = tools.length;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right", "bottom"]}>
       <View
         style={[
           styles.mainContainer,
@@ -266,7 +266,10 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
           presentationStyle="pageSheet"
           onRequestClose={handleCloseToolsModal}
         >
-          <SafeAreaView style={styles.toolsModalContainer}>
+          <View style={[styles.toolsModalContainer, {
+            paddingTop: Platform.OS === "android" ? insets.top : 0,
+            paddingBottom: insets.bottom,
+          }]}>
             <View style={styles.toolsModalHeader}>
               <View style={styles.toolsModalTabs}>
                 <TouchableOpacity
@@ -332,7 +335,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 />
               )}
             </View>
-          </SafeAreaView>
+          </View>
         </Modal>
       )}
 

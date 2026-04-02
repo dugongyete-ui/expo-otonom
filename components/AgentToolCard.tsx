@@ -10,6 +10,7 @@ import {
   Platform,
   UIManager,
   Image,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { AgentEvent, ToolContent } from "@/lib/chat";
@@ -68,11 +69,16 @@ function SearchContent({ query, results }: { query?: string; results?: { title: 
       {results && results.length > 0 ? (
         <ScrollView style={styles.searchResults} showsVerticalScrollIndicator={false}>
           {results.slice(0, 5).map((r, i) => (
-            <View key={i} style={styles.searchResultItem}>
+            <TouchableOpacity
+              key={i}
+              style={styles.searchResultItem}
+              onPress={() => r.url && Linking.openURL(r.url)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.searchResultTitle} numberOfLines={1}>{r.title}</Text>
               <Text style={styles.searchResultUrl} numberOfLines={1}>{r.url}</Text>
               {r.snippet ? <Text style={styles.searchResultSnippet} numberOfLines={2}>{r.snippet}</Text> : null}
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       ) : null}
@@ -95,21 +101,29 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
   return (
     <View style={styles.browserBody}>
       {url ? (
-        <View style={styles.browserUrlBar}>
+        <TouchableOpacity
+          style={styles.browserUrlBar}
+          onPress={() => Linking.openURL(url)}
+          activeOpacity={0.7}
+        >
           <Ionicons name="lock-closed" size={10} color="#34C759" />
-          <Text style={styles.browserUrl} numberOfLines={1}>{url}</Text>
-        </View>
+          <Text style={[styles.browserUrl, { textDecorationLine: "underline" }]} numberOfLines={1}>{url}</Text>
+        </TouchableOpacity>
       ) : null}
       {title ? <Text style={styles.browserTitle} numberOfLines={1}>{title}</Text> : null}
       {validScreenshot && !imgError ? (
-        <View style={styles.screenshotWrapper}>
+        <TouchableOpacity
+          style={styles.screenshotWrapper}
+          onPress={() => url && Linking.openURL(url)}
+          activeOpacity={url ? 0.8 : 1}
+        >
           <Image
             source={{ uri: normalizedShot }}
             style={styles.screenshotImage}
             resizeMode="cover"
             onError={() => setImgError(true)}
           />
-        </View>
+        </TouchableOpacity>
       ) : content ? (
         <ScrollView style={styles.browserContent} showsVerticalScrollIndicator={false}>
           <Text style={styles.browserContentText} numberOfLines={10}>{content.slice(0, 1200)}</Text>
@@ -381,7 +395,7 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
                 <Ionicons
                   name={expanded ? "chevron-up" : "chevron-down"}
                   size={12}
-                  color="#ccc8be"
+                  color="#9ca3af"
                   style={{ marginLeft: 4 }}
                 />
               )}
@@ -420,9 +434,9 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     borderRadius: 10,
-    backgroundColor: "transparent",
+    backgroundColor: "#f9fafb",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     overflow: "hidden",
   },
   cardError: {
@@ -476,13 +490,13 @@ const styles = StyleSheet.create({
   labelText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#f3f4f6",
+    color: "#111827",
     lineHeight: 16,
   },
   argText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#6b7280",
     lineHeight: 15,
   },
   rightArea: {
@@ -499,8 +513,8 @@ const styles = StyleSheet.create({
   shellBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
-    backgroundColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "#111827",
   },
   shellCommand: {
     flexDirection: "row",
@@ -512,7 +526,7 @@ const styles = StyleSheet.create({
   shellPrompt: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#16a34a",
+    color: "#4ade80",
   },
   shellCommandText: {
     flex: 1,
@@ -529,21 +543,21 @@ const styles = StyleSheet.create({
   shellOutputText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#d1d5db",
+    color: "#d1fae5",
     lineHeight: 17,
   },
   // Search
   searchBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
     padding: 10,
     gap: 6,
   },
   searchQuery: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#5AC8FA",
+    color: "#2563eb",
   },
   searchResults: {
     maxHeight: 200,
@@ -551,24 +565,24 @@ const styles = StyleSheet.create({
   searchResultItem: {
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#ece9e1",
+    borderBottomColor: "#e5e7eb",
     gap: 2,
   },
   searchResultTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#f3f4f6",
+    color: "#111827",
     lineHeight: 17,
   },
   searchResultUrl: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#2563eb",
   },
   searchResultSnippet: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#d1d5db",
+    color: "#6b7280",
     lineHeight: 16,
     marginTop: 2,
   },
@@ -576,7 +590,7 @@ const styles = StyleSheet.create({
   browserBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
     padding: 10,
     gap: 6,
   },
@@ -584,21 +598,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 5,
     paddingHorizontal: 7,
     paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   browserUrl: {
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   browserTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#d97706",
+    color: "#111827",
     lineHeight: 17,
   },
   browserContent: {
@@ -607,15 +623,15 @@ const styles = StyleSheet.create({
   browserContentText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#d1d5db",
+    color: "#374151",
     lineHeight: 16,
   },
   screenshotWrapper: {
     borderRadius: 6,
     overflow: "hidden",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
   },
   screenshotImage: {
     width: "100%",
@@ -625,7 +641,7 @@ const styles = StyleSheet.create({
   fileBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
     overflow: "hidden",
   },
   fileHeader: {
@@ -634,9 +650,9 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f9fafb",
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e5e7eb",
   },
   fileName: {
     flex: 1,
@@ -653,6 +669,7 @@ const styles = StyleSheet.create({
   fileContent: {
     maxHeight: 160,
     padding: 10,
+    backgroundColor: "#1f2937",
   },
   fileContentText: {
     fontFamily: "monospace",
@@ -663,7 +680,7 @@ const styles = StyleSheet.create({
   todoBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
     padding: 10,
     gap: 6,
   },
@@ -676,18 +693,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#374151",
     lineHeight: 17,
   },
   todoChecked: {
     textDecorationLine: "line-through",
-    color: "#374151",
+    color: "#9ca3af",
   },
   // MCP
   mcpBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
     padding: 10,
     gap: 6,
   },
@@ -729,7 +746,7 @@ const styles = StyleSheet.create({
   messageBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#e5e7eb",
     padding: 10,
     gap: 6,
   },
@@ -746,7 +763,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#374151",
     lineHeight: 18,
   },
 });

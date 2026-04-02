@@ -99,7 +99,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   if (authMode === null) {
     return (
       <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator size="large" color="#6C5CE7" />
+        <ActivityIndicator size="large" color="#2563eb" />
       </View>
     );
   }
@@ -111,7 +111,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.logoContainer}>
-          <Ionicons name="sparkles" size={48} color="#6C5CE7" />
+          <Ionicons name="sparkles" size={48} color="#2563eb" />
           <Text style={styles.logoTitle}>Dzeck AI</Text>
           <Text style={styles.logoSubtitle}>AUTONOMOUS AI AGENT</Text>
         </View>
@@ -389,11 +389,11 @@ const styles = StyleSheet.create({
     marginTop: -8,
   },
   forgotLinkText: {
-    color: "#6C5CE7",
+    color: "#2563eb",
     fontSize: 13,
   },
   button: {
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#2563eb",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   switchLinkBold: {
-    color: "#6C5CE7",
+    color: "#2563eb",
     fontWeight: "600",
   },
 });

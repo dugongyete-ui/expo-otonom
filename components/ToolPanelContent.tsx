@@ -759,7 +759,7 @@ function TaskToolView({
                   }]}>
                     <Text style={[styles.taskStatusText, {
                       color: task.status === "completed" ? "#34C759" :
-                        task.status === "running" ? "#6C5CE7" : "#636366"
+                        task.status === "running" ? "#2563eb" : "#636366"
                     }]}>
                       {task.status}
                     </Text>
@@ -907,7 +907,7 @@ function FallbackToolView({
       <ScrollView style={styles.mcpResultScroll} showsVerticalScrollIndicator>
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#6C5CE7" />
+            <ActivityIndicator size="small" color="#2563eb" />
             <Text style={styles.runningLabel}>Processing...</Text>
           </View>
         ) : functionResult ? (
@@ -1074,7 +1074,7 @@ export function ToolPanelContent({
         }]}>
           <Text style={[styles.statusText, {
             color:
-              status === "calling" ? "#6C5CE7" :
+              status === "calling" ? "#2563eb" :
               status === "error" ? "#FF453A" :
               "#34C759"
           }]}>

@@ -363,7 +363,7 @@ export function AgentToolView({
         </View>
         <View style={styles.headerRight}>
           {isCalling && (
-            <Ionicons name="sync" size={12} color="#6C5CE7" />
+            <Ionicons name="sync" size={12} color="#2563eb" />
           )}
           {isCalled && (
             <Ionicons name="checkmark-circle" size={14} color="#30D158" />
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
   langBadgeText: {
     fontFamily: "monospace",
     fontSize: 9,
-    color: "#6C5CE7",
+    color: "#2563eb",
     textTransform: "uppercase",
   },
   codeLine: {

@@ -235,7 +235,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
           </Pressable>
           <Text style={styles.headerTitle}>MCP Servers</Text>
           <Pressable onPress={openAddForm} style={styles.addBtn}>
-            <Ionicons name="add" size={22} color="#6C5CE7" />
+            <Ionicons name="add" size={22} color="#2563eb" />
           </Pressable>
         </View>
 
@@ -283,7 +283,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
               <Switch
                 value={form.enabled}
                 onValueChange={(v) => setForm((f) => ({ ...f, enabled: v }))}
-                trackColor={{ false: "#2C2C30", true: "#6C5CE7" }}
+                trackColor={{ false: "#2C2C30", true: "#2563eb" }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -301,7 +301,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
           <ScrollView contentContainerStyle={styles.listContainer}>
             {isLoading ? (
               <View style={styles.loadingState}>
-                <ActivityIndicator size="large" color="#6C5CE7" />
+                <ActivityIndicator size="large" color="#2563eb" />
                 <Text style={styles.loadingText}>Loading MCP servers...</Text>
               </View>
             ) : servers.length === 0 ? (
@@ -328,7 +328,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
                     <Switch
                       value={server.enabled}
                       onValueChange={() => handleToggleEnabled(server)}
-                      trackColor={{ false: "#2C2C30", true: "#6C5CE7" }}
+                      trackColor={{ false: "#2C2C30", true: "#2563eb" }}
                       thumbColor="#FFFFFF"
                       style={{ transform: [{ scale: 0.8 }] }}
                     />
@@ -381,15 +381,15 @@ const styles = StyleSheet.create({
   fieldLabel: { color: "#8E8E93", fontSize: 11, fontWeight: "600", marginBottom: 8, textTransform: "uppercase" },
   segmentRow: { flexDirection: "row", gap: 8 },
   segment: { flex: 1, paddingVertical: 8, backgroundColor: "#1A1A20", borderWidth: 1, borderColor: "#2C2C30", borderRadius: 8, alignItems: "center" },
-  segmentActive: { backgroundColor: "rgba(108,92,231,0.15)", borderColor: "#6C5CE7" },
+  segmentActive: { backgroundColor: "rgba(108,92,231,0.15)", borderColor: "#2563eb" },
   segmentText: { color: "#636366", fontSize: 12 },
-  segmentTextActive: { color: "#6C5CE7", fontWeight: "600" },
+  segmentTextActive: { color: "#2563eb", fontWeight: "600" },
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, marginBottom: 16 },
   switchLabel: { color: "#AEAEB2", fontSize: 14 },
   formActions: { flexDirection: "row", gap: 10, marginTop: 8 },
   cancelBtn: { flex: 1, paddingVertical: 12, borderWidth: 1, borderColor: "#2C2C30", borderRadius: 10, alignItems: "center" },
   cancelBtnText: { color: "#AEAEB2", fontSize: 14, fontWeight: "500" },
-  saveBtn: { flex: 2, paddingVertical: 12, backgroundColor: "#6C5CE7", borderRadius: 10, alignItems: "center" },
+  saveBtn: { flex: 2, paddingVertical: 12, backgroundColor: "#2563eb", borderRadius: 10, alignItems: "center" },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
   loadingState: { alignItems: "center", paddingVertical: 60, gap: 12 },
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", paddingVertical: 60, gap: 12 },
   emptyTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "600" },
   emptyText: { color: "#8E8E93", fontSize: 14, textAlign: "center", paddingHorizontal: 32, lineHeight: 20 },
-  emptyAddBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#6C5CE7", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, marginTop: 8 },
+  emptyAddBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#2563eb", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, marginTop: 8 },
   emptyAddBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
   serverCard: {
     backgroundColor: "#1A1A20", borderRadius: 12, padding: 14,
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
   serverName: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
   transportBadge: { backgroundColor: "#2C2C30", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   transportText: { color: "#636366", fontSize: 10, fontWeight: "600" },
-  serverUrl: { color: "#6C5CE7", fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", marginBottom: 4 },
+  serverUrl: { color: "#2563eb", fontSize: 12, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", marginBottom: 4 },
   serverDesc: { color: "#636366", fontSize: 12, lineHeight: 16, marginBottom: 8 },
   serverActions: { flexDirection: "row", gap: 8, marginTop: 8, borderTopWidth: 1, borderTopColor: "#2C2C30", paddingTop: 10 },
   actionBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderColor: "#2C2C30", borderRadius: 6 },

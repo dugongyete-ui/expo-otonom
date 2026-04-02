@@ -9,6 +9,7 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { e2bService } from "../lib/e2b-service";
 import type { E2BSession } from "../lib/e2b-service";
 import { VNCViewer } from "./VNCViewer";
@@ -40,6 +41,7 @@ export function BrowserPanel({
   agentVncSession,
   vncViewerActive = false,
 }: BrowserPanelProps) {
+  const insets = useSafeAreaInsets();
   const [isTakeOverActive, setIsTakeOverActive] = useState(false);
   const [useVNC, setUseVNC] = useState(false);
   const [vncConnected, setVncConnected] = useState(false);
@@ -52,6 +54,18 @@ export function BrowserPanel({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // refreshScreenshot must be declared before any useEffect that depends on it
+  const refreshScreenshot = useCallback(async (sid?: string) => {
+    const targetId = sid || sessionId;
+    if (!targetId) return;
+    try {
+      const uri = await e2bService.captureScreenshot(targetId);
+      setScreenshotUri(uri);
+    } catch {
+      // Screenshot may not be available yet
+    }
+  }, [sessionId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -67,7 +81,6 @@ export function BrowserPanel({
   useEffect(() => {
     const shouldSkipPolling = useVNC || vncViewerActive;
     if (sessionState === "ready" && sessionId && !shouldSkipPolling) {
-      console.log("[BrowserPanel] Starting screenshot polling (5s interval) for session:", sessionId);
       autoRefreshRef.current = setInterval(() => {
         refreshScreenshot();
       }, 5000);
@@ -82,20 +95,15 @@ export function BrowserPanel({
       clearInterval(autoRefreshRef.current);
       autoRefreshRef.current = null;
     }
-    if (shouldSkipPolling && sessionState === "ready" && sessionId) {
-      console.log("[BrowserPanel] Screenshot polling suppressed — VNCViewer is active (useVNC:", useVNC, "vncViewerActive:", vncViewerActive, ")");
-    }
   }, [sessionState, sessionId, useVNC, vncViewerActive, refreshScreenshot]);
 
   // Auto-connect to agent's sandbox when vnc_stream_url event is received
   useEffect(() => {
     if (agentVncSession && agentVncSession.e2bSessionId) {
-      // Agent has created a sandbox — connect to it directly
       setSessionId(agentVncSession.e2bSessionId);
       setSessionState("connecting");
       setStatusMsg("Menghubungkan ke sandbox agen...");
 
-      // Poll for readiness then transition to ready
       e2bService.waitForReady(
         agentVncSession.e2bSessionId,
         20,
@@ -104,22 +112,15 @@ export function BrowserPanel({
           setStatusMsg(`Menunggu desktop siap... (${attempt}/${max})`);
         },
       ).then((health) => {
-        if (health && health.ready) {
-          setSessionState("ready");
-          setStatusMsg("Desktop agen terhubung!");
-          refreshScreenshot(agentVncSession.e2bSessionId);
-        } else {
-          // Even if health check times out, if we have a session ID it may still work
-          setSessionState("ready");
-          setStatusMsg("Desktop agen aktif");
-          refreshScreenshot(agentVncSession.e2bSessionId);
-        }
+        setSessionState("ready");
+        setStatusMsg(health?.ready ? "Desktop agen terhubung!" : "Desktop agen aktif");
+        refreshScreenshot(agentVncSession.e2bSessionId);
       }).catch(() => {
         setSessionState("ready");
         setStatusMsg("Desktop agen aktif");
       });
     }
-  }, [agentVncSession]);
+  }, [agentVncSession, refreshScreenshot]);
 
   // Update screenshot from agent browser events
   useEffect(() => {
@@ -175,18 +176,7 @@ export function BrowserPanel({
       setSessionState("error");
       setErrorMsg(err instanceof Error ? err.message : "Gagal membuat session");
     }
-  }, []);
-
-  const refreshScreenshot = useCallback(async (sid?: string) => {
-    const targetId = sid || sessionId;
-    if (!targetId) return;
-    try {
-      const uri = await e2bService.captureScreenshot(targetId);
-      setScreenshotUri(uri);
-    } catch {
-      // Screenshot may not be available yet
-    }
-  }, [sessionId]);
+  }, [refreshScreenshot]);
 
   const destroyCurrentSession = useCallback(async () => {
     if (!sessionId) return;
@@ -203,18 +193,30 @@ export function BrowserPanel({
   }, [sessionId]);
 
   const openInBrowser = useCallback(() => {
-    if (!sessionId || Platform.OS !== "web") return;
-    const viewerUrl = `/e2b-viewer?session=${sessionId}&takeover=1`;
-    window.open(viewerUrl, "_blank");
+    if (!sessionId) return;
+    if (Platform.OS === "web") {
+      const viewerUrl = `/e2b-viewer?session=${sessionId}&takeover=1`;
+      window.open(viewerUrl, "_blank");
+    } else {
+      // Native: open screenshot in system browser or activate takeover
+      setIsTakeOverActive(true);
+      setUseVNC(true);
+    }
   }, [sessionId]);
 
   const handleTakeOver = useCallback(() => {
     const targetId = sessionId || agentSessionId;
     if (onTakeOver && targetId) {
+      setIsTakeOverActive(true);
+      setUseVNC(true);
       onTakeOver(targetId);
     } else if (targetId && Platform.OS === "web") {
       const viewerUrl = `/e2b-viewer?session=${targetId}&takeover=1`;
       window.open(viewerUrl, "_blank");
+    } else if (targetId) {
+      // Native: enable interactive VNC control directly in panel
+      setIsTakeOverActive(true);
+      setUseVNC(true);
     }
   }, [sessionId, agentSessionId, onTakeOver]);
 
@@ -230,7 +232,7 @@ export function BrowserPanel({
         onPress={onToggleVisible}
         activeOpacity={0.7}
       >
-        <Ionicons name="chevron-back" size={16} color="#636366" />
+        <Ionicons name="chevron-back" size={16} color="#6b7280" />
       </TouchableOpacity>
     );
   }
@@ -240,7 +242,7 @@ export function BrowserPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="desktop-outline" size={14} color="#6C5CE7" />
+          <Ionicons name="desktop-outline" size={14} color="#2563eb" />
           <Text style={styles.headerTitle}>Browser</Text>
           {sessionState === "ready" && (
             <View style={styles.liveBadge}>
@@ -254,7 +256,7 @@ export function BrowserPanel({
           onPress={onToggleVisible}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-forward" size={16} color="#636366" />
+          <Ionicons name="chevron-forward" size={16} color="#6b7280" />
         </TouchableOpacity>
       </View>
 
@@ -280,7 +282,7 @@ export function BrowserPanel({
 
         {(sessionState === "creating" || sessionState === "waiting" || sessionState === "connecting") && (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color="#6C5CE7" />
+            <ActivityIndicator size="large" color="#2563eb" />
             <Text style={styles.loadingText}>{statusMsg}</Text>
           </View>
         )}
@@ -302,14 +304,14 @@ export function BrowserPanel({
         )}
 
         {sessionState === "ready" && (
-          <View style={styles.readyState}>
+          <View style={[styles.readyState, { paddingBottom: Math.max(insets.bottom, 10) }]}>
             {/* VNC Live View or Screenshot */}
-            {useVNC && Platform.OS === "web" && sessionId ? (
+            {useVNC && sessionId ? (
               <View style={styles.vncContainer}>
                 <VNCViewer
                   sessionId={sessionId}
                   enabled={useVNC}
-                  viewOnly={true}
+                  viewOnly={!isTakeOverActive}
                   onConnected={() => setVncConnected(true)}
                   onDisconnected={() => setVncConnected(false)}
                 />
@@ -332,7 +334,7 @@ export function BrowserPanel({
               </TouchableOpacity>
             ) : (
               <View style={styles.noScreenshot}>
-                <ActivityIndicator size="small" color="#6C5CE7" />
+                <ActivityIndicator size="small" color="#2563eb" />
                 <Text style={styles.noScreenshotText}>Memuat preview...</Text>
               </View>
             )}
@@ -369,12 +371,12 @@ export function BrowserPanel({
                 onPress={() => refreshScreenshot()}
                 activeOpacity={0.7}
               >
-                <Ionicons name="camera-outline" size={14} color="#8E8EA0" />
+                <Ionicons name="camera-outline" size={14} color="#6b7280" />
                 <Text style={styles.actionText}>Screenshot</Text>
               </TouchableOpacity>
 
-              {/* VNC Toggle - Live view */}
-              {Platform.OS === "web" && sessionId && (
+              {/* VNC Toggle - Live view (web) / Screenshot polling (native) */}
+              {sessionId && (
                 <TouchableOpacity
                   style={[
                     styles.actionButton,
@@ -386,35 +388,44 @@ export function BrowserPanel({
                   <Ionicons
                     name={useVNC ? "videocam" : "videocam-outline"}
                     size={14}
-                    color={useVNC ? "#FFFFFF" : "#6C5CE7"}
+                    color={useVNC ? "#FFFFFF" : "#2563eb"}
                   />
                   <Text style={[
                     styles.actionText,
                     useVNC && styles.vncActiveText,
-                  ]}>{useVNC ? "Live" : "VNC"}</Text>
+                  ]}>{useVNC ? "Live" : "Desktop"}</Text>
                 </TouchableOpacity>
               )}
 
-              {/* Take Over button - like ai-manus */}
-              <TouchableOpacity
-                style={[styles.actionButton, styles.takeOverBtn]}
-                onPress={handleTakeOver}
-                activeOpacity={0.7}
-              >
-                <TakeOverIcon size={14} color="#FF9F0A" />
-                <Text style={[styles.actionText, styles.takeOverText]}>Take Over</Text>
-              </TouchableOpacity>
-
-              {Platform.OS === "web" && (
+              {/* Take Over / Exit Control button */}
+              {isTakeOverActive ? (
                 <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={openInBrowser}
+                  style={[styles.actionButton, styles.takeOverBtn]}
+                  onPress={() => { setIsTakeOverActive(false); }}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="open-outline" size={14} color="#8E8EA0" />
-                  <Text style={styles.actionText}>Fullscreen</Text>
+                  <Ionicons name="exit-outline" size={14} color="#FF9F0A" />
+                  <Text style={[styles.actionText, styles.takeOverText]}>Keluar</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.takeOverBtn]}
+                  onPress={handleTakeOver}
+                  activeOpacity={0.7}
+                >
+                  <TakeOverIcon size={14} color="#FF9F0A" />
+                  <Text style={[styles.actionText, styles.takeOverText]}>Take Over</Text>
                 </TouchableOpacity>
               )}
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={openInBrowser}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="open-outline" size={14} color="#6b7280" />
+                <Text style={styles.actionText}>{Platform.OS === "web" ? "Fullscreen" : "Control"}</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.actionButton, styles.dangerButton]}
@@ -435,14 +446,14 @@ export function BrowserPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
   },
   header: {
     flexDirection: "row",
@@ -451,7 +462,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e5e7eb",
   },
   headerLeft: {
     flexDirection: "row",
@@ -461,7 +472,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#f3f4f6",
+    color: "#111827",
   },
   liveBadge: {
     flexDirection: "row",
@@ -489,7 +500,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
   },
   content: {
     flex: 1,
@@ -519,7 +530,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#1a1916",
+    backgroundColor: "#2563eb",
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -566,17 +577,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
   },
   retryButtonText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#f3f4f6",
+    color: "#111827",
   },
   readyState: {
     flex: 1,
@@ -586,9 +597,9 @@ const styles = StyleSheet.create({
   screenshotContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     position: "relative",
   },
   screenshot: {
@@ -615,10 +626,10 @@ const styles = StyleSheet.create({
   noScreenshot: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     paddingVertical: 30,
     gap: 8,
   },
@@ -628,7 +639,7 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
   },
   sessionInfo: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 8,
     padding: 10,
     gap: 6,
@@ -648,7 +659,7 @@ const styles = StyleSheet.create({
   infoValue: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#d1d5db",
+    color: "#6b7280",
   },
   actions: {
     flexDirection: "row",
@@ -661,17 +672,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 6,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     minWidth: 80,
   },
   actionText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#d1d5db",
+    color: "#6b7280",
   },
   dangerButton: {
     borderColor: "rgba(220,38,38,0.2)",
@@ -688,21 +699,21 @@ const styles = StyleSheet.create({
   vncContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#f9fafb",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     height: 200,
   },
   vncActiveBtn: {
-    backgroundColor: "#6C5CE7",
-    borderColor: "#6C5CE7",
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
   vncActiveText: {
     color: "#FFFFFF",
     fontFamily: "Inter_600SemiBold",
   },
   currentUrl: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 8,
     padding: 10,
     gap: 4,
@@ -721,6 +732,6 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#f3f4f6",
+    color: "#111827",
   },
 });

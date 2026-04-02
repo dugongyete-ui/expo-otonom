@@ -79,7 +79,7 @@ export function AgentStatusBar({
   }, [isActive, fadeAnim]);
 
   const toolInfo = functionName ? TOOL_LABELS[functionName] : null;
-  const color = toolInfo?.color || "#6C5CE7";
+  const color = toolInfo?.color || "#2563eb";
   const icon = (toolInfo?.icon || "sync") as keyof typeof Ionicons.glyphMap;
   const label = toolInfo?.label || status || "Agent is working";
 

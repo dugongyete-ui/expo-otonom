@@ -1275,19 +1275,36 @@ export function ChatPage({
         >
           <Ionicons name="menu-outline" size={20} color="#6b7280" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { marginLeft: 8 }]}>{title}</Text>
-        <View style={styles.headerRight}>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerBrand}>Dzeck AI</Text>
+          <TouchableOpacity
+            onPress={() => onAgentModeChange?.(!isAgentMode)}
+            style={[styles.modeBadge, isAgentMode ? styles.modeBadgeAgent : styles.modeBadgeChat]}
+            hitSlop={{ top: 6, left: 6, right: 6, bottom: 6 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={isAgentMode ? "flash" : "chatbubble-ellipses-outline"}
+              size={10}
+              color={isAgentMode ? "#d97706" : "#2563eb"}
+            />
+            <Text style={[styles.modeBadgeText, isAgentMode ? styles.modeBadgeTextAgent : styles.modeBadgeTextChat]}>
+              {isAgentMode ? "Agent" : "Chat"}
+            </Text>
+          </TouchableOpacity>
           {isAgentMode && (
             <View style={[
               styles.e2bBadge,
               e2bStatus === "connected" ? styles.e2bConnected :
               e2bStatus === "error" ? styles.e2bError : styles.e2bChecking,
             ]}>
-              <Text style={styles.e2bBadgeText}>
+              <Text style={[styles.e2bBadgeText, e2bStatus === "connected" ? { color: "#16a34a" } : e2bStatus === "error" ? { color: "#dc2626" } : {}]}>
                 {e2bStatus === "connected" ? "● E2B" : e2bStatus === "error" ? "✕ E2B" : "… E2B"}
               </Text>
             </View>
           )}
+        </View>
+        <View style={styles.headerRight}>
           {onOpenTools && (
             <TouchableOpacity
               onPress={onOpenTools}
@@ -1295,7 +1312,7 @@ export function ChatPage({
               hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
             >
               <View>
-                <Ionicons name="terminal-outline" size={18} color={activeToolsCount > 0 ? "#6C5CE7" : "#6b7280"} />
+                <Ionicons name="terminal-outline" size={18} color={activeToolsCount > 0 ? "#2563eb" : "#6b7280"} />
                 {toolsCount > 0 && (
                   <View style={styles.toolsBadge}>
                     <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
@@ -1305,17 +1322,6 @@ export function ChatPage({
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            onPress={() => onAgentModeChange?.(!isAgentMode)}
-            style={[styles.settingsBtn, isAgentMode && styles.agentModeActive]}
-            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
-          >
-            <Ionicons
-              name={isAgentMode ? "flash" : "flash-outline"}
-              size={18}
-              color={isAgentMode ? "#d97706" : "#6b7280"}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
             onPress={handleShare}
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
@@ -1324,15 +1330,22 @@ export function ChatPage({
             <Ionicons
               name={isShared ? "share-social" : "share-social-outline"}
               size={18}
-              color={messages.length === 0 ? "#d1d5db" : isShared ? "#6C5CE7" : "#6b7280"}
+              color={messages.length === 0 ? "#d1d5db" : isShared ? "#2563eb" : "#6b7280"}
             />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={async () => { await logout(); }}
+            style={styles.settingsBtn}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          >
+            <Ionicons name="log-out-outline" size={18} color="#6b7280" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSettings(true)}
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Ionicons name="settings-outline" size={18} color="#6b7280" />
+            <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
           </TouchableOpacity>
         </View>
       </View>
@@ -1380,8 +1393,8 @@ export function ChatPage({
                 setShowModelSettings(true);
               }}
             >
-              <Ionicons name="options-outline" size={16} color="#6C5CE7" />
-              <Text style={[styles.logoutBtnText, { color: "#6C5CE7" }]}>Model & Config</Text>
+              <Ionicons name="options-outline" size={16} color="#2563eb" />
+              <Text style={[styles.logoutBtnText, { color: "#2563eb" }]}>Model & Config</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1391,8 +1404,8 @@ export function ChatPage({
                 setShowMCPPanel(true);
               }}
             >
-              <Ionicons name="server-outline" size={16} color="#6C5CE7" />
-              <Text style={[styles.logoutBtnText, { color: "#6C5CE7" }]}>MCP Servers</Text>
+              <Ionicons name="server-outline" size={16} color="#2563eb" />
+              <Text style={[styles.logoutBtnText, { color: "#2563eb" }]}>MCP Servers</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1627,7 +1640,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   header: {
-    paddingVertical: 12,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     backgroundColor: "#ffffff",
     borderBottomWidth: 1,
@@ -1636,16 +1649,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  headerCenter: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 8,
+  },
+  headerBrand: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#111827",
+    letterSpacing: -0.3,
+  },
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
     flex: 1,
   },
+  modeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  modeBadgeChat: {
+    backgroundColor: "rgba(37,99,235,0.08)",
+    borderColor: "rgba(37,99,235,0.2)",
+  },
+  modeBadgeAgent: {
+    backgroundColor: "rgba(234,179,8,0.1)",
+    borderColor: "rgba(234,179,8,0.3)",
+  },
+  modeBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.1,
+  },
+  modeBadgeTextChat: {
+    color: "#2563eb",
+  },
+  modeBadgeTextAgent: {
+    color: "#d97706",
+  },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   settingsBtn: {
     width: 32,
@@ -1654,9 +1708,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f3f4f6",
-  },
-  agentModeActive: {
-    backgroundColor: "rgba(234,179,8,0.15)",
   },
   settingsOverlay: {
     flex: 1,
@@ -2048,7 +2099,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2058,7 +2109,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   toolsBtnActive: {
-    backgroundColor: "rgba(108,92,231,0.1)",
+    backgroundColor: "rgba(37,99,235,0.1)",
   },
   inlineToolsBlock: {
     marginLeft: 46,

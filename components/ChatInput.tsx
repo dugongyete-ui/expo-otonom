@@ -14,8 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
 import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
+import { COLORS } from "@/lib/theme";
 
 interface ChatInputProps {
   onSend: (text: string, attachments: ChatAttachment[]) => void;
@@ -46,6 +48,7 @@ export function ChatInput({
   const [isUploadingToSandbox, setIsUploadingToSandbox] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
@@ -147,8 +150,14 @@ export function ChatInput({
 
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !disabled;
 
+  const bottomPad = Platform.OS === "ios"
+    ? Math.max(insets.bottom, 8)
+    : insets.bottom > 0
+      ? insets.bottom + 16
+      : 32;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: bottomPad }]}>
       {/* Attachment menu */}
       {showAttachMenu && (
         <View style={styles.attachMenu}>
@@ -156,21 +165,21 @@ export function ChatInput({
             style={styles.attachMenuItem}
             onPress={handleAttachImage}
           >
-            <Ionicons name="image-outline" size={18} color="#8E8E93" />
+            <Ionicons name="image-outline" size={18} color={COLORS.iconMuted} />
             <Text style={styles.attachMenuText}>Image</Text>
           </TouchableOpacity>
           {activeSessionId && (
             <TouchableOpacity
-              style={styles.attachMenuItem}
+              style={[styles.attachMenuItem, { borderBottomWidth: 0 }]}
               onPress={handleUploadToSandbox}
               disabled={isUploadingToSandbox}
             >
               {isUploadingToSandbox ? (
-                <ActivityIndicator size="small" color="#6C5CE7" />
+                <ActivityIndicator size="small" color={COLORS.accent} />
               ) : (
-                <Ionicons name="cloud-upload-outline" size={18} color="#6C5CE7" />
+                <Ionicons name="cloud-upload-outline" size={18} color={COLORS.accent} />
               )}
-              <Text style={[styles.attachMenuText, { color: "#6C5CE7" }]}>
+              <Text style={[styles.attachMenuText, { color: COLORS.accent }]}>
                 {isUploadingToSandbox ? "Uploading..." : "Upload to Sandbox"}
               </Text>
             </TouchableOpacity>
@@ -193,7 +202,7 @@ export function ChatInput({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <Ionicons name="close-circle" size={18} color="#FF453A" />
+                <Ionicons name="close-circle" size={18} color="#f87171" />
               </TouchableOpacity>
             </View>
           ))}
@@ -206,7 +215,7 @@ export function ChatInput({
           ref={inputRef}
           style={styles.input}
           placeholder={placeholder || "Ask Dzeck AI..."}
-          placeholderTextColor="#636366"
+          placeholderTextColor={COLORS.textPlaceholder}
           value={text}
           onChangeText={setText}
           multiline
@@ -229,7 +238,7 @@ export function ChatInput({
             <Ionicons
               name={showAttachMenu ? "close" : "add"}
               size={22}
-              color={disabled ? "#3A3A40" : "#8E8E93"}
+              color={disabled ? COLORS.textMuted : COLORS.iconMuted}
             />
           </TouchableOpacity>
 
@@ -243,7 +252,7 @@ export function ChatInput({
               <Ionicons
                 name={isAgentMode ? "flash" : "git-branch-outline"}
                 size={20}
-                color={isAgentMode ? "#6C5CE7" : "#8E8E93"}
+                color={isAgentMode ? "#d97706" : COLORS.iconMuted}
               />
             </TouchableOpacity>
           )}
@@ -257,7 +266,7 @@ export function ChatInput({
               activeOpacity={0.6}
             >
               <View style={styles.stopIcon}>
-                <Ionicons name="stop" size={14} color="#FFFFFF" />
+                <Ionicons name="stop" size={14} color={COLORS.stopIcon} />
               </View>
             </TouchableOpacity>
           ) : (
@@ -285,15 +294,16 @@ export function ChatInput({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#0A0A0C",
-    paddingBottom: Platform.OS === "ios" ? 20 : 8,
+    backgroundColor: COLORS.bgToolbar,
     paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   attachMenu: {
-    backgroundColor: "#1A1A20",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2C2C30",
+    borderColor: COLORS.border,
     marginBottom: 8,
     overflow: "hidden",
   },
@@ -304,11 +314,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#2C2C30",
+    borderBottomColor: COLORS.border,
   },
   attachMenuText: {
     fontSize: 14,
-    color: "#8E8E93",
+    color: COLORS.textMuted,
     fontWeight: "500",
   },
   attachmentBar: {
@@ -332,23 +342,23 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6,
     right: -6,
-    backgroundColor: "#0A0A0C",
+    backgroundColor: COLORS.bgToolbar,
     borderRadius: 9,
   },
   inputWrapper: {
-    backgroundColor: "#1A1A20",
-    borderRadius: 20,
+    backgroundColor: COLORS.bgInput,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#2C2C30",
+    borderColor: COLORS.bgInputBorder,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
     maxHeight: 120,
     marginBottom: 6,
+    marginTop: 8,
   },
   input: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 15,
-    color: "#FFFFFF",
+    fontSize: 14,
+    color: COLORS.text,
     maxHeight: 100,
     lineHeight: 20,
   },
@@ -378,21 +388,24 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   sendIconContainer: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#6C5CE7",
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: COLORS.accent,
     alignItems: "center",
     justifyContent: "center",
   },
   sendIconDisabled: {
-    backgroundColor: "#2C2C30",
+    backgroundColor: COLORS.sendDisabled,
+    opacity: 0.5,
   },
   stopIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#FF453A",
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: COLORS.stopBg,
+    borderWidth: 1,
+    borderColor: COLORS.stopBorder,
     alignItems: "center",
     justifyContent: "center",
   },

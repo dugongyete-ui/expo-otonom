@@ -276,7 +276,7 @@ export default function SharePage() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6C5CE7" />
+        <ActivityIndicator size="large" color="#2563eb" />
         <Text style={styles.loadingText}>Loading shared session...</Text>
       </View>
     );
@@ -298,7 +298,7 @@ export default function SharePage() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="sparkles" size={20} color="#6C5CE7" />
+          <Ionicons name="sparkles" size={20} color="#2563eb" />
           <Text style={styles.headerTitle}>Shared Session</Text>
         </View>
         <View style={styles.headerRight}>
@@ -317,7 +317,7 @@ export default function SharePage() {
 
       {session.userMessage ? (
         <View style={styles.userMessageBox}>
-          <Ionicons name="person-circle" size={16} color="#6C5CE7" />
+          <Ionicons name="person-circle" size={16} color="#2563eb" />
           <Text style={styles.userMessageText} numberOfLines={3}>{session.userMessage}</Text>
         </View>
       ) : null}
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(108,92,231,0.15)", borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 4,
   },
-  doneBadgeText: { color: "#6C5CE7", fontSize: 11, fontWeight: "600" },
+  doneBadgeText: { color: "#2563eb", fontSize: 11, fontWeight: "600" },
   userMessageBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     paddingHorizontal: 16, paddingVertical: 12,
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   tab: { paddingVertical: 10, paddingHorizontal: 12, marginBottom: -1 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: "#6C5CE7" },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: "#2563eb" },
   tabText: { color: "#636366", fontSize: 13, fontWeight: "500" },
   tabTextActive: { color: "#FFFFFF" },
   content: { flex: 1 },
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   stepStatus: { color: "#636366", fontSize: 10, fontWeight: "600", textTransform: "uppercase" },
   stepTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "500", marginBottom: 4 },
   stepDesc: { color: "#8E8E93", fontSize: 12, lineHeight: 16 },
-  stepAgent: { color: "#6C5CE7", fontSize: 10, marginTop: 4 },
+  stepAgent: { color: "#2563eb", fontSize: 10, marginTop: 4 },
   messageCard: {
     backgroundColor: "#1A1A20", borderRadius: 10, padding: 12,
     borderWidth: 1, borderColor: "rgba(48,209,88,0.2)", marginBottom: 8,

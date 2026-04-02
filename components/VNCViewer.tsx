@@ -18,6 +18,7 @@ import {
   TextInput,
   Modal,
   Dimensions,
+  PanResponder,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { e2bService } from "@/lib/e2b-service";
@@ -59,6 +60,11 @@ export function VNCViewer({
   const [keyboardText, setKeyboardText] = useState("");
   const [isSendingInput, setIsSendingInput] = useState(false);
   const [containerLayout, setContainerLayout] = useState({ width: SANDBOX_DESKTOP_WIDTH, height: SANDBOX_DESKTOP_HEIGHT });
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
+  const viewOnlyRef = useRef(viewOnly);
+  const sessionIdRef = useRef(sessionId);
+  const containerLayoutRef = useRef({ width: SANDBOX_DESKTOP_WIDTH, height: SANDBOX_DESKTOP_HEIGHT });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -179,12 +185,46 @@ export function VNCViewer({
     const scaleY = SANDBOX_DESKTOP_HEIGHT / (containerLayout.height || SANDBOX_DESKTOP_HEIGHT);
     const sandboxX = Math.round(locationX * scaleX);
     const sandboxY = Math.round(locationY * scaleY);
-    try {
-      await e2bService.click(sessionId, sandboxX, sandboxY);
-    } catch {
-      // ignore click errors
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last && now - last.time < 300 && Math.abs(sandboxX - last.x) < 30 && Math.abs(sandboxY - last.y) < 30) {
+      // Double-tap: right-click
+      try { await e2bService.click(sessionId, sandboxX, sandboxY, "right"); } catch {}
+      lastTapRef.current = null;
+    } else {
+      lastTapRef.current = { time: now, x: sandboxX, y: sandboxY };
+      try { await e2bService.click(sessionId, sandboxX, sandboxY); } catch {}
     }
   }, [viewOnly, enabled, sessionId, containerLayout]);
+
+  // Keep refs in sync with latest prop/state values (safe in PanResponder closures)
+  useEffect(() => { viewOnlyRef.current = viewOnly; }, [viewOnly]);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+  useEffect(() => { containerLayoutRef.current = containerLayout; }, [containerLayout]);
+
+  // PanResponder for scroll/drag gestures on native — uses refs for latest values
+  const scrollPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) =>
+        !viewOnlyRef.current && (Math.abs(gs.dy) > 8 || Math.abs(gs.dx) > 8),
+      onPanResponderGrant: (_, gs) => {
+        panStartRef.current = { x: gs.moveX, y: gs.moveY };
+      },
+      onPanResponderRelease: async (_, gs) => {
+        if (viewOnlyRef.current || !sessionIdRef.current) return;
+        const { dx, dy } = gs;
+        const layout = containerLayoutRef.current;
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 15) {
+          const direction = dy < 0 ? "up" : "down";
+          const amount = Math.min(Math.round(Math.abs(dy) / 30), 10);
+          const cx = Math.round(gs.x0 * (SANDBOX_DESKTOP_WIDTH / (layout.width || SANDBOX_DESKTOP_WIDTH)));
+          const cy = Math.round(gs.y0 * (SANDBOX_DESKTOP_HEIGHT / (layout.height || SANDBOX_DESKTOP_HEIGHT)));
+          try { await e2bService.scroll(sessionIdRef.current, cx, cy, direction, amount); } catch {}
+        }
+        panStartRef.current = null;
+      },
+    })
+  ).current;
 
   const handleSendKeyboard = useCallback(async () => {
     if (!keyboardText || !sessionId) return;
@@ -268,7 +308,7 @@ export function VNCViewer({
       <View style={styles.container}>
         {status === "connecting" && !screenshotUri && (
           <View style={styles.overlay}>
-            <ActivityIndicator size="large" color="#6C5CE7" />
+            <ActivityIndicator size="large" color="#2563eb" />
             <Text style={styles.statusText}>Loading desktop snapshot...</Text>
             {reconnectAttemptsRef.current > 0 && (
               <Text style={styles.reconnectText}>
@@ -279,21 +319,26 @@ export function VNCViewer({
         )}
 
         {screenshotUri ? (
-          <TouchableOpacity
+          <View
             style={styles.screenshotTouchable}
-            onPress={viewOnly ? undefined : handleMobileTap}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
               if (width > 0 && height > 0) setContainerLayout({ width, height });
             }}
-            activeOpacity={viewOnly ? 1 : 0.9}
+            {...(!viewOnly ? scrollPanResponder.panHandlers : {})}
           >
-            <Image
-              source={{ uri: screenshotUri }}
-              style={styles.screenshot}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={viewOnly ? undefined : handleMobileTap}
+              activeOpacity={viewOnly ? 1 : 0.9}
+            >
+              <Image
+                source={{ uri: screenshotUri }}
+                style={styles.screenshot}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </View>
         ) : null}
 
         {status === "error" && (
@@ -363,7 +408,7 @@ export function VNCViewer({
     <View style={styles.container}>
       {status === "connecting" && (
         <View style={styles.overlay}>
-          <ActivityIndicator size="large" color="#6C5CE7" />
+          <ActivityIndicator size="large" color="#2563eb" />
           <Text style={styles.statusText}>
             {reconnectAttemptsRef.current > 0
               ? `Reconnecting... (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
@@ -441,7 +486,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   retryBtn: {
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#2563eb",
     borderRadius: 8,
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -533,7 +578,7 @@ const styles = StyleSheet.create({
     flex: 2,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: "#6C5CE7",
+    backgroundColor: "#2563eb",
     alignItems: "center",
   },
   keyboardModalSendDisabled: {
