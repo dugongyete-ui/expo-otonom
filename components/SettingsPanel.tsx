@@ -310,14 +310,14 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
 
         {successMsg && (
           <View style={styles.successBanner}>
-            <Ionicons name="checkmark-circle" size={14} color="#30D158" />
+            <Ionicons name="checkmark-circle" size={14} color="#888888" />
             <Text style={styles.successText}>{successMsg}</Text>
           </View>
         )}
 
         {isLoading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color="#2563eb" />
+            <ActivityIndicator size="large" color="#888888" />
             <Text style={styles.loadingText}>Loading settings...</Text>
           </View>
         ) : (
@@ -374,9 +374,9 @@ const styles = StyleSheet.create({
   errorText: { color: "#FF453A", fontSize: 13, flex: 1 },
   successBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "rgba(48,209,88,0.1)", paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 16, paddingVertical: 10,
   },
-  successText: { color: "#30D158", fontSize: 13 },
+  successText: { color: "#888888", fontSize: 13 },
   loadingState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingText: { color: "#8E8E93", fontSize: 14 },
   content: { padding: 16 },
@@ -396,18 +396,18 @@ const styles = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 12,
     backgroundColor: "#1A1A20", borderWidth: 1, borderColor: "#2C2C30", borderRadius: 8,
   },
-  optionChipActive: { backgroundColor: "rgba(37,99,235,0.1)", borderColor: "#2563eb" },
+  optionChipActive: { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "#555555" },
   optionChipText: { color: "#636366", fontSize: 12, fontWeight: "500" },
-  optionChipTextActive: { color: "#2563eb", fontWeight: "600" },
+  optionChipTextActive: { color: "#d1d5db", fontWeight: "600" },
   statusRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#1A1A20",
   },
   statusLabel: { color: "#AEAEB2", fontSize: 14 },
   statusBadge: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6 },
-  statusOk: { backgroundColor: "rgba(48,209,88,0.12)" },
+  statusOk: { backgroundColor: "rgba(255,255,255,0.06)" },
   statusOff: { backgroundColor: "rgba(142,142,147,0.12)" },
   statusBadgeText: { fontSize: 11, fontWeight: "600" },
-  statusOkText: { color: "#30D158" },
-  statusOffText: { color: "#636366" },
+  statusOkText: { color: "#888888" },
+  statusOffText: { color: "#555555" },
 });

@@ -129,7 +129,7 @@ function ToolRow({ event }: { event: AgentEvent }) {
         {label}
       </Text>
       {isCalling && <PulsingDot />}
-      {isCalled && <NativeIcon name="checkmark" size={10} color="#4ade80" />}
+      {isCalled && <NativeIcon name="checkmark" size={10} color="#666666" />}
       {isError && <NativeIcon name="close" size={10} color="#f87171" />}
     </View>
   );
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   toolIconBoxDone: {
-    backgroundColor: "#1a2a1a",
+    backgroundColor: "#222222",
   },
   toolIconBoxError: {
     backgroundColor: "#2a1a1a",

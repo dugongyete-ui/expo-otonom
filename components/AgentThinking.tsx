@@ -62,7 +62,7 @@ const dotStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#9ca3af",
+    backgroundColor: "#666666",
   },
 });
 
@@ -80,7 +80,7 @@ export function AgentThinking({ thinking }: AgentThinkingProps) {
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <View style={styles.iconContainer}>
-        <NativeIcon name="bulb-outline" size={12} color="#2563eb" />
+        <NativeIcon name="bulb-outline" size={12} color="#888888" />
       </View>
       <Text style={styles.text} numberOfLines={3}>
         {thinking}
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "rgba(59,130,246,0.15)",
+    backgroundColor: "#242424",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,

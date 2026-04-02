@@ -110,7 +110,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
           onPress={() => Linking.openURL(url)}
           activeOpacity={0.7}
         >
-          <LockClosedIcon size={10} color="#34C759" />
+          <LockClosedIcon size={10} color="#888888" />
           <Text style={[styles.browserUrl, { textDecorationLine: "underline" }]} numberOfLines={1}>{url}</Text>
         </TouchableOpacity>
       ) : null}
@@ -148,7 +148,7 @@ function FileContent({ file, content, operation }: { file?: string; content?: st
     <View style={styles.fileBody}>
       {displayFile ? (
         <View style={styles.fileHeader}>
-          <DocumentTextIcon size={11} color="#FFD60A" />
+          <DocumentTextIcon size={11} color="#888888" />
           <Text style={styles.fileName} numberOfLines={1}>{displayFile}</Text>
           {operation ? <Text style={styles.fileOp}>{operation}</Text> : null}
         </View>
@@ -173,7 +173,7 @@ function TodoContent({ content }: { content?: string }) {
         return (
           <View key={i} style={styles.todoItem}>
             {checked
-              ? <CheckCircleIcon size={14} color="#30D158" />
+              ? <CheckCircleIcon size={14} color="#888888" />
               : <CircleOutlineIcon size={14} color="#555555" />
             }
             <Text style={[styles.todoText, checked && styles.todoChecked]}>{text}</Text>
@@ -191,7 +191,7 @@ function TaskContent({ content }: { content?: string }) {
     <View style={styles.todoBody}>
       {lines.map((line, i) => (
         <View key={i} style={styles.todoItem}>
-          <ListIcon size={14} color="#0A84FF" />
+          <ListIcon size={14} color="#888888" />
           <Text style={styles.todoText}>{line.trim()}</Text>
         </View>
       ))}
@@ -204,7 +204,7 @@ function McpContent({ tool, args, result }: { tool?: string; args?: string; resu
     <View style={styles.mcpBody}>
       {tool ? (
         <View style={styles.mcpHeader}>
-          <ExtensionPuzzleIcon size={11} color="#64D2FF" />
+          <ExtensionPuzzleIcon size={11} color="#888888" />
           <Text style={styles.mcpToolName}>{tool}</Text>
         </View>
       ) : null}
@@ -227,7 +227,7 @@ function MessageContent({ text, isAsk }: { text?: string; isAsk?: boolean }) {
   return (
     <View style={styles.messageBody}>
       <View style={styles.messageHeader}>
-        <ChatbubbleIcon size={11} color="#7c3aed" />
+        <ChatbubbleIcon size={11} color="#888888" />
         <Text style={styles.messageLabel}>{isAsk ? "Question" : "Notification"}</Text>
       </View>
       <Text style={styles.messageText}>{text}</Text>
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   shellPrompt: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#4ade80",
+    color: "#888888",
   },
   shellCommandText: {
     flex: 1,
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
   shellOutputText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#d1fae5",
+    color: "#a0a0a0",
     lineHeight: 17,
   },
   // Search
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#d97706",
+    color: "#a0a0a0",
   },
   fileOp: {
     fontFamily: "Inter_400Regular",
@@ -760,7 +760,7 @@ const styles = StyleSheet.create({
   messageLabel: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#7c3aed",
+    color: "#888888",
   },
   messageText: {
     fontFamily: "Inter_400Regular",

@@ -9,29 +9,31 @@ interface AgentStatusBarProps {
   isActive: boolean;
 }
 
-const TOOL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  web_search: { label: "Searching the web", icon: "search", color: "#5AC8FA" },
-  web_browse: { label: "Browsing page", icon: "globe", color: "#FF9F0A" },
-  browser_navigate: { label: "Navigating browser", icon: "globe", color: "#FF9F0A" },
-  browser_view: { label: "Reading page", icon: "eye", color: "#FF9F0A" },
-  browser_click: { label: "Clicking element", icon: "finger-print", color: "#FF9F0A" },
-  browser_type: { label: "Typing text", icon: "create", color: "#FF9F0A" },
-  browser_scroll: { label: "Scrolling page", icon: "arrow-down", color: "#FF9F0A" },
-  shell_exec: { label: "Running command", icon: "terminal", color: "#30D158" },
-  shell_view: { label: "Viewing terminal", icon: "terminal", color: "#30D158" },
-  shell_wait: { label: "Waiting for process", icon: "hourglass", color: "#30D158" },
-  file_read: { label: "Reading file", icon: "document-text", color: "#FFD60A" },
-  file_write: { label: "Writing file", icon: "document-text", color: "#FFD60A" },
-  file_str_replace: { label: "Editing file", icon: "create", color: "#FFD60A" },
-  file_find_by_name: { label: "Finding file", icon: "folder-open", color: "#FFD60A" },
-  message_notify_user: { label: "Sending message", icon: "chatbubble", color: "#BF5AF2" },
-  message_ask_user: { label: "Asking question", icon: "help-circle", color: "#BF5AF2" },
-  mcp_call_tool: { label: "Calling MCP tool", icon: "extension-puzzle", color: "#64D2FF" },
+const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
+  web_search: { label: "Searching the web", icon: "search" },
+  web_browse: { label: "Browsing page", icon: "globe" },
+  browser_navigate: { label: "Navigating browser", icon: "globe" },
+  browser_view: { label: "Reading page", icon: "eye" },
+  browser_click: { label: "Clicking element", icon: "finger-print" },
+  browser_type: { label: "Typing text", icon: "create" },
+  browser_scroll: { label: "Scrolling page", icon: "arrow-down" },
+  shell_exec: { label: "Running command", icon: "terminal" },
+  shell_view: { label: "Viewing terminal", icon: "terminal" },
+  shell_wait: { label: "Waiting for process", icon: "hourglass" },
+  file_read: { label: "Reading file", icon: "document-text" },
+  file_write: { label: "Writing file", icon: "document-text" },
+  file_str_replace: { label: "Editing file", icon: "create" },
+  file_find_by_name: { label: "Finding file", icon: "folder-open" },
+  message_notify_user: { label: "Sending message", icon: "chatbubble" },
+  message_ask_user: { label: "Asking question", icon: "help-circle" },
+  mcp_call_tool: { label: "Calling MCP tool", icon: "extension-puzzle" },
 };
 
-function PulsingDot({ color }: { color: string }) {
+const NEUTRAL = "#888888";
+
+function PulsingDot() {
   const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.6)).current;
+  const opacity = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
     Animated.loop(
@@ -42,7 +44,7 @@ function PulsingDot({ color }: { color: string }) {
         ]),
         Animated.sequence([
           Animated.timing(opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.6, duration: 500, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
         ]),
       ]),
     ).start();
@@ -54,7 +56,7 @@ function PulsingDot({ color }: { color: string }) {
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: color,
+        backgroundColor: NEUTRAL,
         transform: [{ scale }],
         opacity,
       }}
@@ -79,16 +81,15 @@ export function AgentStatusBar({
   }, [isActive, fadeAnim]);
 
   const toolInfo = functionName ? TOOL_LABELS[functionName] : null;
-  const color = toolInfo?.color || "#2563eb";
   const icon = toolInfo?.icon || "sync";
   const label = toolInfo?.label || status || "Agent is working";
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]} pointerEvents="none">
-      <View style={[styles.bar, { borderColor: `${color}25` }]}>
-        <PulsingDot color={color} />
-        <NativeIcon name={icon} size={12} color={color} />
-        <Text style={[styles.label, { color }]} numberOfLines={1}>
+      <View style={styles.bar}>
+        <PulsingDot />
+        <NativeIcon name={icon} size={12} color={NEUTRAL} />
+        <Text style={styles.label} numberOfLines={1}>
           {label}
           {functionName && toolInfo?.label !== label ? `: ${toolName || functionName}` : ""}
         </Text>
@@ -109,13 +110,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: "rgba(108, 92, 231, 0.06)",
+    backgroundColor: "#1e1e1e",
     borderWidth: 1,
+    borderColor: "#333333",
     alignSelf: "flex-start",
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     fontStyle: "italic",
+    color: NEUTRAL,
   },
 });

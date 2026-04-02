@@ -146,7 +146,7 @@ export function ChatBox({
           </TouchableOpacity>
           {isAgentMode && (
             <View style={styles.modeIcon}>
-              <FlashIcon size={18} color="#d97706" />
+              <FlashIcon size={18} color="#888888" />
             </View>
           )}
         </View>

@@ -192,7 +192,7 @@ function ShellToolView({
       >
         {isRunning && !consoleOutput ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#34C759" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Executing...</Text>
           </View>
         ) : consoleOutput ? (
@@ -210,13 +210,13 @@ function ShellToolView({
           <View
             style={[
               styles.returnCodeBadge,
-              { backgroundColor: returnCode === 0 ? "rgba(52,199,89,0.15)" : "rgba(255,69,58,0.15)" },
+              { backgroundColor: returnCode === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,69,58,0.15)" },
             ]}
           >
             <Text
               style={[
                 styles.returnCodeText,
-                { color: returnCode === 0 ? "#34C759" : "#FF453A" },
+                { color: returnCode === 0 ? "#888888" : "#FF453A" },
               ]}
             >
               exit {returnCode}
@@ -268,7 +268,7 @@ function BrowserToolView({
           }}
           activeOpacity={0.7}
         >
-          <Ionicons name="lock-closed" size={10} color="#34C759" />
+          <Ionicons name="lock-closed" size={10} color="#888888" />
           <Text style={styles.browserUrlText} numberOfLines={1}>
             {url}
           </Text>
@@ -293,7 +293,7 @@ function BrowserToolView({
           />
         ) : isRunning ? (
           <View style={styles.browserLoading}>
-            <ActivityIndicator size="large" color="#FF9F0A" />
+            <ActivityIndicator size="large" color="#888888" />
             <Text style={styles.browserLoadingText}>Loading page...</Text>
           </View>
         ) : (
@@ -312,7 +312,7 @@ function BrowserToolView({
             onPress={onSwitchToBrowser}
             activeOpacity={0.7}
           >
-            <Ionicons name="desktop-outline" size={14} color="#FF9F0A" />
+            <Ionicons name="desktop-outline" size={14} color="#888888" />
             <Text style={styles.browserActionText}>View Desktop</Text>
           </TouchableOpacity>
         )}
@@ -410,7 +410,7 @@ function FileToolView({
       {/* File header */}
       <View style={styles.fileHeader}>
         <View style={styles.fileHeaderLeft}>
-          <EditIcon size={16} color="#FFD60A" />
+          <EditIcon size={16} color="#888888" />
           <Text style={styles.fileNameText} numberOfLines={1}>
             {fileName || filePath || "File"}
           </Text>
@@ -421,8 +421,8 @@ function FileToolView({
               <Text style={styles.languageBadgeText}>{language}</Text>
             </View>
           ) : null}
-          <View style={[styles.operationBadge, { backgroundColor: operation === "write" ? "rgba(52,199,89,0.15)" : "rgba(255,214,10,0.15)" }]}>
-            <Text style={[styles.operationBadgeText, { color: operation === "write" ? "#34C759" : "#FFD60A" }]}>
+          <View style={[styles.operationBadge, { backgroundColor: "rgba(255,255,255,0.05)" }]}>
+            <Text style={[styles.operationBadgeText, { color: "#888888" }]}>
               {operationLabel}
             </Text>
           </View>
@@ -444,7 +444,7 @@ function FileToolView({
       >
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#FFD60A" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Processing file...</Text>
           </View>
         ) : fileContent ? (
@@ -480,7 +480,7 @@ function FileToolView({
           }}
           activeOpacity={0.7}
         >
-          <Ionicons name="download-outline" size={14} color="#007AFF" />
+          <Ionicons name="download-outline" size={14} color="#888888" />
           <Text style={styles.downloadBtnText}>Download</Text>
         </TouchableOpacity>
       ) : null}
@@ -521,7 +521,7 @@ function SearchToolView({
       {/* Search query */}
       {query ? (
         <View style={styles.searchQueryBar}>
-          <Ionicons name="search" size={14} color="#5AC8FA" />
+          <Ionicons name="search" size={14} color="#888888" />
           <Text style={styles.searchQueryText} numberOfLines={2}>
             {query}
           </Text>
@@ -536,7 +536,7 @@ function SearchToolView({
       >
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#5AC8FA" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Searching...</Text>
           </View>
         ) : results.length > 0 ? (
@@ -606,9 +606,9 @@ function McpToolView({
     <View style={styles.viewContainer}>
       {/* MCP tool name */}
       <View style={styles.mcpHeader}>
-        <Ionicons name="extension-puzzle-outline" size={14} color="#64D2FF" />
+        <Ionicons name="extension-puzzle-outline" size={14} color="#888888" />
         <Text style={styles.mcpToolName}>{toolName || "MCP Tool"}</Text>
-        <View style={[styles.statusDot, { backgroundColor: isRunning ? "#FF9F0A" : status === "error" ? "#FF453A" : "#34C759" }]} />
+        <View style={[styles.statusDot, { backgroundColor: isRunning ? "#666666" : status === "error" ? "#FF453A" : "#666666" }]} />
       </View>
 
       {/* Server */}
@@ -635,7 +635,7 @@ function McpToolView({
       <ScrollView style={styles.mcpResultScroll} showsVerticalScrollIndicator>
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#64D2FF" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Calling MCP tool...</Text>
           </View>
         ) : result ? (
@@ -674,7 +674,7 @@ function TodoToolView({
   return (
     <View style={styles.viewContainer}>
       <View style={styles.todoHeader}>
-        <Ionicons name="checkmark-circle-outline" size={14} color="#30D158" />
+        <Ionicons name="checkmark-circle-outline" size={14} color="#888888" />
         <Text style={styles.todoTitle}>{title}</Text>
         <Text style={styles.todoCount}>{doneCount}/{total}</Text>
       </View>
@@ -687,7 +687,7 @@ function TodoToolView({
       <ScrollView style={styles.todoListScroll} showsVerticalScrollIndicator>
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#30D158" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Updating todo...</Text>
           </View>
         ) : items.length > 0 ? (
@@ -696,7 +696,7 @@ function TodoToolView({
               <Ionicons
                 name={item.done ? "checkmark-circle" : "ellipse-outline"}
                 size={16}
-                color={item.done ? "#30D158" : "#636366"}
+                color={item.done ? "#888888" : "#555555"}
               />
               <Text style={[styles.todoItemText, item.done && styles.todoItemDone]}>
                 {item.text}
@@ -734,7 +734,7 @@ function TaskToolView({
   return (
     <View style={styles.viewContainer}>
       <View style={styles.taskHeader}>
-        <Ionicons name="list-circle-outline" size={14} color="#0A84FF" />
+        <Ionicons name="list-circle-outline" size={14} color="#888888" />
         <Text style={styles.taskTitle}>Tasks</Text>
         <View style={styles.taskTypeBadge}>
           <Text style={styles.taskTypeText}>{typeLabel}</Text>
@@ -744,7 +744,7 @@ function TaskToolView({
       <ScrollView style={styles.taskListScroll} showsVerticalScrollIndicator>
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#0A84FF" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Processing task...</Text>
           </View>
         ) : tasks.length > 0 ? (
@@ -754,12 +754,11 @@ function TaskToolView({
                 <Text style={styles.taskItemId}>{task.id || `#${index + 1}`}</Text>
                 {task.status && (
                   <View style={[styles.taskStatusBadge, {
-                    backgroundColor: task.status === "completed" ? "rgba(52,199,89,0.15)" :
-                      task.status === "running" ? "rgba(108,92,231,0.15)" : "rgba(99,99,102,0.15)"
+                    backgroundColor: "rgba(255,255,255,0.05)"
                   }]}>
                     <Text style={[styles.taskStatusText, {
-                      color: task.status === "completed" ? "#34C759" :
-                        task.status === "running" ? "#2563eb" : "#636366"
+                      color: task.status === "completed" ? "#888888" :
+                        task.status === "running" ? "#a0a0a0" : "#606060"
                     }]}>
                       {task.status}
                     </Text>
@@ -797,7 +796,7 @@ function MessageToolView({
         <Ionicons
           name={isAsk ? "chatbubble-ellipses-outline" : "chatbubble-outline"}
           size={14}
-          color="#BF5AF2"
+          color="#888888"
         />
         <Text style={styles.messageType}>{isAsk ? "Question to User" : "Notification"}</Text>
       </View>
@@ -839,7 +838,7 @@ function ImageToolView({
       {fileName ? (
         <View style={styles.fileHeader}>
           <View style={styles.fileHeaderLeft}>
-            <Ionicons name="image-outline" size={16} color="#FF9F0A" />
+            <Ionicons name="image-outline" size={16} color="#888888" />
             <Text style={styles.fileNameText} numberOfLines={1}>
               {fileName}
             </Text>
@@ -864,7 +863,7 @@ function ImageToolView({
           />
         ) : isRunning ? (
           <View style={styles.browserLoading}>
-            <ActivityIndicator size="large" color="#FF9F0A" />
+            <ActivityIndicator size="large" color="#888888" />
             <Text style={styles.browserLoadingText}>Loading image...</Text>
           </View>
         ) : (
@@ -907,7 +906,7 @@ function FallbackToolView({
       <ScrollView style={styles.mcpResultScroll} showsVerticalScrollIndicator>
         {isRunning ? (
           <View style={styles.runningIndicator}>
-            <ActivityIndicator size="small" color="#2563eb" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.runningLabel}>Processing...</Text>
           </View>
         ) : functionResult ? (
@@ -1129,7 +1128,7 @@ const styles = StyleSheet.create({
   liveText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#34C759",
+    color: "#888888",
     letterSpacing: 0.5,
   },
   statusBadge: {
@@ -1169,7 +1168,7 @@ const styles = StyleSheet.create({
   shellPs1: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#34C759",
+    color: "#888888",
     fontWeight: "700",
   },
   shellCommandText: {
@@ -1209,14 +1208,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shellIdBadge: {
-    backgroundColor: "rgba(52,199,89,0.12)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,
   },
   shellIdText: {
     fontSize: 9,
-    color: "#34C759",
+    color: "#888888",
     fontWeight: "600",
     fontFamily: "monospace",
   },
@@ -1360,14 +1359,14 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   languageBadge: {
-    backgroundColor: "rgba(90,200,250,0.15)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,
   },
   languageBadgeText: {
     fontSize: 9,
-    color: "#5AC8FA",
+    color: "#888888",
     fontWeight: "600",
     textTransform: "uppercase",
   },
@@ -1431,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   downloadBtnText: {
     fontSize: 11,
-    color: "#007AFF",
+    color: "#888888",
     fontWeight: "500",
   },
 
@@ -1475,7 +1474,7 @@ const styles = StyleSheet.create({
   searchResultUrl: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#007AFF",
+    color: "#888888",
   },
   searchResultSnippet: {
     fontSize: 11,
@@ -1626,14 +1625,14 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   taskTypeBadge: {
-    backgroundColor: "rgba(10,132,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,
   },
   taskTypeText: {
     fontSize: 9,
-    color: "#0A84FF",
+    color: "#888888",
     fontWeight: "600",
   },
   taskListScroll: {

@@ -39,7 +39,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
             />
             <Text style={styles.agentName}>Dzeck</Text>
             <View style={[styles.agentBadge, styles.agentBadgeAgent]}>
-              <Text style={[styles.agentBadgeText, styles.agentBadgeTextAgent]}>Agent</Text>
+              <Text style={[styles.agentBadgeText]}>Agent</Text>
             </View>
           </View>
           <View style={styles.messageBubble}>
@@ -55,7 +55,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.titleRow}>
-            <NativeIcon name="flash" size={15} color="#4a7cf0" />
+            <NativeIcon name="flash" size={15} color="#888888" />
             <Text style={styles.titleText} numberOfLines={2}>
               {event.title || ""}
             </Text>
@@ -75,7 +75,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
             />
             <Text style={styles.agentName}>Dzeck</Text>
             <View style={[styles.agentBadge, styles.agentBadgeWait]}>
-              <Text style={[styles.agentBadgeText, styles.agentBadgeTextWait]}>Menunggu</Text>
+              <Text style={[styles.agentBadgeText]}>Menunggu</Text>
             </View>
           </View>
           <View style={styles.messageBubble}>
@@ -128,27 +128,15 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 4,
     backgroundColor: "#2a2a2a",
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
   },
+  agentBadgeAgent: {},
+  agentBadgeWait: {},
   agentBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#a0a0a0",
-  },
-  agentBadgeAgent: {
-    backgroundColor: "rgba(37,99,235,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(37,99,235,0.2)",
-  },
-  agentBadgeTextAgent: {
-    color: "#4a7cf0",
-  },
-  agentBadgeWait: {
-    backgroundColor: "rgba(217,119,6,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(217,119,6,0.2)",
-  },
-  agentBadgeTextWait: {
-    color: "#d97706",
+    color: "#888888",
   },
   messageBubble: {
     paddingLeft: 28,
@@ -161,7 +149,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   cursor: {
-    color: "#4a7cf0",
+    color: "#888888",
     fontSize: 14,
   },
   titleRow: {
@@ -182,17 +170,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(255,69,58,0.07)",
+    backgroundColor: "rgba(220,38,38,0.06)",
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,69,58,0.12)",
+    borderColor: "rgba(220,38,38,0.15)",
   },
   errorText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#FF6B6B",
+    color: "#f07070",
     lineHeight: 18,
   },
 });

@@ -188,7 +188,7 @@ function InlineToolStep({ tool }: { tool: any }) {
         {label}
       </Text>
       {isRunning && <View style={inlineToolStyles.runningDot} />}
-      {isDone && <CheckIcon size={10} color="#4ade80" />}
+      {isDone && <CheckIcon size={10} color="#666666" />}
       {isError && <CloseCircleIcon size={10} color="#f87171" />}
     </View>
   );
@@ -1247,8 +1247,8 @@ export function ChatPage({
             activeOpacity={0.7}
           >
             {isAgentMode
-              ? <FlashIcon size={10} color="#d97706" />
-              : <ChatbubbleIcon size={10} color="#4a7cf0" />
+              ? <FlashIcon size={10} color="#888888" />
+              : <ChatbubbleIcon size={10} color="#888888" />
             }
             <Text style={[styles.modeBadgeText, isAgentMode ? styles.modeBadgeTextAgent : styles.modeBadgeTextChat]}>
               {isAgentMode ? "Agent" : "Chat"}
@@ -1274,7 +1274,7 @@ export function ChatPage({
               hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
             >
               <View>
-                <TerminalIcon size={20} color={activeToolsCount > 0 ? "#4a7cf0" : "#a0a0a0"} />
+                <TerminalIcon size={20} color="#a0a0a0" />
                 {toolsCount > 0 && (
                   <View style={styles.toolsBadge}>
                     <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
@@ -1291,7 +1291,7 @@ export function ChatPage({
           >
             <ShareIcon
               size={20}
-              color={messages.length === 0 ? "#555555" : isShared ? "#4a7cf0" : "#a0a0a0"}
+              color={messages.length === 0 ? "#555555" : "#a0a0a0"}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -1354,8 +1354,8 @@ export function ChatPage({
                 setShowModelSettings(true);
               }}
             >
-              <SettingsIcon size={16} color="#4a7cf0" />
-              <Text style={[styles.logoutBtnText, { color: "#4a7cf0" }]}>Model & Config</Text>
+              <SettingsIcon size={16} color="#a0a0a0" />
+              <Text style={[styles.logoutBtnText, { color: "#a0a0a0" }]}>Model & Config</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1365,8 +1365,8 @@ export function ChatPage({
                 setShowMCPPanel(true);
               }}
             >
-              <ServerIcon size={16} color="#4a7cf0" />
-              <Text style={[styles.logoutBtnText, { color: "#4a7cf0" }]}>MCP Servers</Text>
+              <ServerIcon size={16} color="#a0a0a0" />
+              <Text style={[styles.logoutBtnText, { color: "#a0a0a0" }]}>MCP Servers</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1446,7 +1446,7 @@ export function ChatPage({
                   )}
                   {isPlanDone && (
                     <View style={styles.agentTurnBadgeDone}>
-                      <Text style={[styles.agentTurnBadgeText, { color: "#16a34a" }]}>Done</Text>
+                      <Text style={[styles.agentTurnBadgeText]}>Done</Text>
                     </View>
                   )}
                 </View>
@@ -1505,14 +1505,14 @@ export function ChatPage({
                     onPress={() => openFile(f)}
                   >
                     <View style={styles.fileDocIconWrap}>
-                      <DocumentTextIcon size={20} color="#4a7cf0" />
+                      <DocumentTextIcon size={20} color="#a0a0a0" />
                     </View>
                     <View style={styles.fileDocInfo}>
                       <Text style={styles.fileDocName} numberOfLines={1}>{f.filename}</Text>
                       <Text style={styles.fileDocType}>{getFileExt(f.filename)}</Text>
                     </View>
                     <View style={styles.fileDocDownloadBtn}>
-                      <ShareIcon size={16} color="#4a7cf0" />
+                      <ShareIcon size={16} color="#a0a0a0" />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -1562,15 +1562,15 @@ export function ChatPage({
                 </View>
                 <Text style={styles.taskCompletedText}>Task Completed</Text>
                 {taskCompletedExpanded
-                  ? <ChevronUpIcon size={14} color="#16a34a" />
-                  : <ChevronDownIcon size={14} color="#16a34a" />
+                  ? <ChevronUpIcon size={14} color="#888888" />
+                  : <ChevronDownIcon size={14} color="#888888" />
                 }
               </TouchableOpacity>
               {taskCompletedExpanded && completedSteps.length > 0 && (
                 <View style={styles.taskCompletedSteps}>
                   {completedSteps.map((step, i) => (
                     <View key={step.id || i} style={styles.taskCompletedStepRow}>
-                      <CheckCircleIcon size={13} color="#16a34a" />
+                      <CheckCircleIcon size={13} color="#888888" />
                       <Text style={styles.taskCompletedStepText} numberOfLines={2}>
                         {step.description}
                       </Text>
@@ -1642,12 +1642,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   modeBadgeChat: {
-    backgroundColor: "rgba(74,124,240,0.08)",
-    borderColor: "rgba(74,124,240,0.2)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "#333333",
   },
   modeBadgeAgent: {
-    backgroundColor: "rgba(234,179,8,0.1)",
-    borderColor: "rgba(234,179,8,0.3)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "#333333",
   },
   modeBadgeText: {
     fontSize: 10,
@@ -1655,10 +1655,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   modeBadgeTextChat: {
-    color: "#4a7cf0",
+    color: "#888888",
   },
   modeBadgeTextAgent: {
-    color: "#d97706",
+    color: "#888888",
   },
   headerRight: {
     flexDirection: "row",
@@ -1723,8 +1723,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#222222",
   },
   langBtnActive: {
-    backgroundColor: "#4a7cf0",
-    borderColor: "#4a7cf0",
+    backgroundColor: "#3a3a3a",
+    borderColor: "#4a4a4a",
   },
   langBtnText: {
     color: "#888888",
@@ -1807,7 +1807,7 @@ const styles = StyleSheet.create({
   fileCardAction: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#1a73e8",
+    color: "#a0a0a0",
     fontWeight: "600",
   },
   screenshotContainer: {
@@ -1866,9 +1866,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(22,163,74,0.08)",
+    backgroundColor: "rgba(100,100,100,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(22,163,74,0.2)",
+    borderColor: "rgba(100,100,100,0.2)",
   },
   agentTurnBadgeText: {
     fontFamily: "Inter_500Medium",
@@ -1896,7 +1896,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "rgba(74,124,240,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1921,7 +1921,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "rgba(74,124,240,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1929,7 +1929,7 @@ const styles = StyleSheet.create({
   fileViewAllLink: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4a7cf0",
+    color: "#888888",
     paddingLeft: 2,
     paddingTop: 2,
   },
@@ -1953,7 +1953,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#c8c8c8",
   },
   thinkingDotPulse: {
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#888888",
   },
   thinkingLabel: {
     flex: 1,
@@ -1995,7 +1995,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 5,
-    backgroundColor: "#16a34a",
+    backgroundColor: "#404040",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -2004,7 +2004,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#16a34a",
+    color: "#a0a0a0",
     letterSpacing: -0.2,
   },
   flatList: {
