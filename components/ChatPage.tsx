@@ -1516,7 +1516,7 @@ export function ChatPage({
                     </View>
                   )}
                 </View>
-                <AgentPlanView plan={item.plan} notifyMessages={item.notifyMessages} />
+                <AgentPlanView plan={item.plan} notifyMessages={item.notifyMessages} onToolPress={onOpenTools} />
               </View>
             );
           }

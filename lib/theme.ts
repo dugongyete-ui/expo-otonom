@@ -13,7 +13,7 @@ export const COLORS = {
   textMuted: "#888888",
   textPlaceholder: "#555555",
   textUser: "#f0f0f0",
-  textAi: "#d0d0d0",
+  textAi: "#efefef",
   textCode: "#88b4ff",
 
   accent: "#4a7cf0",

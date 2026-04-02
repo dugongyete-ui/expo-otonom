@@ -21,7 +21,15 @@ type Segment =
   | { type: "text"; content: string }
   | { type: "code"; content: string; language: string };
 
+function cleanText(raw: string): string {
+  return raw
+    .replace(/<co>([\s\S]*?)<\/co:[^>]*>/g, "$1")
+    .replace(/<\/?co[^>]*>/g, "")
+    .replace(/<\/?[a-zA-Z][^>]*>/g, "");
+}
+
 function parseContent(text: string): Segment[] {
+  text = cleanText(text);
   const segments: Segment[] = [];
   const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
   let lastIndex = 0;

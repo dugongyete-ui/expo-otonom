@@ -137,6 +137,12 @@ function renderInlineWithLinks(
   return nodes;
 }
 
+function cleanCitations(raw: string): string {
+  return raw
+    .replace(/<co>([\s\S]*?)<\/co:[^>]*>/g, "$1")
+    .replace(/<\/?co[^>]*>/g, "");
+}
+
 export function MarkdownText({
   text,
   color = "#1a1916",
@@ -144,7 +150,7 @@ export function MarkdownText({
 }: MarkdownTextProps) {
   const blocks = useMemo(() => {
     const result: React.ReactNode[] = [];
-    const lines = text.split("\n");
+    const lines = cleanCitations(text).split("\n");
     let idx = 0;
 
     while (idx < lines.length) {
