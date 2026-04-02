@@ -27,7 +27,7 @@ def _get_model_name() -> str:
     candidate = os.environ.get("CEREBRAS_AGENT_MODEL") or ""
     if candidate and "/" not in candidate:
         return candidate
-    return "qwen-3-32b"
+    return "qwen-3-235b-a22b-instruct-2507"
 
 
 _TOOLS_SUPPORTED: Optional[bool] = None
@@ -141,7 +141,21 @@ def call_cerebras_streaming(messages: list) -> str:
             return full_text
         except urllib.error.HTTPError as e:
             last_error = e
-            if e.code == 429 or e.code >= 500:
+            if e.code == 429:
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                if retry_after:
+                    try:
+                        wait = min(int(retry_after) + 1, 90)
+                    except (ValueError, TypeError):
+                        wait = min(10 * (2 ** attempt), 90)
+                else:
+                    wait = min(10 * (2 ** attempt), 90)
+                sys.stderr.write(
+                    "[agent] Cerebras streaming rate limited (attempt {}): retrying in {}s\n".format(attempt + 1, wait)
+                )
+                sys.stderr.flush()
+                time.sleep(wait)
+            elif e.code >= 500:
                 wait = 2 ** attempt
                 sys.stderr.write(
                     "[agent] Cerebras streaming error (attempt {}): {} — retrying in {}s\n".format(attempt + 1, e, wait)
@@ -245,7 +259,14 @@ def call_text_with_retry(messages: list, max_retries: int = 7) -> str:
         except urllib.error.HTTPError as e:
             last_error = e
             if e.code == 429:
-                wait_time = min(5 * (2 ** attempt), 60)
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                if retry_after:
+                    try:
+                        wait_time = min(int(retry_after) + 1, 90)
+                    except (ValueError, TypeError):
+                        wait_time = min(5 * (2 ** attempt), 90)
+                else:
+                    wait_time = min(5 * (2 ** attempt), 90)
                 sys.stderr.write(
                     f"[agent] Rate limited (429), retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})\n"
                 )
@@ -297,7 +318,14 @@ def call_api_with_retry(
                     continue
             last_error = e
             if e.code == 429:
-                wait_time = min(5 * (2 ** attempt), 60)
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                if retry_after:
+                    try:
+                        wait_time = min(int(retry_after) + 1, 90)
+                    except (ValueError, TypeError):
+                        wait_time = min(5 * (2 ** attempt), 90)
+                else:
+                    wait_time = min(5 * (2 ** attempt), 90)
                 sys.stderr.write(
                     f"[agent] Rate limited (429), retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})\n"
                 )

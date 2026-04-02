@@ -81,8 +81,8 @@ waitForPort = 3002
 [userenv]
 
 [userenv.shared]
-CEREBRAS_CHAT_MODEL = "qwen-3-32b"
-CEREBRAS_AGENT_MODEL = "qwen-3-32b"
+CEREBRAS_CHAT_MODEL = "qwen-3-235b-a22b-instruct-2507"
+CEREBRAS_AGENT_MODEL = "qwen-3-235b-a22b-instruct-2507"
 MAX_AGENT_STEPS = "20"
 PLAYWRIGHT_ENABLED = "true"
 REDIS_HOST = "redis-16364.c279.us-central1-1.gce.cloud.redislabs.com"

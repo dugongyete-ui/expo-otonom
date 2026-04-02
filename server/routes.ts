@@ -38,8 +38,8 @@ function isE2BEnabled(): boolean {
 
 function getCerebrasConfig() {
   const apiKey = process.env.CEREBRAS_API_KEY || "";
-  const model = process.env.CEREBRAS_CHAT_MODEL || "qwen-3-32b";
-  const agentModel = process.env.CEREBRAS_AGENT_MODEL || "qwen-3-32b";
+  const model = process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507";
+  const agentModel = process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507";
   const hostname = "api.cerebras.ai";
   const path = "/v1/chat/completions";
   return { apiKey, model, agentModel, hostname, path };
@@ -100,11 +100,8 @@ export async function registerRoutes(app: any): Promise<Server> {
   // These can be overridden by setting AVAILABLE_MODELS and AVAILABLE_PROVIDERS env vars
   // (JSON arrays of {label, value} pairs).
   const DEFAULT_MODELS = [
-    { label: "Qwen 3 32B (Default)", value: "qwen-3-32b" },
-    { label: "Qwen 3 235B (Large)", value: "qwen-3-235b-a22b-instruct-2507" },
-    { label: "Llama 4 Scout", value: "llama-4-scout-17b-16e-instruct" },
-    { label: "Llama 4 Maverick", value: "llama-4-maverick-17b-128e-instruct" },
-    { label: "Llama 3.3 70B", value: "llama-3.3-70b" },
+    { label: "Qwen 3 235B (Default)", value: "qwen-3-235b-a22b-instruct-2507" },
+    { label: "Llama 3.1 8B (Fast)", value: "llama3.1-8b" },
   ];
   const DEFAULT_PROVIDERS = [
     { label: "Cerebras", value: "cerebras" },
@@ -125,14 +122,14 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.get("/api/config", (_req: any, res: any) => {
     res.json({
-      CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-32b",
-      CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-32b",
+      CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+      CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
       SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
       GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
       AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
       E2B_ENABLED: isE2BEnabled(),
       authProvider: process.env.AUTH_PROVIDER || "none",
-      modelName: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-32b",
+      modelName: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
       modelProvider: process.env.MODEL_PROVIDER || "cerebras",
       searchProvider: process.env.SEARCH_PROVIDER || "bing_web",
       showGithubButton: process.env.SHOW_GITHUB_BUTTON === "true",
@@ -179,8 +176,8 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({
       updated: updates,
       current: {
-        CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-32b",
-        CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-32b",
+        CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+        CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
         SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
         MODEL_PROVIDER: process.env.MODEL_PROVIDER || "cerebras",
         SHOW_GITHUB_BUTTON: process.env.SHOW_GITHUB_BUTTON || "false",
