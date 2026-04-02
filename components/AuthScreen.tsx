@@ -16,6 +16,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { authService, AuthUser } from "@/lib/auth-service";
@@ -111,8 +112,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.logoContainer}>
-          <Ionicons name="sparkles" size={48} color="#2563eb" />
-          <Text style={styles.logoTitle}>Dzeck AI</Text>
+          <Image
+            source={require("../assets/images/dzeck-logo-transparent.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.logoSubtitle}>AUTONOMOUS AI AGENT</Text>
         </View>
 
@@ -277,7 +281,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0A0A0C",
+    backgroundColor: "#0d1117",
   },
   scroll: {
     flexGrow: 1,
@@ -288,25 +292,23 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     marginBottom: 40,
-    gap: 8,
+    gap: 10,
   },
-  logoTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: -0.5,
+  logoImage: {
+    width: 180,
+    height: 72,
   },
   logoSubtitle: {
     fontSize: 11,
-    color: "#636366",
+    color: "#4b5563",
     letterSpacing: 2,
   },
   card: {
-    backgroundColor: "#1A1A20",
+    backgroundColor: "#111827",
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: "#2C2C30",
+    borderColor: "#1f2937",
     gap: 16,
   },
   title: {
@@ -356,10 +358,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   input: {
-    backgroundColor: "#0A0A0C",
+    backgroundColor: "#0d1117",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2C2C30",
+    borderColor: "#1f2937",
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
@@ -368,10 +370,10 @@ const styles = StyleSheet.create({
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0A0A0C",
+    backgroundColor: "#0d1117",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2C2C30",
+    borderColor: "#1f2937",
   },
   passwordInput: {
     flex: 1,

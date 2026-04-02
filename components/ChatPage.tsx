@@ -1229,7 +1229,11 @@ export function ChatPage({
           <Ionicons name="menu-outline" size={20} color="#6b7280" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerBrand}>Dzeck AI</Text>
+          <Image
+            source={require("../assets/images/dzeck-logo-transparent.png")}
+            style={{ width: 80, height: 28 }}
+            resizeMode="contain"
+          />
           <TouchableOpacity
             onPress={() => onAgentModeChange?.(!isAgentMode)}
             style={[styles.modeBadge, isAgentMode ? styles.modeBadgeAgent : styles.modeBadgeChat]}

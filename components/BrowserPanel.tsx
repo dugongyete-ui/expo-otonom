@@ -208,16 +208,15 @@ export function BrowserPanel({
   const handleTakeOver = useCallback(() => {
     const targetId = sessionId || agentSessionId;
     if (onTakeOver && targetId) {
+      // Open TakeOverView modal — it handles VNC internally, don't enable VNC in panel
       setIsTakeOverActive(true);
-      setUseVNC(true);
       onTakeOver(targetId);
     } else if (targetId && Platform.OS === "web") {
       const viewerUrl = `/e2b-viewer?session=${targetId}&takeover=1`;
       window.open(viewerUrl, "_blank");
     } else if (targetId) {
-      // Native: enable interactive VNC control directly in panel
+      // Native fallback with no onTakeOver: show fullscreen modal
       setIsTakeOverActive(true);
-      setUseVNC(true);
     }
   }, [sessionId, agentSessionId, onTakeOver]);
 
@@ -317,8 +316,8 @@ export function BrowserPanel({
 
         {sessionState === "ready" && (
           <View style={[styles.readyState, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            {/* VNC Live View or Screenshot */}
-            {useVNC && sessionId ? (
+            {/* VNC Live View (web only) or Screenshot (native always) */}
+            {useVNC && sessionId && Platform.OS === "web" ? (
               <View style={styles.vncContainer}>
                 <VNCViewer
                   sessionId={sessionId}
@@ -461,14 +460,14 @@ export function BrowserPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   header: {
     flexDirection: "row",
@@ -477,7 +476,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#1f2937",
   },
   headerLeft: {
     flexDirection: "row",
@@ -487,7 +486,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#111827",
+    color: "#f3f4f6",
   },
   liveBadge: {
     flexDirection: "row",
@@ -515,7 +514,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
   },
   content: {
     flex: 1,
@@ -530,13 +529,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#9ca3af",
+    color: "#6b7280",
     marginTop: 4,
   },
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#4b5563",
     textAlign: "center",
     lineHeight: 16,
     marginBottom: 8,
@@ -565,7 +564,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#6b7280",
     textAlign: "center",
   },
   errorState: {
@@ -578,12 +577,12 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#dc2626",
+    color: "#FF453A",
   },
   errorText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#6b7280",
     textAlign: "center",
     lineHeight: 16,
     marginBottom: 8,
@@ -592,17 +591,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#374151",
   },
   retryButtonText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#111827",
+    color: "#e5e7eb",
   },
   readyState: {
     flex: 1,
@@ -612,9 +611,9 @@ const styles = StyleSheet.create({
   screenshotContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#0d1117",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#1f2937",
     position: "relative",
   },
   screenshot: {
@@ -641,20 +640,20 @@ const styles = StyleSheet.create({
   noScreenshot: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#0d1117",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#1f2937",
     paddingVertical: 30,
     gap: 8,
   },
   noScreenshotText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   sessionInfo: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     padding: 10,
     gap: 6,
@@ -667,14 +666,14 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   infoValue: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#6b7280",
+    color: "#9ca3af",
   },
   actions: {
     flexDirection: "row",
@@ -687,36 +686,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
     borderRadius: 6,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#374151",
     minWidth: 80,
   },
   actionText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#6b7280",
+    color: "#9ca3af",
   },
   dangerButton: {
-    borderColor: "rgba(220,38,38,0.2)",
+    borderColor: "rgba(255,69,58,0.25)",
   },
   dangerText: {
-    color: "#dc2626",
+    color: "#FF453A",
   },
   takeOverBtn: {
-    borderColor: "rgba(217,119,6,0.3)",
+    borderColor: "rgba(255,159,10,0.3)",
   },
   takeOverText: {
-    color: "#d97706",
+    color: "#FF9F0A",
   },
   vncContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0d1117",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#1f2937",
     height: 200,
   },
   vncActiveBtn: {
@@ -728,7 +727,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   currentUrl: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     padding: 10,
     gap: 4,
@@ -742,11 +741,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   pageTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#111827",
+    color: "#e5e7eb",
   },
 });
