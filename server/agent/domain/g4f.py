@@ -115,8 +115,9 @@ def call_cerebras_api(
 def call_cerebras_streaming(messages: list) -> str:
     last_error: Optional[Exception] = None
     full_text = ""
+    current_messages = messages
     for attempt in range(4):
-        body = _build_request_body(messages, stream=True)
+        body = _build_request_body(current_messages, stream=True)
         req = _make_cerebras_request(CEREBRAS_API_URL, body)
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
@@ -141,7 +142,13 @@ def call_cerebras_streaming(messages: list) -> str:
             return full_text
         except urllib.error.HTTPError as e:
             last_error = e
-            if e.code == 429:
+            if e.code == 413:
+                sys.stderr.write(
+                    "[agent] Cerebras streaming Payload Too Large (413, attempt {}): truncating messages and retrying\n".format(attempt + 1)
+                )
+                sys.stderr.flush()
+                current_messages = _truncate_messages_for_413(current_messages)
+            elif e.code == 429:
                 retry_after = e.headers.get("Retry-After") if e.headers else None
                 if retry_after:
                     try:
@@ -251,14 +258,78 @@ def call_cerebras_text(messages: list) -> str:
     return ""
 
 
+def _truncate_messages_for_413(messages: list) -> list:
+    """Truncate message content to reduce payload size after a 413 error.
+
+    Preserves the system message (index 0) and the most recent 2 messages
+    intact (with only browser content capped at 1500 chars). Aggressively
+    truncates all middle messages: browser content → 300 chars, other → 500 chars.
+    """
+    if len(messages) <= 3:
+        # Too few messages to selectively truncate; truncate everything except system
+        result = []
+        for i, msg in enumerate(messages):
+            if i == 0:
+                result.append(msg)
+                continue
+            content = str(msg.get("content", ""))
+            new_msg = dict(msg)
+            new_msg["content"] = content[:500] + "...[truncated]" if len(content) > 500 else content
+            result.append(new_msg)
+        return result
+
+    system_msg = messages[0]
+    recent = messages[-2:]
+    middle = messages[1:-2]
+
+    # Aggressively truncate middle messages
+    truncated_middle = []
+    for msg in middle:
+        content = str(msg.get("content", ""))
+        is_browser = any(kw in content for kw in [
+            "browser_navigate", "browser_view", "browser_click",
+            "<html", "<!DOCTYPE", "document.querySelector",
+        ])
+        new_msg = dict(msg)
+        if is_browser:
+            new_msg["content"] = content[:300] + "...[browser content truncated for size]" if len(content) > 300 else content
+        else:
+            new_msg["content"] = content[:500] + "...[truncated]" if len(content) > 500 else content
+        truncated_middle.append(new_msg)
+
+    # Cap browser content in recent messages (less aggressive — keep 1500 chars)
+    capped_recent = []
+    for msg in recent:
+        content = str(msg.get("content", ""))
+        is_browser = any(kw in content for kw in [
+            "browser_navigate", "browser_view", "browser_click",
+            "<html", "<!DOCTYPE", "document.querySelector",
+        ])
+        if is_browser and len(content) > 1500:
+            new_msg = dict(msg)
+            new_msg["content"] = content[:1500] + "...[browser content truncated]"
+            capped_recent.append(new_msg)
+        else:
+            capped_recent.append(msg)
+
+    return [system_msg] + truncated_middle + capped_recent
+
+
 def call_text_with_retry(messages: list, max_retries: int = 7) -> str:
     last_error: Optional[Exception] = None
+    current_messages = messages
     for attempt in range(max_retries):
         try:
-            return call_cerebras_text(messages)
+            return call_cerebras_text(current_messages)
         except urllib.error.HTTPError as e:
             last_error = e
-            if e.code == 429:
+            if e.code == 413:
+                sys.stderr.write(
+                    f"[agent] Payload Too Large (413) on attempt {attempt + 1}/{max_retries} — truncating messages and retrying\n"
+                )
+                sys.stderr.flush()
+                current_messages = _truncate_messages_for_413(current_messages)
+            elif e.code == 429:
                 retry_after = e.headers.get("Retry-After") if e.headers else None
                 if retry_after:
                     try:
@@ -299,12 +370,21 @@ def call_api_with_retry(
     current_model = _get_model_name()
     model_supports_tools = current_model not in _NO_TOOL_CALL_MODELS
     effective_tools = tools if (model_supports_tools and tools) else None
+    current_messages = messages
 
     for attempt in range(max_retries):
         try:
-            result = call_cerebras_api(messages, tools=effective_tools)
+            result = call_cerebras_api(current_messages, tools=effective_tools)
             return result
         except urllib.error.HTTPError as e:
+            if e.code == 413:
+                sys.stderr.write(
+                    f"[agent] Payload Too Large (413) on attempt {attempt + 1}/{max_retries} — truncating messages and retrying\n"
+                )
+                sys.stderr.flush()
+                current_messages = _truncate_messages_for_413(current_messages)
+                last_error = e
+                continue
             if e.code == 400 and effective_tools is not None:
                 sys.stderr.write(
                     "[agent] Model doesn't support native tool schemas (400). Falling back to text-based tool calling.\n"
@@ -312,7 +392,7 @@ def call_api_with_retry(
                 sys.stderr.flush()
                 effective_tools = None
                 try:
-                    return call_cerebras_api(messages, tools=None)
+                    return call_cerebras_api(current_messages, tools=None)
                 except Exception as e2:
                     last_error = e2
                     continue

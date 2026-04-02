@@ -193,13 +193,13 @@ def _coerce_bool(value: Any, default: bool = True) -> bool:
 
 
 def _compact_exec_messages(messages: list) -> list:
-    if len(messages) <= 16:
+    if len(messages) <= 6:
         return messages
 
     system_msg = messages[0]
     first_user_msg = messages[1] if len(messages) > 1 else None
-    last_6 = messages[-6:]
-    middle = messages[2:-6] if len(messages) > 8 else []
+    last_2 = messages[-2:]
+    middle = messages[2:-2] if len(messages) > 4 else []
     if not middle:
         return messages
 
@@ -231,8 +231,139 @@ def _compact_exec_messages(messages: list) -> list:
     if first_user_msg:
         result.append(first_user_msg)
     result.extend(compacted_middle)
-    result.extend(last_6)
+
+    # Cap browser content in the last 2 messages as well (max 1500 chars each)
+    for msg in last_2:
+        role = msg.get("role", "")
+        content = str(msg.get("content", ""))
+        is_browser_result = any(kw in content for kw in [
+            "browser_navigate", "browser_view", "browser_click",
+            "<html", "<!DOCTYPE", "document.querySelector",
+        ])
+        if is_browser_result and len(content) > 1500:
+            result.append({"role": role, "content": content[:1500] + "...[browser content truncated]"})
+        else:
+            result.append(msg)
+
     return result
+
+
+def _estimate_payload_chars(messages: list, tools: Optional[List[Dict[str, Any]]] = None) -> int:
+    """Estimate total character count of the payload to be sent to the API."""
+    total = sum(len(str(m.get("content", ""))) for m in messages)
+    if tools:
+        total += sum(len(json.dumps(t)) for t in tools)
+    return total
+
+
+def _compact_exec_messages_aggressive(messages: list) -> list:
+    """More aggressive compaction: apply browser caps across all non-system messages.
+
+    The system message (index 0, role='system') is preserved intact to avoid
+    degrading instruction fidelity. All other messages are capped aggressively.
+    """
+    result = []
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "")
+        content = str(msg.get("content", ""))
+        if i == 0 and role == "system":
+            result.append(msg)
+            continue
+        is_browser_result = any(kw in content for kw in [
+            "browser_navigate", "browser_view", "browser_click",
+            "<html", "<!DOCTYPE", "document.querySelector",
+        ])
+        is_shell_result = "return_code:" in content or "stdout:" in content
+        if is_browser_result:
+            new_content = content[:300] + "...[browser content truncated]" if len(content) > 300 else content
+            result.append({"role": role, "content": new_content})
+        elif is_shell_result:
+            new_content = content[:500] + "...[truncated]" if len(content) > 500 else content
+            result.append({"role": role, "content": new_content})
+        else:
+            new_content = content[:400] + "...[truncated]" if len(content) > 400 else content
+            result.append({"role": role, "content": new_content})
+    return result
+
+
+_AGENT_TOOL_ALLOWLIST: Dict[str, Optional[List[str]]] = {
+    "web": WEB_AGENT_TOOLS,
+    "data": DATA_AGENT_TOOLS,
+    "code": CODE_AGENT_TOOLS,
+    "files": FILES_AGENT_TOOLS,
+    "general": None,
+    "orchestrator": None,
+}
+
+
+_MANDATORY_TOOLS = {"idle", "task_complete"}
+
+
+def _filter_tools_for_agent(
+    tools: List[Dict[str, Any]],
+    agent_type: str,
+) -> List[Dict[str, Any]]:
+    """Filter tool schemas to only those relevant for the given agent_type.
+
+    Uses canonical agent tool allowlists (same lists used by _AGENT_CONTEXT_MAP)
+    to reduce tool schema payload before sending to the API. For agent types
+    without a defined allowlist (general, orchestrator), returns the full list.
+    Mandatory control tools (idle, task_complete) are always included regardless
+    of the allowlist to preserve step-completion semantics.
+    Falls back to the full list if the filter produces an empty result.
+    """
+    allowlist = _AGENT_TOOL_ALLOWLIST.get(agent_type)
+    if allowlist is None:
+        return tools
+    allowed_set = set(allowlist) | _MANDATORY_TOOLS
+    filtered = [t for t in tools if t.get("name", "") in allowed_set]
+    if not filtered:
+        return tools
+    return filtered
+
+
+def _enforce_payload_limit(
+    messages: list,
+    tools: Optional[List[Dict[str, Any]]],
+    limit: int = 60000,
+) -> list:
+    """Ensure total payload chars stay under limit by iteratively compacting messages.
+
+    Strategy (in order):
+    1. Return immediately if already under limit.
+    2. Apply aggressive compaction (system msg preserved, non-system capped).
+    3. If still over, emergency trim: system + last 3 messages only.
+    4. Final guard: iteratively drop oldest non-system messages until under limit
+       or only system + 1 message remains.
+    4. Log to stderr at each escalation level.
+    """
+    if _estimate_payload_chars(messages, tools) <= limit:
+        return messages
+    sys.stderr.write("[agent] Payload too large (>{}), applying aggressive compaction before send\n".format(limit))
+    sys.stderr.flush()
+    compacted = _compact_exec_messages_aggressive(messages)
+    if _estimate_payload_chars(compacted, tools) <= limit:
+        return compacted
+    # Emergency trim: keep system message + the last 3 messages only
+    sys.stderr.write("[agent] Payload still too large after aggressive compaction — applying emergency trim\n")
+    sys.stderr.flush()
+    if len(compacted) <= 4:
+        emergency = compacted
+    else:
+        emergency = [compacted[0]] + compacted[-3:]
+    # Final guard: iteratively drop oldest non-system messages until under limit
+    while len(emergency) > 2 and _estimate_payload_chars(emergency, tools) > limit:
+        sys.stderr.write("[agent] Emergency trim: dropping oldest non-system message to fit payload limit\n")
+        sys.stderr.flush()
+        emergency = [emergency[0]] + emergency[2:]
+    final_size = _estimate_payload_chars(emergency, tools)
+    if final_size > limit:
+        sys.stderr.write(
+            "[agent] WARNING: payload ({} chars) still exceeds limit ({}) after all trimming "
+            "(likely large system msg or tool schemas). Sending anyway.\n".format(final_size, limit)
+        )
+        sys.stderr.flush()
+    return emergency
 
 
 def safe_plan_dict(plan: Optional["Plan"]) -> Dict[str, Any]:
@@ -1237,9 +1368,11 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     exec_messages[0] = {"role": "system", "content": _build_system_content()}
 
                 _msgs = list(exec_messages)
+                _send_tools = _filter_tools_for_agent(_agent_tool_schemas, _agent_type)
+                _msgs = _enforce_payload_limit(_msgs, _send_tools)
                 api_result = await loop.run_in_executor(
                     None,
-                    lambda: call_api_with_retry(_msgs, tools=_agent_tool_schemas),
+                    lambda: call_api_with_retry(_msgs, tools=_send_tools),
                 )
                 text, tool_calls = _extract_cerebras_response(api_result)
 
@@ -1296,7 +1429,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                         return
                     if iteration > 0 and iteration % 5 == 0:
                         self.memory.compact()
-                    if len(exec_messages) > 12:
+                    if len(exec_messages) > 6:
                         exec_messages = _compact_exec_messages(exec_messages)
                     continue
 
@@ -1363,7 +1496,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                         })
                         if iteration > 0 and iteration % 5 == 0:
                             self.memory.compact()
-                        if len(exec_messages) > 12:
+                        if len(exec_messages) > 6:
                             exec_messages = _compact_exec_messages(exec_messages)
                         continue
 
@@ -1403,7 +1536,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                                 return
                             if iteration > 0 and iteration % 5 == 0:
                                 self.memory.compact()
-                            if len(exec_messages) > 12:
+                            if len(exec_messages) > 6:
                                 exec_messages = _compact_exec_messages(exec_messages)
                             continue
 
