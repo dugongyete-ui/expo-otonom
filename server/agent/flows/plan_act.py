@@ -50,7 +50,7 @@ from server.agent.prompts.agents.code_agent import CODE_AGENT_SYSTEM_PROMPT, COD
 from server.agent.prompts.agents.files_agent import FILES_AGENT_SYSTEM_PROMPT, FILES_AGENT_TOOLS
 from server.agent.prompts.agents.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_TOOLS
 
-from server.agent.domain.g4f import (
+from server.agent.domain.cohere import (
     CEREBRAS_API_URL,
     _build_request_body,
     _make_cerebras_request,
@@ -1310,7 +1310,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
 """
 
         def _build_system_content() -> str:
-            from server.agent.domain.g4f import _TOOLS_SUPPORTED as _ts
+            from server.agent.domain.cohere import _TOOLS_SUPPORTED as _ts
             return _agent_sys_prompt + (_TEXT_TOOL_INSTRUCTION if _ts is False else "")
 
         exec_messages: List[Dict[str, Any]] = [
@@ -1319,7 +1319,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
         ]
 
         loop = asyncio.get_running_loop()
-        from server.agent.domain.g4f import _TOOLS_SUPPORTED as _ts_init
+        from server.agent.domain.cohere import _TOOLS_SUPPORTED as _ts_init
         _prev_tools_supported = _ts_init
 
         async def _wait_if_paused():
@@ -1362,7 +1362,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     except Exception:
                         pass
 
-                from server.agent.domain.g4f import _TOOLS_SUPPORTED as _ts_cur
+                from server.agent.domain.cohere import _TOOLS_SUPPORTED as _ts_cur
                 if _ts_cur != _prev_tools_supported:
                     _prev_tools_supported = _ts_cur
                     exec_messages[0] = {"role": "system", "content": _build_system_content()}
@@ -1376,7 +1376,7 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                 )
                 text, tool_calls = _extract_cerebras_response(api_result)
 
-                from server.agent.domain.g4f import _TOOLS_SUPPORTED as _ts_after
+                from server.agent.domain.cohere import _TOOLS_SUPPORTED as _ts_after
                 if _ts_after != _prev_tools_supported:
                     _prev_tools_supported = _ts_after
                     exec_messages[0] = {"role": "system", "content": _build_system_content()}

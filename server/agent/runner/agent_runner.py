@@ -191,7 +191,7 @@ def main() -> None:
     # E2B_API_KEY and MONGODB_URI are optional (agent will run without them,
     # but sandbox tools and session persistence will be unavailable).
     _missing = []
-    if not (os.environ.get("COHERE_API_KEY", "") or os.environ.get("G4F_API_KEY", "")):
+    if not os.environ.get("COHERE_API_KEY", ""):
         _missing.append("COHERE_API_KEY")
     if _missing:
         _emit({

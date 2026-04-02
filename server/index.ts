@@ -51,8 +51,8 @@ if (process.env.E2B_API_KEY) {
 (function validateEnv() {
   const warnings: string[] = [];
 
-  if (!process.env.G4F_API_KEY) {
-    warnings.push("G4F_API_KEY — required for AI chat and agent. Get from https://g4f.space/");
+  if (!process.env.COHERE_API_KEY) {
+    warnings.push("COHERE_API_KEY — required for AI chat and agent. Get from https://cohere.com/");
   }
   if (!process.env.MONGODB_URI) {
     warnings.push("MONGODB_URI — required for session persistence. Agent will run without history.");
@@ -714,8 +714,8 @@ asyncio.run(main())
           if (toolsRes.ok) {
             const health = await toolsRes.json() as Record<string, any>;
             const e2b = health.e2b_enabled ? "✓ connected" : "✗ not configured";
-            const g4f = health.g4f_configured ? "✓ configured" : "✗ missing key";
-            log(`[Health] E2B sandbox: ${e2b} | G4F Space AI: ${g4f}`);
+            const cohere = health.cohere_configured ? "✓ configured" : "✗ missing key";
+            log(`[Health] E2B sandbox: ${e2b} | Cohere AI: ${cohere}`);
             if (health.tools) {
               const toolStatuses = Object.entries(health.tools as Record<string, any>)
                 .map(([name, info]: [string, any]) => `${name}=${info.status}`)

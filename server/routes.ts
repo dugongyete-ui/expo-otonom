@@ -37,7 +37,7 @@ function isE2BEnabled(): boolean {
 }
 
 function getCerebrasConfig() {
-  const apiKey = process.env.COHERE_API_KEY || process.env.G4F_API_KEY || "";
+  const apiKey = process.env.COHERE_API_KEY || "";
   const model = process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025";
   const agentModel = process.env.COHERE_AGENT_MODEL || "command-a-reasoning-08-2025";
   const apiUrl = process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat";
@@ -212,7 +212,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   app.put("/api/config", requireAdmin, async (req: any, res: any) => {
-    const allowed = ["G4F_MODEL", "G4F_API_URL", "COHERE_CHAT_MODEL", "COHERE_AGENT_MODEL", "COHERE_API_URL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
+    const allowed = ["COHERE_CHAT_MODEL", "COHERE_AGENT_MODEL", "COHERE_API_URL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
     const updates: Record<string, string> = {};
 
     for (const key of allowed) {
@@ -244,8 +244,6 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({
       updated: updates,
       current: {
-        G4F_MODEL: process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025",
-        G4F_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
         COHERE_CHAT_MODEL: process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025",
         COHERE_AGENT_MODEL: process.env.COHERE_AGENT_MODEL || "command-a-reasoning-08-2025",
         SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
@@ -434,7 +432,7 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     if (!apiKey) {
       setupSSEHeaders(res);
-      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set G4F_API_KEY di environment." })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set COHERE_API_KEY di environment." })}\n\n`);
       return res.end();
     }
 
@@ -468,7 +466,8 @@ export async function registerRoutes(app: any): Promise<Server> {
 
       let buffer = "";
       let messageStarted = false;
-      let currentEventType = "";
+      let thinkingStarted = false;
+      let thinkingBuffer = "";
 
       apiRes.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
@@ -476,39 +475,46 @@ export async function registerRoutes(app: any): Promise<Server> {
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          const trimmed = line.trimEnd();
-          if (trimmed.startsWith("event: ")) {
-            currentEventType = trimmed.slice(7).trim();
-            continue;
-          }
-          if (!trimmed.startsWith("data: ")) continue;
-          const payload = trimmed.slice(6).trim();
-          if (!payload || payload === "[DONE]") continue;
+          const trimmed = line.trim();
+          if (!trimmed) continue;
 
           try {
-            const parsed = JSON.parse(payload);
-            let content = "";
+            // Cohere v2 NDJSON streaming — each line is a raw JSON object
+            const parsed = JSON.parse(trimmed);
+            const eventType = parsed?.type ?? "";
 
-            // Cohere v2 streaming: content-delta event
-            if (currentEventType === "content-delta") {
-              content = parsed?.delta?.message?.content?.text ?? "";
-            } else if (currentEventType === "message-end") {
-              // stream complete
-              break;
-            } else {
-              // Fallback: OpenAI-style delta
-              content = parsed?.response ?? parsed?.choices?.[0]?.delta?.content ?? "";
-            }
+            if (eventType === "message-end") break;
 
-            if (content) {
-              if (!messageStarted) {
-                res.write(`data: ${JSON.stringify({ type: "message_start", role: "assistant" })}\n\n`);
-                messageStarted = true;
+            if (eventType === "content-delta") {
+              const delta = parsed?.delta?.message?.content ?? {};
+              // Thinking tokens
+              if (typeof delta.thinking === "string" && delta.thinking) {
+                thinkingBuffer += delta.thinking;
+                if (!thinkingStarted) {
+                  res.write(`data: ${JSON.stringify({ type: "thinking_start" })}\n\n`);
+                  thinkingStarted = true;
+                }
+                res.write(`data: ${JSON.stringify({ type: "thinking_chunk", chunk: delta.thinking })}\n\n`);
+                if (typeof (res as any).flush === "function") (res as any).flush();
+                continue;
               }
-              res.write(`data: ${JSON.stringify({ type: "message_chunk", chunk: content })}\n\n`);
-              if (typeof (res as any).flush === "function") (res as any).flush();
+              // Regular text content
+              const content: string = delta.text ?? "";
+              if (content) {
+                if (thinkingStarted && !messageStarted) {
+                  res.write(`data: ${JSON.stringify({ type: "thinking_end" })}\n\n`);
+                }
+                if (!messageStarted) {
+                  res.write(`data: ${JSON.stringify({ type: "message_start", role: "assistant" })}\n\n`);
+                  messageStarted = true;
+                }
+                res.write(`data: ${JSON.stringify({ type: "message_chunk", chunk: content })}\n\n`);
+                if (typeof (res as any).flush === "function") (res as any).flush();
+              }
             }
-          } catch (_e) {}
+          } catch (_e) {
+            // Ignore parse errors for incomplete lines
+          }
         }
       });
 
@@ -1141,7 +1147,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     const e2bKey = process.env.E2B_API_KEY || "";
 
     if (!apiKey) {
-      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set G4F_API_KEY di environment lalu restart server." })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set COHERE_API_KEY di environment lalu restart server." })}\n\n`);
       res.write("data: [DONE]\n\n");
       return res.end();
     }
@@ -1211,11 +1217,9 @@ export async function registerRoutes(app: any): Promise<Server> {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        G4F_API_KEY: apiKey,
-        G4F_MODEL: agentModel,
+        COHERE_API_KEY: apiKey,
         COHERE_AGENT_MODEL: agentModel,
         COHERE_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
-        G4F_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
         PYTHONPATH: process.cwd(),
         PYTHONUNBUFFERED: "1",
         DZECK_SESSION_ID: sid,
@@ -2124,7 +2128,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({
       message: "API is working",
       timestamp: new Date().toISOString(),
-      g4fConfigured: !!startupCfg.apiKey,
+      cohereConfigured: !!startupCfg.apiKey,
       e2bEnabled: isE2BEnabled(),
     });
   });
@@ -2908,7 +2912,7 @@ asyncio.run(main())
   // ─── Tools health check endpoint ─────────────────────────────────────────
   app.get("/api/health/tools", async (_req: any, res: any) => {
     const e2bOn = isE2BEnabled();
-    const g4fConfigured = !!getCerebrasConfig().apiKey;
+    const cohereConfigured = !!getCerebrasConfig().apiKey;
     const timestamp = new Date().toISOString();
 
     // Fast lightweight Python probe: only checks imports + search — NO sandbox creation.
@@ -3044,7 +3048,7 @@ print(json.dumps(results))
       return "ready";
     };
 
-    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ active" : "○ idle"} | imports: ${importsOk ? "✓" : "✗"} | search: ${searchOk ? "✓" : "✗"} | g4f: ${g4fConfigured ? "✓" : "✗"}${e2eRan ? ` | shell: ${e2eProbe.shell_e2e} | file: ${e2eProbe.file_e2e} | browser: ${e2eProbe.browser_e2e}` : ""}`);
+    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ active" : "○ idle"} | imports: ${importsOk ? "✓" : "✗"} | search: ${searchOk ? "✓" : "✗"} | cohere: ${cohereConfigured ? "✓" : "✗"}${e2eRan ? ` | shell: ${e2eProbe.shell_e2e} | file: ${e2eProbe.file_e2e} | browser: ${e2eProbe.browser_e2e}` : ""}`);
 
     res.json({
       status: "ok",
@@ -3088,11 +3092,11 @@ print(json.dumps(results))
         mcp: { status: "ready", requires: "none", available: true },
       },
       e2b_enabled: e2bOn,
-      g4f_configured: g4fConfigured,
+      cohere_configured: cohereConfigured,
       python_probe: pythonProbe,
       e2e_probe: e2eProbe,
       sandbox_id: sandboxId,
-      all_tools_ready: e2bOn && g4fConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
+      all_tools_ready: e2bOn && cohereConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
       e2e_verified: e2eRan && shellOk && fileOk,
     });
   });
@@ -3136,10 +3140,10 @@ print(json.dumps(results))
       message: isE2BEnabled() ? "E2B_API_KEY set" : "E2B_API_KEY not set",
     };
 
-    // Check G4F
-    services.g4f = {
-      status: !!process.env.G4F_API_KEY ? "configured" : "unavailable",
-      message: !!process.env.G4F_API_KEY ? "G4F_API_KEY set" : "G4F_API_KEY not set",
+    // Check Cohere AI
+    services.cohere = {
+      status: !!process.env.COHERE_API_KEY ? "configured" : "unavailable",
+      message: !!process.env.COHERE_API_KEY ? "COHERE_API_KEY set" : "COHERE_API_KEY not set",
     };
 
     const mongoOk = services.mongodb.status === "ok";

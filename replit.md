@@ -177,6 +177,12 @@ Replit only accepts HTTPS on external ports — plain HTTP (port 3002) is reject
 - **Header icons**: Transparent button backgrounds, icon color `#a0a0a0`–`#b0b0b0`, size 20–22px
 - **Tool icons**: `components/icons/ToolIcons.tsx` — SVG icons with `#2a2a2a` fill, `#3a3a3a` stroke
 
+## Recent Fixes (April 2026 — Latest)
+- **Cohere AI fully integrated**: All G4F/gpt4free references removed from `server/routes.ts`, `server/index.ts`, `server/agent/runner/agent_runner.py`, `server/agent/domain/g4f.py`. App now uses only `COHERE_API_KEY` env var.
+- **Streaming parser fixed**: Chat endpoint (`/api/chat`) now correctly parses Cohere v2 NDJSON streaming format (each line is raw JSON with `type` field) instead of SSE format. Supports `thinking_start/chunk/end` events for reasoning model tokens.
+- **Thinking tokens exposed**: `command-a-reasoning-08-2025` model sends thinking tokens before the actual response. These are now streamed as `thinking_chunk` events for real-time display.
+- **Health check updated**: `/api/health/tools` now reports `cohere_configured` (was `g4f_configured`); `/api/health` now checks `services.cohere` instead of `services.g4f`.
+
 ## Recent Fixes (April 2026)
 - **Icons fix**: Added `...Ionicons.font` to `useFonts` in `app/_layout.tsx` — Ionicons (from @expo/vector-icons) now loads properly; icons no longer appear as squares.
 - **E2B text removed**: Replaced all user-facing "E2B" labels with professional equivalents: "Sandbox" (status badge in ChatPage.tsx), "Cloud Desktop" (BrowserPanel.tsx title), "Membuat Cloud Desktop Sandbox..." (status message).
