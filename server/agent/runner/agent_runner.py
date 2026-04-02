@@ -187,12 +187,12 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
     # ── Preflight: validate required environment variables ────────────────────
-    # Only CEREBRAS_API_KEY is strictly required for basic chat/agent function.
+    # Only G4F_API_KEY is strictly required for basic chat/agent function.
     # E2B_API_KEY and MONGODB_URI are optional (agent will run without them,
     # but sandbox tools and session persistence will be unavailable).
     _missing = []
-    if not os.environ.get("CEREBRAS_API_KEY", ""):
-        _missing.append("CEREBRAS_API_KEY")
+    if not os.environ.get("G4F_API_KEY", ""):
+        _missing.append("G4F_API_KEY")
     if _missing:
         _emit({
             "type": "error",

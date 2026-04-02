@@ -325,7 +325,7 @@ export function ChatPage({
       fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
       fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
     ]).then(([prefs, cfg]) => {
-      const m = prefs.model || cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
+      const m = prefs.model || cfg.G4F_MODEL || cfg.modelName;
       if (m) setActiveModel(m);
     }).catch(() => {});
   }, []);
@@ -1408,7 +1408,7 @@ export function ChatPage({
             fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
             fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
           ]).then(([prefs, cfg]) => {
-            const m = prefs.model || cfg.CEREBRAS_AGENT_MODEL || cfg.modelName;
+            const m = prefs.model || cfg.G4F_MODEL || cfg.modelName;
             if (m) setActiveModel(m);
           }).catch(() => {});
         }}

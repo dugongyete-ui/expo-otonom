@@ -31,8 +31,8 @@ interface ServiceStatus {
 }
 
 interface AppConfig {
-  CEREBRAS_CHAT_MODEL?: string;
-  CEREBRAS_AGENT_MODEL?: string;
+  G4F_MODEL?: string;
+  G4F_API_URL?: string;
   SEARCH_PROVIDER?: string;
   MODEL_PROVIDER?: string;
   SHOW_GITHUB_BUTTON?: string;
@@ -62,7 +62,7 @@ const FALLBACK_MODELS: SelectOption[] = [
 ];
 
 const FALLBACK_PROVIDERS: SelectOption[] = [
-  { label: "Cerebras", value: "cerebras" },
+  { label: "G4F Space", value: "g4f" },
   { label: "OpenAI", value: "openai" },
   { label: "Anthropic", value: "anthropic" },
 ];
@@ -164,7 +164,7 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
 
   const [agentModel, setAgentModel] = useState("qwen-3-235b-a22b-instruct-2507");
   const [chatModel, setChatModel] = useState("qwen-3-235b-a22b-instruct-2507");
-  const [modelProvider, setModelProvider] = useState("cerebras");
+  const [modelProvider, setModelProvider] = useState("g4f");
   const [searchProvider, setSearchProvider] = useState("bing_web");
   const [googleApiKey, setGoogleApiKey] = useState("");
   const [googleEngineId, setGoogleEngineId] = useState("");
@@ -191,7 +191,7 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
       const statuses: Record<string, ServiceStatus> = {};
       if (health?.services) {
         const svcMap: Record<string, string> = {
-          cerebras: "cerebras",
+          g4f: "g4f",
           mongodb: "mongodb",
           redis: "redis",
         };
@@ -221,9 +221,9 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
       if (data.available_providers?.length) setProviderOptions(data.available_providers);
       if (data.available_search_providers?.length) setSearchOptions(data.available_search_providers);
       const prefs = prefsRes.ok ? await prefsRes.json().catch(() => ({})) : {};
-      setAgentModel(prefs.model || data.CEREBRAS_AGENT_MODEL || data.modelName || "qwen-3-235b-a22b-instruct-2507");
-      setChatModel(data.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507");
-      setModelProvider(prefs.modelProvider || data.MODEL_PROVIDER || data.modelProvider || "cerebras");
+      setAgentModel(prefs.model || data.G4F_MODEL || data.modelName || "auto");
+      setChatModel(data.G4F_MODEL || "auto");
+      setModelProvider(prefs.modelProvider || data.MODEL_PROVIDER || data.modelProvider || "g4f");
       setSearchProvider(prefs.searchProvider || data.SEARCH_PROVIDER || data.searchProvider || "bing_web");
     } catch (err: any) {
       setError(err.message);
@@ -339,7 +339,7 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
             )}
 
             <SectionHeader title="Service Status" />
-            <StatusRow label="Cerebras AI" enabled={serviceStatuses.cerebras?.configured ?? false} message={serviceStatuses.cerebras?.message} />
+            <StatusRow label="G4F Space AI" enabled={serviceStatuses.g4f?.configured ?? false} message={serviceStatuses.g4f?.message} />
             <StatusRow label="MongoDB" enabled={serviceStatuses.mongodb?.configured ?? false} message={serviceStatuses.mongodb?.message} />
             <StatusRow label="Redis" enabled={serviceStatuses.redis?.configured ?? false} message={serviceStatuses.redis?.message} />
             <StatusRow label="E2B Sandbox" enabled={serviceStatuses.e2b?.configured ?? !!config.E2B_ENABLED} message={serviceStatuses.e2b?.message} />

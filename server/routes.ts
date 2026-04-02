@@ -37,12 +37,18 @@ function isE2BEnabled(): boolean {
 }
 
 function getCerebrasConfig() {
-  const apiKey = process.env.CEREBRAS_API_KEY || "";
-  const model = process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507";
-  const agentModel = process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507";
-  const hostname = "api.cerebras.ai";
-  const path = "/v1/chat/completions";
-  return { apiKey, model, agentModel, hostname, path };
+  const apiKey = process.env.G4F_API_KEY || "";
+  const model = process.env.G4F_MODEL || "auto";
+  const agentModel = process.env.G4F_MODEL || "auto";
+  const apiUrl = process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions";
+  let hostname = "g4f.space";
+  let path = "/api/auto/chat/completions";
+  try {
+    const urlObj = new URL(apiUrl);
+    hostname = urlObj.hostname;
+    path = urlObj.pathname;
+  } catch (_) {}
+  return { apiKey, model, agentModel, hostname, path, apiUrl };
 }
 
 function setupSSEHeaders(res: any) {
@@ -56,7 +62,7 @@ function setupSSEHeaders(res: any) {
 export async function registerRoutes(app: any): Promise<Server> {
   const startupCfg = getCerebrasConfig();
   if (!startupCfg.apiKey) {
-    console.warn("[WARNING] CEREBRAS_API_KEY is not set. AI features will not work.");
+    console.warn("[WARNING] G4F_API_KEY is not set. AI features will not work.");
   }
 
   // ─── Startup: clean up stale running sessions from previous server instance ─
@@ -135,16 +141,16 @@ export async function registerRoutes(app: any): Promise<Server> {
         const doc = await (col as any).findOne({ _type: "app_config" }, { projection: { _id: 0 } });
         if (doc) {
           // .env always wins for model config — only apply MongoDB values if .env is not set
-          if (doc.CEREBRAS_CHAT_MODEL && !process.env.CEREBRAS_CHAT_MODEL) process.env.CEREBRAS_CHAT_MODEL = doc.CEREBRAS_CHAT_MODEL;
-          if (doc.CEREBRAS_AGENT_MODEL && !process.env.CEREBRAS_AGENT_MODEL) process.env.CEREBRAS_AGENT_MODEL = doc.CEREBRAS_AGENT_MODEL;
+          if (doc.G4F_MODEL && !process.env.G4F_MODEL) process.env.G4F_MODEL = doc.G4F_MODEL;
+          if (doc.G4F_API_URL && !process.env.G4F_API_URL) process.env.G4F_API_URL = doc.G4F_API_URL;
           if (doc.SEARCH_PROVIDER && !process.env.SEARCH_PROVIDER) process.env.SEARCH_PROVIDER = doc.SEARCH_PROVIDER;
           if (doc.GOOGLE_SEARCH_API_KEY && !process.env.GOOGLE_SEARCH_API_KEY) process.env.GOOGLE_SEARCH_API_KEY = doc.GOOGLE_SEARCH_API_KEY;
           if (doc.GOOGLE_SEARCH_ENGINE_ID && !process.env.GOOGLE_SEARCH_ENGINE_ID) process.env.GOOGLE_SEARCH_ENGINE_ID = doc.GOOGLE_SEARCH_ENGINE_ID;
           if (doc.GOOGLE_CSE_ID && !process.env.GOOGLE_CSE_ID) process.env.GOOGLE_CSE_ID = doc.GOOGLE_CSE_ID;
           if (doc.MODEL_PROVIDER && !process.env.MODEL_PROVIDER) process.env.MODEL_PROVIDER = doc.MODEL_PROVIDER;
           console.log("[Config] Loaded persisted config from MongoDB (skipped keys already set in .env):", {
-            CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL,
-            CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL,
+            G4F_MODEL: process.env.G4F_MODEL,
+            G4F_API_URL: process.env.G4F_API_URL,
             SEARCH_PROVIDER: process.env.SEARCH_PROVIDER,
             GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
           });
@@ -181,15 +187,15 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.get("/api/config", (_req: any, res: any) => {
     res.json({
-      CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
-      CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+      G4F_MODEL: process.env.G4F_MODEL || "auto",
+      G4F_API_URL: process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions",
       SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
       GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
       AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
       E2B_ENABLED: isE2BEnabled(),
       authProvider: process.env.AUTH_PROVIDER || "none",
-      modelName: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
-      modelProvider: process.env.MODEL_PROVIDER || "cerebras",
+      modelName: process.env.G4F_MODEL || "auto",
+      modelProvider: process.env.MODEL_PROVIDER || "g4f",
       searchProvider: process.env.SEARCH_PROVIDER || "bing_web",
       showGithubButton: process.env.SHOW_GITHUB_BUTTON === "true",
       MCP_SERVER_URL: process.env.MCP_SERVER_URL || "",
@@ -203,7 +209,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   app.put("/api/config", requireAdmin, async (req: any, res: any) => {
-    const allowed = ["CEREBRAS_CHAT_MODEL", "CEREBRAS_AGENT_MODEL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
+    const allowed = ["G4F_MODEL", "G4F_API_URL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
     const updates: Record<string, string> = {};
 
     for (const key of allowed) {
@@ -235,10 +241,10 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({
       updated: updates,
       current: {
-        CEREBRAS_CHAT_MODEL: process.env.CEREBRAS_CHAT_MODEL || "qwen-3-235b-a22b-instruct-2507",
-        CEREBRAS_AGENT_MODEL: process.env.CEREBRAS_AGENT_MODEL || "qwen-3-235b-a22b-instruct-2507",
+        G4F_MODEL: process.env.G4F_MODEL || "auto",
+        G4F_API_URL: process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions",
         SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
-        MODEL_PROVIDER: process.env.MODEL_PROVIDER || "cerebras",
+        MODEL_PROVIDER: process.env.MODEL_PROVIDER || "g4f",
         SHOW_GITHUB_BUTTON: process.env.SHOW_GITHUB_BUTTON || "false",
       },
     });
@@ -423,7 +429,7 @@ export async function registerRoutes(app: any): Promise<Server> {
 
     if (!apiKey) {
       setupSSEHeaders(res);
-      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set CEREBRAS_API_KEY di environment." })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set G4F_API_KEY di environment." })}\n\n`);
       return res.end();
     }
 
@@ -1112,7 +1118,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     const e2bKey = process.env.E2B_API_KEY || "";
 
     if (!apiKey) {
-      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set CEREBRAS_API_KEY di environment lalu restart server." })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set G4F_API_KEY di environment lalu restart server." })}\n\n`);
       res.write("data: [DONE]\n\n");
       return res.end();
     }
@@ -1182,8 +1188,9 @@ export async function registerRoutes(app: any): Promise<Server> {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        CEREBRAS_API_KEY: apiKey,
-        CEREBRAS_AGENT_MODEL: agentModel,
+        G4F_API_KEY: apiKey,
+        G4F_MODEL: agentModel,
+        G4F_API_URL: process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions",
         PYTHONPATH: process.cwd(),
         PYTHONUNBUFFERED: "1",
         DZECK_SESSION_ID: sid,
@@ -2092,7 +2099,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({
       message: "API is working",
       timestamp: new Date().toISOString(),
-      cerebrasConfigured: !!startupCfg.apiKey,
+      g4fConfigured: !!startupCfg.apiKey,
       e2bEnabled: isE2BEnabled(),
     });
   });
@@ -2876,7 +2883,7 @@ asyncio.run(main())
   // ─── Tools health check endpoint ─────────────────────────────────────────
   app.get("/api/health/tools", async (_req: any, res: any) => {
     const e2bOn = isE2BEnabled();
-    const cerebrasConfigured = !!getCerebrasConfig().apiKey;
+    const g4fConfigured = !!getCerebrasConfig().apiKey;
     const timestamp = new Date().toISOString();
 
     // Fast lightweight Python probe: only checks imports + search — NO sandbox creation.
@@ -3012,7 +3019,7 @@ print(json.dumps(results))
       return "ready";
     };
 
-    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ active" : "○ idle"} | imports: ${importsOk ? "✓" : "✗"} | search: ${searchOk ? "✓" : "✗"} | cerebras: ${cerebrasConfigured ? "✓" : "✗"}${e2eRan ? ` | shell: ${e2eProbe.shell_e2e} | file: ${e2eProbe.file_e2e} | browser: ${e2eProbe.browser_e2e}` : ""}`);
+    console.log(`[Health] E2B sandbox: ${sandboxActive ? "✓ active" : "○ idle"} | imports: ${importsOk ? "✓" : "✗"} | search: ${searchOk ? "✓" : "✗"} | g4f: ${g4fConfigured ? "✓" : "✗"}${e2eRan ? ` | shell: ${e2eProbe.shell_e2e} | file: ${e2eProbe.file_e2e} | browser: ${e2eProbe.browser_e2e}` : ""}`);
 
     res.json({
       status: "ok",
@@ -3056,11 +3063,11 @@ print(json.dumps(results))
         mcp: { status: "ready", requires: "none", available: true },
       },
       e2b_enabled: e2bOn,
-      cerebras_configured: cerebrasConfigured,
+      g4f_configured: g4fConfigured,
       python_probe: pythonProbe,
       e2e_probe: e2eProbe,
       sandbox_id: sandboxId,
-      all_tools_ready: e2bOn && cerebrasConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
+      all_tools_ready: e2bOn && g4fConfigured && importsOk && (!e2eRan || (shellOk && fileOk)),
       e2e_verified: e2eRan && shellOk && fileOk,
     });
   });
@@ -3104,10 +3111,10 @@ print(json.dumps(results))
       message: isE2BEnabled() ? "E2B_API_KEY set" : "E2B_API_KEY not set",
     };
 
-    // Check Cerebras
-    services.cerebras = {
-      status: !!process.env.CEREBRAS_API_KEY ? "configured" : "unavailable",
-      message: !!process.env.CEREBRAS_API_KEY ? "CEREBRAS_API_KEY set" : "CEREBRAS_API_KEY not set",
+    // Check G4F
+    services.g4f = {
+      status: !!process.env.G4F_API_KEY ? "configured" : "unavailable",
+      message: !!process.env.G4F_API_KEY ? "G4F_API_KEY set" : "G4F_API_KEY not set",
     };
 
     const mongoOk = services.mongodb.status === "ok";

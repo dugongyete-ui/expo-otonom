@@ -3,7 +3,7 @@
 Dzeck AI Agent - Backward-compatible shim.
 
 The implementation has been split into DDD subdirectories:
-  server/agent/domain/cerebras.py   — Cerebras LLM helpers
+  server/agent/domain/g4f.py        — G4F Space LLM helpers
   server/agent/domain/events.py     — SSE event builders + tool content formatters
   server/agent/flows/plan_act.py    — DzeckAgent (Plan-Act orchestrator)
   server/agent/runner/agent_runner.py — run_agent_async + subprocess main()
@@ -17,7 +17,7 @@ import sys
 sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
 
 # ── Domain layer ──────────────────────────────────────────────────────────────
-from server.agent.domain.cerebras import (
+from server.agent.domain.g4f import (
     CEREBRAS_API_URL,
     _NO_TOOL_CALL_MODELS,
     _TOOLS_SUPPORTED,

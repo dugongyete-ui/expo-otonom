@@ -1,7 +1,7 @@
 """
-Cerebras LLM API helpers for Dzeck AI Agent.
+G4F Space LLM API helpers for Dzeck AI Agent.
 
-All network calls to api.cerebras.ai live here:
+All network calls to g4f.space live here:
 - _build_request_body / _make_cerebras_request
 - call_cerebras_api / call_cerebras_streaming / call_cerebras_streaming_realtime
 - call_text_with_retry / call_api_with_retry
@@ -18,16 +18,16 @@ import concurrent.futures
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 
-CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
+CEREBRAS_API_URL = os.environ.get("G4F_API_URL", "https://g4f.space/api/auto/chat/completions")
 
-_NO_TOOL_CALL_MODELS = {"llama3.1-8b", "llama-3.1-8b-instruct"}
+_NO_TOOL_CALL_MODELS: set = set()
 
 
 def _get_model_name() -> str:
-    candidate = os.environ.get("CEREBRAS_AGENT_MODEL") or ""
-    if candidate and "/" not in candidate:
+    candidate = os.environ.get("G4F_MODEL") or ""
+    if candidate:
         return candidate
-    return "qwen-3-235b-a22b-instruct-2507"
+    return "auto"
 
 
 _TOOLS_SUPPORTED: Optional[bool] = None
@@ -58,14 +58,14 @@ def _build_request_body(
 
 
 def _make_cerebras_request(url: str, body: Dict[str, Any]) -> urllib.request.Request:
-    api_key = os.environ.get("CEREBRAS_API_KEY", "")
+    api_key = os.environ.get("G4F_API_KEY", "")
     return urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "Authorization": "Bearer {}".format(api_key),
-            "User-Agent": "DzeckAI/2.0",
+            "User-Agent": "Mozilla/5.0 (compatible; DzeckAI/2.0)",
         },
         method="POST",
     )

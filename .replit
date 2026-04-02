@@ -81,8 +81,6 @@ waitForPort = 3002
 [userenv]
 
 [userenv.shared]
-CEREBRAS_CHAT_MODEL = "qwen-3-235b-a22b-instruct-2507"
-CEREBRAS_AGENT_MODEL = "qwen-3-235b-a22b-instruct-2507"
 MAX_AGENT_STEPS = "20"
 PLAYWRIGHT_ENABLED = "true"
 REDIS_HOST = "redis-14320.c334.asia-southeast2-1.gce.cloud.redislabs.com"
@@ -104,6 +102,8 @@ EMAIL_HOST = "smtp.gmail.com"
 EMAIL_USER = "admin@example.com"
 EMAIL_PASSWORD = "admin123"
 EMAIL_FROM = "admin@example.com"
+G4F_API_URL = "https://g4f.space/api/auto/chat/completions"
+G4F_MODEL = "auto"
 
 [agent]
 expertMode = true
