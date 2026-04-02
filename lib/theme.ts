@@ -4,7 +4,7 @@ export const COLORS = {
   bgInput: "#f3f4f6",
   bgInputBorder: "#e5e7eb",
   bgUserBubble: "#2563eb",
-  bgAiBubble: "#f3f4f6",
+  bgAiBubble: "#111827",
   bgAskBubble: "rgba(234,179,8,0.07)",
   bgCode: "#1f2937",
   bgToolbar: "#ffffff",
@@ -13,7 +13,7 @@ export const COLORS = {
   textMuted: "#6b7280",
   textPlaceholder: "#9ca3af",
   textUser: "#ffffff",
-  textAi: "#111827",
+  textAi: "#e5e7eb",
   textCode: "#93c5fd",
 
   accent: "#2563eb",
@@ -23,7 +23,7 @@ export const COLORS = {
   border: "#e5e7eb",
   borderStrong: "#d1d5db",
 
-  avatarAi: "#2563eb",
+  avatarAi: "#1d4ed8",
   avatarUser: "#2563eb",
   avatarAsk: "#d97706",
 

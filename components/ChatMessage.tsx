@@ -146,13 +146,14 @@ function renderInline(text: string, color: string): React.ReactNode[] {
         </Text>,
       );
     } else if (match[4]) {
+      const isBg = color === COLORS.textUser || color === COLORS.textAi;
       nodes.push(
         <Text
           key={`icode-${key++}`}
           style={{
             fontFamily: "monospace",
-            backgroundColor: "#f1f5f9",
-            color: "#1e40af",
+            backgroundColor: isBg ? "rgba(255,255,255,0.1)" : "#f1f5f9",
+            color: isBg ? "#93c5fd" : "#1e40af",
             fontSize: 12,
             paddingHorizontal: 5,
             borderRadius: 4,
@@ -304,6 +305,8 @@ const styles = StyleSheet.create({
   aiBubble: {
     backgroundColor: COLORS.bgAiBubble,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "#1f2937",
   },
   askBubble: {
     backgroundColor: "rgba(234,179,8,0.07)",

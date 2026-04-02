@@ -7,6 +7,8 @@ import {
 } from "@expo-google-fonts/inter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, usePathname } from "expo-router";
+import * as Font from "expo-font";
+import { Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
@@ -141,14 +143,23 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [iconsLoaded, setIconsLoaded] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    Font.loadAsync(Ionicons.font)
+      .catch((err) => {
+        if (__DEV__) console.warn("[Ionicons] Font preload failed:", err);
+      })
+      .finally(() => setIconsLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if ((fontsLoaded || fontError) && iconsLoaded) {
       SplashScreen.hideAsync();
       setTimeout(() => setShowSplash(false), 800);
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, iconsLoaded]);
 
   // Failsafe: never show splash for more than 5 seconds
   useEffect(() => {
