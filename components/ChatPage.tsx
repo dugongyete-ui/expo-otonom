@@ -777,14 +777,16 @@ export function ChatPage({
         }
         setThinking({ active: false, label: "", stepLabel: undefined });
         setIsLoading(false);
-        if (isAgentMode) {
+        if (isAgentMode && currentPlanRef.current) {
           const steps = currentPlanRef.current?.steps || [];
-          const doneSteps = steps
-            .filter(s => s.status === "completed" || s.status === "failed")
-            .map(s => ({ id: s.id, description: s.description }));
-          setCompletedSteps(doneSteps.length > 0 ? doneSteps : steps.map(s => ({ id: s.id, description: s.description })));
-          setTaskCompleted(true);
-          setTaskCompletedExpanded(false);
+          if (steps.length > 0) {
+            const doneSteps = steps
+              .filter(s => s.status === "completed" || s.status === "failed")
+              .map(s => ({ id: s.id, description: s.description }));
+            setCompletedSteps(doneSteps.length > 0 ? doneSteps : steps.map(s => ({ id: s.id, description: s.description })));
+            setTaskCompleted(true);
+            setTaskCompletedExpanded(false);
+          }
         }
         return;
       }
@@ -832,9 +834,7 @@ export function ChatPage({
       }
 
       case "notify": {
-        if (ev.text) {
-          setThinking({ active: true, label: ev.text });
-        }
+        setThinking({ active: false, label: "" });
         if (ev.attachments && ev.attachments.length > 0) {
           filesShownViaNotifyRef.current = true;
           const filesMsg: ChatMessage = {
@@ -849,6 +849,14 @@ export function ChatPage({
             })),
           };
           setMessages(prev => [...prev, filesMsg]);
+        } else if (ev.text) {
+          const notifyMsg: ChatMessage = {
+            id: `msg_${Date.now()}_notify`,
+            role: "assistant",
+            content: ev.text,
+            timestamp: Date.now(),
+          };
+          setMessages(prev => [...prev, notifyMsg]);
         }
         return;
       }

@@ -57,8 +57,8 @@ interface SettingsPanelProps {
 }
 
 const FALLBACK_MODELS: SelectOption[] = [
-  { label: "Qwen 3 235B (Default)", value: "qwen-3-235b-a22b-instruct-2507" },
-  { label: "Qwen 3 32B", value: "qwen-3-32b" },
+  { label: "Qwen 3 32B (Default)", value: "qwen-3-32b" },
+  { label: "Qwen 3 235B (Large)", value: "qwen-3-235b-a22b-instruct-2507" },
   { label: "Llama 4 Scout", value: "llama-4-scout-17b-16e-instruct" },
   { label: "Llama 4 Maverick", value: "llama-4-maverick-17b-128e-instruct" },
   { label: "Llama 3.3 70B", value: "llama-3.3-70b" },

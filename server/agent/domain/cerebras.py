@@ -27,7 +27,7 @@ def _get_model_name() -> str:
     candidate = os.environ.get("CEREBRAS_AGENT_MODEL") or ""
     if candidate and "/" not in candidate:
         return candidate
-    return "qwen-3-235b-a22b-instruct-2507"
+    return "qwen-3-32b"
 
 
 _TOOLS_SUPPORTED: Optional[bool] = None

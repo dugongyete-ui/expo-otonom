@@ -3,7 +3,7 @@ export const COLORS = {
   bgSurface: "#111827",
   bgInput: "#111827",
   bgInputBorder: "#1f2937",
-  bgUserBubble: "#2563eb",
+  bgUserBubble: "#2d2d3a",
   bgAiBubble: "transparent",
   bgAskBubble: "rgba(234,179,8,0.07)",
   bgCode: "#1f2937",
