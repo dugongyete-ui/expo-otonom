@@ -11,6 +11,7 @@ import type { AgentPlan, AgentPlanStep, AgentEvent } from "@/lib/chat";
 
 interface AgentPlanViewProps {
   plan: AgentPlan;
+  notifyMessages?: string[];
 }
 
 const toolIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -211,7 +212,7 @@ function StepRow({ step }: { step: AgentPlanStep }) {
   );
 }
 
-export function AgentPlanView({ plan }: AgentPlanViewProps) {
+export function AgentPlanView({ plan, notifyMessages }: AgentPlanViewProps) {
   const steps = plan.steps || [];
 
   return (
@@ -219,6 +220,16 @@ export function AgentPlanView({ plan }: AgentPlanViewProps) {
       {steps.map((step, index) => (
         <StepRow key={step.id || index} step={step} />
       ))}
+      {notifyMessages && notifyMessages.length > 0 && (
+        <View style={styles.notifyBlock}>
+          {notifyMessages.map((msg, i) => (
+            <View key={i} style={styles.notifyRow}>
+              <Ionicons name="chatbubble-ellipses-outline" size={12} color="#6b7280" style={styles.notifyIcon} />
+              <Text style={styles.notifyText}>{msg}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -342,5 +353,29 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     backgroundColor: "#3b82f6",
     flexShrink: 0,
+  },
+  notifyBlock: {
+    marginTop: 8,
+    marginLeft: 4,
+    gap: 6,
+    borderLeftWidth: 2,
+    borderLeftColor: "#1f2937",
+    paddingLeft: 10,
+  },
+  notifyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  notifyIcon: {
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  notifyText: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#9ca3af",
+    lineHeight: 18,
   },
 });

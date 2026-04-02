@@ -52,6 +52,7 @@ interface ChatMessage {
   searchResults?: Array<{ title: string; url: string; snippet?: string; [key: string]: any }>;
   searchQuery?: string;
   shellOutput?: string;
+  notifyMessages?: string[];
 }
 
 export interface VncSessionInfo {
@@ -279,6 +280,8 @@ export function ChatPage({
   const [completedSteps, setCompletedSteps] = useState<Array<{ id: string; description: string }>>([]);
 
   const flatListRef = useRef<FlatList>(null);
+  const msgCounterRef = useRef(0);
+  const nextMsgId = (suffix?: string) => `msg_${Date.now()}_${msgCounterRef.current++}${suffix ? `_${suffix}` : ""}`;
   const activeSessionIdRef = useRef<string>(externalSessionId || randomUUID());
   const planMsgIdRef = useRef<string | null>(null);
   const currentPlanRef = useRef<AgentPlan | null>(null);
@@ -552,7 +555,7 @@ export function ChatPage({
         const planStatus = ev.status as string | undefined;
 
         if (planData && !planMsgIdRef.current) {
-          const planMsgId = `plan_${Date.now()}`;
+          const planMsgId = `plan_${Date.now()}_${msgCounterRef.current++}`;
           planMsgIdRef.current = planMsgId;
           currentPlanRef.current = planData;
           const planMsg: ChatMessage = {
@@ -707,7 +710,7 @@ export function ChatPage({
 
       case "message_start": {
         const role = ev.role === "ask" ? "ask" as const : "assistant" as const;
-        const newId = `msg_${Date.now()}_stream`;
+        const newId = `msg_${Date.now()}_${msgCounterRef.current++}_stream`;
         streamingMsgIdRef.current = newId;
         setStreamingContent("");
         if (role === "ask") {
@@ -737,7 +740,7 @@ export function ChatPage({
                 : m
             ));
           } else {
-            const newId = `msg_${Date.now()}_stream`;
+            const newId = `msg_${Date.now()}_${msgCounterRef.current++}_stream`;
             streamingMsgIdRef.current = newId;
             setThinking({ active: false, label: "" });
             setMessages(prev => [...prev, {
@@ -795,7 +798,7 @@ export function ChatPage({
         if (!ev.content) return;
         setThinking({ active: false, label: "" });
         const msg: ChatMessage = {
-          id: `msg_${Date.now()}`,
+          id: `msg_${Date.now()}_${msgCounterRef.current++}`,
           role: "assistant",
           content: ev.content,
           timestamp: Date.now(),
@@ -838,11 +841,11 @@ export function ChatPage({
         if (ev.attachments && ev.attachments.length > 0) {
           filesShownViaNotifyRef.current = true;
           const filesMsg: ChatMessage = {
-            id: `msg_${Date.now()}_notify_files`,
+            id: `msg_${Date.now()}_${msgCounterRef.current++}_notify_files`,
             role: "assistant",
             content: ev.text || "",
             timestamp: Date.now(),
-            files: ev.attachments.map(a => ({
+            files: ev.attachments.map((a: any) => ({
               filename: a.filename,
               download_url: a.download_url,
               sandbox_path: a.sandbox_path,
@@ -850,13 +853,21 @@ export function ChatPage({
           };
           setMessages(prev => [...prev, filesMsg]);
         } else if (ev.text) {
-          const notifyMsg: ChatMessage = {
-            id: `msg_${Date.now()}_notify`,
-            role: "assistant",
-            content: ev.text,
-            timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev, notifyMsg]);
+          if (planMsgIdRef.current) {
+            setMessages(prev => prev.map(m =>
+              m.id === planMsgIdRef.current
+                ? { ...m, notifyMessages: [...(m.notifyMessages || []), ev.text as string] }
+                : m
+            ));
+          } else {
+            const notifyMsg: ChatMessage = {
+              id: `msg_${Date.now()}_${msgCounterRef.current++}_notify`,
+              role: "assistant",
+              content: ev.text,
+              timestamp: Date.now(),
+            };
+            setMessages(prev => [...prev, notifyMsg]);
+          }
         }
         return;
       }
@@ -919,7 +930,7 @@ export function ChatPage({
       case "error": {
         setThinking({ active: false, label: "" });
         const errMsg: ChatMessage = {
-          id: `msg_${Date.now()}_err`,
+          id: `msg_${Date.now()}_${msgCounterRef.current++}_err`,
           role: "assistant",
           content: "",
           timestamp: Date.now(),
@@ -930,77 +941,17 @@ export function ChatPage({
         return;
       }
 
-      case "todo_update": {
-        if (ev.items && ev.items.length > 0) {
-          const summary = ev.items
-            .map((item: any) => `• [${item.status || "?"}] ${item.text}`)
-            .join("\n");
-          const todoMsg: ChatMessage = {
-            id: `msg_${Date.now()}_todo`,
-            role: "assistant",
-            content: `Todo list updated:\n${summary}`,
-            timestamp: Date.now(),
-            todoItems: ev.items,
-          };
-          setMessages(prev => {
-            const existing = prev.findIndex(m => m.todoItems !== undefined);
-            if (existing >= 0) {
-              const updated = [...prev];
-              updated[existing] = { ...updated[existing], todoItems: ev.items, content: `Todo list updated:\n${summary}` };
-              return updated;
-            }
-            return [...prev, todoMsg];
-          });
-        }
+      case "todo_update":
         return;
-      }
 
-      case "task_update": {
-        if (ev.task) {
-          const label = ev.task.title || ev.task.description || "";
-          const status = ev.task.status ? ` [${ev.task.status}]` : "";
-          const taskMsg: ChatMessage = {
-            id: `msg_${Date.now()}_task`,
-            role: "assistant",
-            content: label ? `Task${status}: ${label}` : `Task updated${status}`,
-            timestamp: Date.now(),
-            taskUpdate: ev.task,
-          };
-          setMessages(prev => [...prev, taskMsg]);
-        }
+      case "task_update":
         return;
-      }
 
-      case "search_results": {
-        if (ev.results && ev.results.length > 0) {
-          const lines = ev.results.map((r: any) => `• ${r.title} — ${r.url}`).join("\n");
-          const queryLabel = ev.query ? `Hasil pencarian "${ev.query}":\n` : "Hasil pencarian:\n";
-          const searchMsg: ChatMessage = {
-            id: `msg_${Date.now()}_search`,
-            role: "assistant",
-            content: queryLabel + lines,
-            timestamp: Date.now(),
-            searchResults: ev.results,
-            searchQuery: ev.query,
-          };
-          setMessages(prev => [...prev, searchMsg]);
-        }
+      case "search_results":
         return;
-      }
 
-      case "shell_output": {
-        if (ev.output) {
-          const shellMsg: ChatMessage = {
-            id: `msg_${Date.now()}_shell`,
-            role: "assistant",
-            content: ev.output,
-            timestamp: Date.now(),
-            shellOutput: ev.output,
-          };
-          setMessages(prev => [...prev, shellMsg]);
-        }
+      case "shell_output":
         return;
-      }
 
       default:
         return;
@@ -1016,7 +967,7 @@ export function ChatPage({
     }
 
     const userMsg: ChatMessage = {
-      id: `msg_${Date.now()}`,
+      id: `msg_${Date.now()}_${msgCounterRef.current++}`,
       role: "user",
       content: inputMessage.trim(),
       timestamp: Date.now(),
@@ -1266,7 +1217,7 @@ export function ChatPage({
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <View style={styles.header}>
@@ -1489,7 +1440,7 @@ export function ChatPage({
                     </View>
                   )}
                 </View>
-                <AgentPlanView plan={item.plan} />
+                <AgentPlanView plan={item.plan} notifyMessages={item.notifyMessages} />
               </View>
             );
           }
