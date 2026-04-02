@@ -51,7 +51,7 @@ export function PlanPanel({ plan }: PlanPanelProps) {
   const getStepColor = (status: string) => {
     switch (status) {
       case "running":
-        return "#4a7cf0";
+        return "#888888";
       case "completed":
         return "#34C759";
       case "failed":
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#555555",
   },
   progressText: {
     color: "#a0a0a0",

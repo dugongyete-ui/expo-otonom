@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
   searchQuery: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#4a7cf0",
+    color: "#a0a0a0",
   },
   searchResults: {
     maxHeight: 200,
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
   searchResultUrl: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#4a7cf0",
+    color: "#666666",
   },
   searchResultSnippet: {
     fontFamily: "Inter_400Regular",
@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
   mcpToolName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#4a7cf0",
+    color: "#a0a0a0",
   },
   mcpArgs: {
     maxHeight: 120,

@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   },
   stepCheckBoxRunning: {
     borderWidth: 1.5,
-    borderColor: "#3b82f6",
+    borderColor: "#555555",
     backgroundColor: "transparent",
   },
   stepCheckBoxPending: {
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#666666",
     flexShrink: 0,
   },
   notifyBlock: {

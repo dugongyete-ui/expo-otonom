@@ -303,6 +303,49 @@ async function killE2BSandbox(sandboxId: string): Promise<void> {
 }
 
 /**
+ * Restart only the browser inside an already-running desktop sandbox.
+ * Used when the browser process crashes but VNC/x11vnc is still alive.
+ */
+async function restartBrowserOnly(
+  sandboxId: string,
+  startUrl?: string,
+): Promise<void> {
+  const sandbox = sandboxInstances.get(sandboxId);
+  if (!sandbox) {
+    throw new Error(`No sandbox instance for ${sandboxId}`);
+  }
+
+  const url = startUrl || "https://www.google.com";
+  console.log(`[E2B-Desktop] Restarting browser only for sandbox ${sandboxId} → ${url}`);
+
+  // Kill any zombie browser/chrome processes first
+  try {
+    await sandbox.commands.run("pkill -f 'chrome|chromium' 2>/dev/null; sleep 1", { timeout: 5000 });
+  } catch {
+    // ignore — processes may already be gone
+  }
+
+  const browsers = ["google-chrome", "chromium", "chromium-browser"];
+  for (const browser of browsers) {
+    try {
+      await sandbox.launch(browser, url);
+      console.log(`[E2B-Desktop] Browser restarted successfully: ${browser}`);
+      return;
+    } catch (err: any) {
+      console.warn(`[E2B-Desktop] Failed to restart ${browser}: ${err.message}`);
+    }
+  }
+
+  // Fallback
+  try {
+    await sandbox.open(url);
+    console.log(`[E2B-Desktop] Browser restarted via sandbox.open()`);
+  } catch (err: any) {
+    throw new Error(`All browser restart attempts failed: ${err.message}`);
+  }
+}
+
+/**
  * Start VNC streaming and launch browser in the desktop sandbox.
  * The @e2b/desktop template already has XFCE4, Xvfb, x11vnc, noVNC pre-installed.
  */
@@ -922,22 +965,31 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
       if (needsRecovery && session.status === "running") {
         const reason = !vncAlive ? "VNC process crashed" : "browser process crashed";
         console.warn(
-          `[E2B-Desktop] ${reason} for session ${session.id} — attempting re-bootstrap`,
+          `[E2B-Desktop] ${reason} for session ${session.id} — attempting recovery`,
         );
         try {
-          const { streamUrl, vncUrl } = await bootstrapDesktop(session.sandboxId);
-          session.streamUrl = streamUrl;
-          session.vncUrl = vncUrl;
-          session.wsProxyUrl = streamUrl;
-          console.log(
-            `[E2B-Desktop] Re-bootstrap successful for session ${session.id}: ${streamUrl}`,
-          );
+          if (!vncAlive) {
+            // VNC is down — need full re-bootstrap (restart VNC stream + browser)
+            const { streamUrl, vncUrl } = await bootstrapDesktop(session.sandboxId);
+            session.streamUrl = streamUrl;
+            session.vncUrl = vncUrl;
+            session.wsProxyUrl = streamUrl;
+            console.log(
+              `[E2B-Desktop] Full re-bootstrap successful for session ${session.id}: ${streamUrl}`,
+            );
+          } else {
+            // VNC is alive — only the browser crashed, restart browser only
+            await restartBrowserOnly(session.sandboxId);
+            console.log(
+              `[E2B-Desktop] Browser-only restart successful for session ${session.id}`,
+            );
+          }
         } catch (rebootErr: any) {
           console.error(
-            `[E2B-Desktop] Re-bootstrap failed for session ${session.id}: ${rebootErr.message}`,
+            `[E2B-Desktop] Recovery failed for session ${session.id}: ${rebootErr.message}`,
           );
           session.status = "error";
-          session.error = `Desktop crashed and re-bootstrap failed: ${rebootErr.message}`;
+          session.error = `Desktop crashed and recovery failed: ${rebootErr.message}`;
           res.json({ ready: false, status: "error", error: session.error });
           return;
         }

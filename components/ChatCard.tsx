@@ -81,15 +81,8 @@ export function ChatCard({
   }
 
   if (type === "tool") {
-    const getToolColor = (name?: string) => {
-      const map: Record<string, string> = {
-        shell_exec: "#16a34a",
-        file_read: "#d97706",
-        browser_navigate: "#d97706",
-        web_search: "#4a7cf0",
-        mcp_call_tool: "#4a7cf0",
-      };
-      return map[name || ""] || "#8a8780";
+    const getToolColor = (_name?: string) => {
+      return "#666666";
     };
 
     const getToolIcon = (name?: string) => {
@@ -286,7 +279,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: "#4a7cf0",
+    borderColor: "#555555",
     borderTopColor: "transparent",
     marginRight: 6,
   },

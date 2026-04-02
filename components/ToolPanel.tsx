@@ -37,7 +37,7 @@ function getToolIcon(name: string): string {
 
 function getStatusColor(status: ToolItem["status"]): string {
   switch (status) {
-    case "calling": return "#4a7cf0";
+    case "calling": return "#888888";
     case "called": return "#30D158";
     case "error": return "#FF453A";
   }
@@ -87,7 +87,7 @@ export function ToolPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <NativeIcon name="terminal-outline" size={14} color="#4a7cf0" />
+          <NativeIcon name="terminal-outline" size={14} color="#888888" />
           <Text style={styles.headerTitle}>Tools</Text>
           {tools.length > 0 && (
             <View style={styles.badge}>
@@ -148,7 +148,7 @@ export function ToolPanel({
                   </Text>
                   <View style={styles.toolStatusRow}>
                     {tool.status === "calling" && (
-                      <ActivityIndicator size="small" color="#4a7cf0" style={styles.spinner} />
+                      <ActivityIndicator size="small" color="#888888" style={styles.spinner} />
                     )}
                     <Text style={[styles.toolStatus, { color: getStatusColor(tool.status) }]}>
                       {getStatusLabel(tool.status)}

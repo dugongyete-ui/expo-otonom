@@ -229,7 +229,7 @@ const inlineToolStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#666666",
     flexShrink: 0,
   },
 });
@@ -1858,9 +1858,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(74,124,240,0.1)",
+    backgroundColor: "rgba(100,100,100,0.1)",
     borderWidth: 1,
-    borderColor: "rgba(74,124,240,0.2)",
+    borderColor: "rgba(100,100,100,0.2)",
   },
   agentTurnBadgeDone: {
     paddingHorizontal: 6,
@@ -1873,7 +1873,7 @@ const styles = StyleSheet.create({
   agentTurnBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#3b82f6",
+    color: "#888888",
     letterSpacing: -0.1,
   },
   fileCardsBlock: {

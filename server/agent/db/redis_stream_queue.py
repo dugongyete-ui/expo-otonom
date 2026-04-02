@@ -96,13 +96,19 @@ class RedisStreamQueue:
         return self._connected
 
     async def xadd(self, data: Any) -> Optional[str]:
-        """Append an event to the stream. Returns entry ID or None on failure."""
+        """Append an event to the stream. Returns entry ID or None on failure.
+        Stream is capped at 2000 entries (approximate) to prevent Redis OOM."""
         if not self._connected:
             return None
         try:
             if not isinstance(data, str):
                 data = json.dumps(data, default=str)
-            entry_id = await self._client.xadd(self._stream_key, {"data": data})
+            entry_id = await self._client.xadd(
+                self._stream_key,
+                {"data": data},
+                maxlen=2000,
+                approximate=True,
+            )
             return entry_id
         except Exception as exc:
             logger.warning("[RedisStreamQueue] XADD failed: %s", exc)
