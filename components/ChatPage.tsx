@@ -90,9 +90,11 @@ function ThinkingIndicator({ label }: { label: string }) {
 
   return (
     <View style={thinkingStyles.row}>
-      <View style={thinkingStyles.avatar}>
-        <Ionicons name="sparkles" size={12} color="#ffffff" />
-      </View>
+      <Image
+        source={require("../assets/images/dzeck-logo.jpg")}
+        style={thinkingStyles.avatarImage}
+        resizeMode="cover"
+      />
       <View style={thinkingStyles.bubble}>
         <View style={thinkingStyles.dotsRow}>
           {[dot1, dot2, dot3].map((d, i) => (
@@ -116,14 +118,12 @@ const thinkingStyles = StyleSheet.create({
     paddingVertical: 6,
     gap: 10,
   },
-  avatar: {
+  avatarImage: {
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "#2c4eb0",
-    alignItems: "center",
-    justifyContent: "center",
     flexShrink: 0,
+    overflow: "hidden",
   },
   bubble: {
     flexDirection: "row",

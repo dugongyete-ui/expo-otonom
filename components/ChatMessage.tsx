@@ -205,9 +205,17 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
     <View style={[styles.container, isUser && styles.containerUser]}>
       {!isUser && (
         <View style={styles.avatarContainer}>
-          <View style={[styles.avatar, isAsk && styles.avatarAsk]}>
-            <Ionicons name={isAsk ? "help" : "sparkles"} size={14} color="#FFFFFF" />
-          </View>
+          {isAsk ? (
+            <View style={[styles.avatar, styles.avatarAsk]}>
+              <Ionicons name="help" size={14} color="#FFFFFF" />
+            </View>
+          ) : (
+            <Image
+              source={require("../assets/images/dzeck-logo.jpg")}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
+          )}
         </View>
       )}
       <View style={[styles.bubbleWrapper, isUser && styles.bubbleWrapperUser]}>
@@ -282,6 +290,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.avatarAi,
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarImage: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    overflow: "hidden",
   },
   avatarAsk: {
     backgroundColor: COLORS.avatarAsk,

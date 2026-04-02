@@ -384,7 +384,7 @@ export default function ChatPage() {
       <div className="flex flex-col flex-1 min-w-0">
         <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900">
           <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-blue-400" />
+            <img src="/dzeck-logo.jpg" alt="Dzeck AI" className="w-6 h-6 rounded-lg object-cover" />
             <span className="font-semibold text-white">Dzeck AI</span>
             <Badge variant="outline" className="text-xs border-gray-600 text-gray-400">
               {mode === "agent" ? "Agent" : "Chat"}
@@ -430,17 +430,20 @@ export default function ChatPage() {
               <div className="space-y-4 max-w-3xl mx-auto">
                 {messages.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                    <Bot className="h-12 w-12 mb-3 text-gray-600" />
+                    <img src="/dzeck-logo.jpg" alt="Dzeck AI" className="w-12 h-12 rounded-xl mb-3 object-cover" />
                     <p className="text-lg font-medium">Dzeck AI</p>
                     <p className="text-sm mt-1">Kirim pesan untuk mulai percakapan</p>
                   </div>
                 )}
                 {messages.map(msg => (
                   <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${
                       msg.role === "user" ? "bg-blue-600" : "bg-gray-700"
                     }`}>
-                      {msg.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                      {msg.role === "user"
+                        ? <User className="h-4 w-4 text-white" />
+                        : <img src="/dzeck-logo.jpg" alt="Dzeck" className="w-full h-full object-cover" />
+                      }
                     </div>
                     <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : ""}`}>
                       <Card className={`p-3 text-sm ${

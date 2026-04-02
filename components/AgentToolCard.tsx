@@ -171,7 +171,7 @@ function TodoContent({ content }: { content?: string }) {
             <Ionicons
               name={checked ? "checkmark-circle" : "ellipse-outline"}
               size={14}
-              color={checked ? "#16a34a" : "rgba(0,0,0,0.2)"}
+              color={checked ? "#30D158" : "#555555"}
             />
             <Text style={[styles.todoText, checked && styles.todoChecked]}>{text}</Text>
           </View>
@@ -434,9 +434,9 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     borderRadius: 10,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#242424",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#333333",
     overflow: "hidden",
   },
   cardError: {
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   searchResultItem: {
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "#333333",
     gap: 2,
   },
   searchResultTitle: {
@@ -598,18 +598,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1e1e1e",
     borderRadius: 5,
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#3a3a3a",
   },
   browserUrl: {
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#888888",
+    color: "#7a7a7a",
   },
   browserTitle: {
     fontFamily: "Inter_500Medium",
@@ -629,9 +629,9 @@ const styles = StyleSheet.create({
   screenshotWrapper: {
     borderRadius: 6,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1e1e1e",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#3a3a3a",
   },
   screenshotImage: {
     width: "100%",
@@ -650,9 +650,9 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#242424",
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "#333333",
   },
   fileName: {
     flex: 1,

@@ -4,8 +4,8 @@
  * Each icon renders inside a styled rounded-rectangle or circle container
  * with inner shadow effects matching the ai-manus design language.
  */
-import React from "react";
-import { View, Platform, StyleSheet } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, Platform, StyleSheet, Animated, Easing } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 interface IconProps {
@@ -34,7 +34,7 @@ export function ShellIcon({ size = 21, color }: IconProps) {
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="terminal-outline" size={size * 0.7} color={color || "#888888"} />;
+  return <Ionicons name="terminal-outline" size={size} color={color || "#888888"} />;
 }
 
 // Browser Icon - Compass in circle
@@ -46,7 +46,7 @@ export function BrowserIcon({ size = 21, color }: IconProps) {
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="globe-outline" size={size * 0.7} color={color || "#888888"} />;
+  return <Ionicons name="globe-outline" size={size} color={color || "#888888"} />;
 }
 
 // Edit/File Icon - Pencil in rounded rectangle
@@ -59,7 +59,7 @@ export function EditIcon({ size = 21, color }: IconProps) {
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="document-text-outline" size={size * 0.7} color={color || "#888888"} />;
+  return <Ionicons name="document-text-outline" size={size} color={color || "#888888"} />;
 }
 
 // Search Icon - Magnifying glass in rounded rectangle
@@ -72,7 +72,7 @@ export function SearchIcon({ size = 21, color }: IconProps) {
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="search-outline" size={size * 0.7} color={color || "#888888"} />;
+  return <Ionicons name="search-outline" size={size} color={color || "#888888"} />;
 }
 
 // TakeOver Icon - Cursor with rays
@@ -95,12 +95,36 @@ export function McpIcon({ size = 21, color }: IconProps) {
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="extension-puzzle-outline" size={size * 0.7} color={color || "#535350"} />;
+  return <Ionicons name="extension-puzzle-outline" size={size} color={color || "#535350"} />;
 }
 
-// Loading/Spinning icon
+// Loading/Spinning icon - actually animates rotation
 export function SpinningIcon({ size = 16, color }: IconProps) {
-  return <Ionicons name="sync-outline" size={size} color={color || "#636366"} />;
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const spin = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ rotate: spin }] }}>
+      <Ionicons name="sync-outline" size={size} color={color || "#636366"} />
+    </Animated.View>
+  );
 }
 
 // Success icon
