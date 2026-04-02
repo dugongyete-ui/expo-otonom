@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import type { ToolContent } from "@/lib/chat";
 import { getToolDisplayInfo, TOOL_FUNCTION_MAP, TOOL_FUNCTION_ARG_MAP } from "@/lib/tool-constants";
 
@@ -15,7 +15,7 @@ interface AgentToolViewProps {
 
 function ToolIcon({ name }: { name: string }) {
   const info = getToolDisplayInfo(name);
-  return <Ionicons name={info.icon.replace("-outline", "") as any} size={14} color={info.color} />;
+  return <NativeIcon name={info.icon} size={14} color={info.color} />;
 }
 
 const KEYWORD_COLOR = "#FF79C6";
@@ -258,7 +258,7 @@ function BrowserContent({
     <View style={styles.browserContainer}>
       {url ? (
         <View style={styles.browserUrlBar}>
-          <Ionicons name="lock-closed" size={10} color="#34C759" />
+          <NativeIcon name="lock-closed" size={10} color="#34C759" />
           <Text style={styles.browserUrlText} numberOfLines={1}>{url}</Text>
         </View>
       ) : null}
@@ -363,15 +363,15 @@ export function AgentToolView({
         </View>
         <View style={styles.headerRight}>
           {isCalling && (
-            <Ionicons name="sync" size={12} color="#2563eb" />
+            <NativeIcon name="sync" size={12} color="#2563eb" />
           )}
           {isCalled && (
-            <Ionicons name="checkmark-circle" size={14} color="#30D158" />
+            <NativeIcon name="checkmark-circle" size={14} color="#30D158" />
           )}
           {isError && (
-            <Ionicons name="close-circle" size={14} color="#FF453A" />
+            <NativeIcon name="close-circle" size={14} color="#FF453A" />
           )}
-          <Ionicons
+          <NativeIcon
             name={expanded ? "chevron-up" : "chevron-down"}
             size={14}
             color="#636366"
@@ -427,7 +427,7 @@ export function AgentToolView({
                 <View style={styles.mcpContainer}>
                   {toolContent.tool ? (
                     <View style={styles.mcpToolHeader}>
-                      <Ionicons name="extension-puzzle-outline" size={11} color="#64D2FF" />
+                      <NativeIcon name="extension-puzzle" size={11} color="#64D2FF" />
                       <Text style={styles.mcpToolName}>{toolContent.tool}</Text>
                     </View>
                   ) : null}

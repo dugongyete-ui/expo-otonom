@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 
 interface ChatCardProps {
   type: "user" | "assistant" | "tool" | "step";
@@ -65,7 +66,7 @@ export function ChatCard({
       <View style={styles.assistantMessageContainer}>
         <View style={styles.assistantHeader}>
           <View style={styles.assistantIcon}>
-            <Ionicons name="sparkles" size={20} color="#4a7cf0" />
+            <Image source={require("../../assets/images/dzeck-logo.jpg")} style={{ width: 28, height: 28, borderRadius: 14 }} />
           </View>
           <Text style={styles.assistantLabel}>Dzeck AI</Text>
         </View>
@@ -114,7 +115,7 @@ export function ChatCard({
         >
           <View style={styles.toolHeader}>
             <View style={[styles.toolIconBg, { backgroundColor: color + "20" }]}>
-              <Ionicons name={icon as any} size={16} color={color} />
+              <NativeIcon name={icon as string} size={16} color={color} />
             </View>
             <View style={styles.toolInfo}>
               <Text style={styles.toolName}>{toolName}</Text>
@@ -152,12 +153,12 @@ export function ChatCard({
               <View style={styles.spinner} />
             ) : (
               <View style={styles.stepCheckmark}>
-                <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                <NativeIcon name="checkmark" size={12} color="#FFFFFF" />
               </View>
             )}
           </View>
           <Text style={styles.stepText}>{content}</Text>
-          <Ionicons
+          <NativeIcon
             name={isExpanded ? "chevron-up" : "chevron-down"}
             size={16}
             color="#8a8780"

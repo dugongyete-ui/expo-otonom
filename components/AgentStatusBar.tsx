@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Animated } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 
 interface AgentStatusBarProps {
   status: string;
@@ -80,14 +80,14 @@ export function AgentStatusBar({
 
   const toolInfo = functionName ? TOOL_LABELS[functionName] : null;
   const color = toolInfo?.color || "#2563eb";
-  const icon = (toolInfo?.icon || "sync") as keyof typeof Ionicons.glyphMap;
+  const icon = toolInfo?.icon || "sync";
   const label = toolInfo?.label || status || "Agent is working";
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]} pointerEvents="none">
       <View style={[styles.bar, { borderColor: `${color}25` }]}>
         <PulsingDot color={color} />
-        <Ionicons name={icon} size={12} color={color} />
+        <NativeIcon name={icon} size={12} color={color} />
         <Text style={[styles.label, { color }]} numberOfLines={1}>
           {label}
           {functionName && toolInfo?.label !== label ? `: ${toolName || functionName}` : ""}

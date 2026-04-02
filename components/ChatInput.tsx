@@ -10,7 +10,7 @@ import {
   Text,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -166,7 +166,7 @@ export function ChatInput({
             style={styles.attachMenuItem}
             onPress={handleAttachFile}
           >
-            <Ionicons name="attach-outline" size={18} color={COLORS.iconMuted} />
+            <NativeIcon name="attach" size={18} color={COLORS.iconMuted} />
             <Text style={styles.attachMenuText}>Pilih File</Text>
           </TouchableOpacity>
           {activeSessionId && (
@@ -178,7 +178,7 @@ export function ChatInput({
               {isUploadingToSandbox ? (
                 <ActivityIndicator size="small" color={COLORS.accent} />
               ) : (
-                <Ionicons name="cloud-upload-outline" size={18} color={COLORS.accent} />
+                <NativeIcon name="cloud-upload" size={18} color={COLORS.accent} />
               )}
               <Text style={[styles.attachMenuText, { color: COLORS.accent }]}>
                 {isUploadingToSandbox ? "Uploading..." : "Upload to Sandbox"}
@@ -202,7 +202,7 @@ export function ChatInput({
                 <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
               ) : (
                 <View style={styles.fileThumb}>
-                  <Ionicons name="document-outline" size={22} color={COLORS.accent} />
+                  <NativeIcon name="document" size={22} color={COLORS.accent} />
                   <Text style={styles.fileThumbName} numberOfLines={1}>{att.name}</Text>
                 </View>
               )}
@@ -210,7 +210,7 @@ export function ChatInput({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <Ionicons name="close-circle" size={18} color="#f87171" />
+                <NativeIcon name="close-circle" size={18} color="#f87171" />
               </TouchableOpacity>
             </View>
           ))}
@@ -243,7 +243,7 @@ export function ChatInput({
             activeOpacity={0.6}
             disabled={disabled}
           >
-            <Ionicons
+            <NativeIcon
               name={showAttachMenu ? "close" : "add"}
               size={22}
               color={disabled ? COLORS.textMuted : COLORS.iconMuted}
@@ -257,8 +257,8 @@ export function ChatInput({
               activeOpacity={0.6}
               disabled={disabled || isGenerating}
             >
-              <Ionicons
-                name={isAgentMode ? "flash" : "git-branch-outline"}
+              <NativeIcon
+                name={isAgentMode ? "flash" : "code"}
                 size={20}
                 color={isAgentMode ? "#d97706" : COLORS.iconMuted}
               />
@@ -274,7 +274,7 @@ export function ChatInput({
               activeOpacity={0.6}
             >
               <View style={styles.stopIcon}>
-                <Ionicons name="stop" size={14} color={COLORS.stopIcon} />
+                <NativeIcon name="stop" size={14} color={COLORS.stopIcon} />
               </View>
             </TouchableOpacity>
           ) : (
@@ -290,7 +290,7 @@ export function ChatInput({
                   !canSend && styles.sendIconDisabled,
                 ]}
               >
-                <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                <NativeIcon name="arrow-up" size={16} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
           )}

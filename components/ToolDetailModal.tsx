@@ -8,7 +8,7 @@ import {
   ScrollView,
   SafeAreaView,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import type { ToolContent } from "@/lib/chat";
 
 interface ToolDetailModalProps {
@@ -17,7 +17,7 @@ interface ToolDetailModalProps {
   functionName: string;
   functionArgs: Record<string, unknown>;
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   iconColor: string;
   status: string;
   toolContent?: ToolContent;
@@ -55,7 +55,7 @@ function BrowserView({ title, url, content }: { title?: string; url?: string; co
     <ScrollView style={styles.browserContainer} showsVerticalScrollIndicator={false}>
       {url && (
         <View style={styles.browserBar}>
-          <Ionicons name="lock-closed" size={11} color="#34C759" />
+          <NativeIcon name="lock-closed" size={11} color="#34C759" />
           <Text style={styles.browserUrl} numberOfLines={1}>{url}</Text>
         </View>
       )}
@@ -70,7 +70,7 @@ function FileView({ fileName, content }: { fileName?: string; content?: string }
     <View style={styles.fileContainer}>
       {fileName && (
         <View style={styles.fileHeader}>
-          <Ionicons name="document-text-outline" size={13} color="#FFD60A" />
+          <NativeIcon name="document-text" size={13} color="#FFD60A" />
           <Text style={styles.fileName} numberOfLines={1}>{fileName.replace(/^\/home\/ubuntu\//, "")}</Text>
         </View>
       )}
@@ -164,7 +164,7 @@ export function ToolDetailModal({
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <View style={[styles.iconCircle, { backgroundColor: `${iconColor}22` }]}>
-                  <Ionicons name={icon} size={18} color={iconColor} />
+                  <NativeIcon name={icon} size={18} color={iconColor} />
                 </View>
                 <View>
                   <Text style={styles.headerLabel}>{label}</Text>
@@ -174,7 +174,7 @@ export function ToolDetailModal({
                 </View>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-                <Ionicons name="close" size={20} color="#8a8780" />
+                <NativeIcon name="close" size={20} color="#8a8780" />
               </TouchableOpacity>
             </View>
 

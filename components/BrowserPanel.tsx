@@ -8,7 +8,7 @@ import {
   Platform,
   Image,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { e2bService } from "../lib/e2b-service";
 import type { E2BSession } from "../lib/e2b-service";
@@ -232,7 +232,7 @@ export function BrowserPanel({
         onPress={onToggleVisible}
         activeOpacity={0.7}
       >
-        <Ionicons name="chevron-back" size={16} color="#888888" />
+        <NativeIcon name="chevron-back" size={16} color="#888888" />
       </TouchableOpacity>
     );
   }
@@ -242,7 +242,7 @@ export function BrowserPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="desktop-outline" size={14} color="#4a7cf0" />
+          <NativeIcon name="desktop" size={14} color="#4a7cf0" />
           <Text style={styles.headerTitle}>Browser</Text>
           {sessionState === "ready" && (
             <View style={styles.liveBadge}>
@@ -256,7 +256,7 @@ export function BrowserPanel({
           onPress={onToggleVisible}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-forward" size={16} color="#888888" />
+          <NativeIcon name="chevron-forward" size={16} color="#888888" />
         </TouchableOpacity>
       </View>
 
@@ -264,7 +264,7 @@ export function BrowserPanel({
       <View style={styles.content}>
         {sessionState === "idle" && (
           <View style={styles.emptyState}>
-            <Ionicons name="globe-outline" size={32} color="#2A2A32" />
+            <NativeIcon name="globe" size={32} color="#2A2A32" />
             {agentVncSession ? (
               <>
                 <Text style={styles.emptyTitle}>Desktop Agen Aktif</Text>
@@ -283,7 +283,7 @@ export function BrowserPanel({
                   onPress={startSession}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="play" size={14} color="#fff" />
+                  <NativeIcon name="play" size={14} color="#fff" />
                   <Text style={styles.startButtonText}>Mulai Desktop</Text>
                 </TouchableOpacity>
               </>
@@ -300,7 +300,7 @@ export function BrowserPanel({
 
         {sessionState === "error" && (
           <View style={styles.errorState}>
-            <Ionicons name="alert-circle" size={32} color="#FF453A" />
+            <NativeIcon name="alert-circle" size={32} color="#FF453A" />
             <Text style={styles.errorTitle}>Error</Text>
             <Text style={styles.errorText}>{errorMsg}</Text>
             <TouchableOpacity
@@ -308,7 +308,7 @@ export function BrowserPanel({
               onPress={startSession}
               activeOpacity={0.7}
             >
-              <Ionicons name="refresh" size={14} color="#fff" />
+              <NativeIcon name="refresh" size={14} color="#fff" />
               <Text style={styles.retryButtonText}>Coba Lagi</Text>
             </TouchableOpacity>
           </View>
@@ -339,7 +339,7 @@ export function BrowserPanel({
                   resizeMode="contain"
                 />
                 <View style={styles.screenshotOverlay}>
-                  <Ionicons name="expand" size={16} color="#fff" />
+                  <NativeIcon name="expand" size={16} color="#fff" />
                   <Text style={styles.screenshotOverlayText}>Buka Fullscreen</Text>
                 </View>
               </TouchableOpacity>
@@ -366,7 +366,7 @@ export function BrowserPanel({
             {lastBrowserEvent?.url ? (
               <View style={styles.currentUrl}>
                 <View style={styles.urlRow}>
-                  <Ionicons name="lock-closed" size={10} color="#34C759" />
+                  <NativeIcon name="lock-closed" size={10} color="#34C759" />
                   <Text style={styles.urlText} numberOfLines={1}>{lastBrowserEvent.url}</Text>
                 </View>
                 {lastBrowserEvent.title ? (
@@ -382,7 +382,7 @@ export function BrowserPanel({
                 onPress={() => refreshScreenshot()}
                 activeOpacity={0.7}
               >
-                <Ionicons name="camera-outline" size={14} color="#888888" />
+                <NativeIcon name="camera" size={14} color="#888888" />
                 <Text style={styles.actionText}>Screenshot</Text>
               </TouchableOpacity>
 
@@ -396,8 +396,8 @@ export function BrowserPanel({
                   onPress={toggleVNCMode}
                   activeOpacity={0.7}
                 >
-                  <Ionicons
-                    name={useVNC ? "videocam" : "videocam-outline"}
+                  <NativeIcon
+                    name={useVNC ? "videocam" : "videocam"}
                     size={14}
                     color={useVNC ? "#FFFFFF" : "#4a7cf0"}
                   />
@@ -415,7 +415,7 @@ export function BrowserPanel({
                   onPress={() => { setIsTakeOverActive(false); }}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="exit-outline" size={14} color="#FF9F0A" />
+                  <NativeIcon name="exit" size={14} color="#FF9F0A" />
                   <Text style={[styles.actionText, styles.takeOverText]}>Keluar</Text>
                 </TouchableOpacity>
               ) : (
@@ -434,7 +434,7 @@ export function BrowserPanel({
                 onPress={openInBrowser}
                 activeOpacity={0.7}
               >
-                <Ionicons name="open-outline" size={14} color="#888888" />
+                <NativeIcon name="open" size={14} color="#888888" />
                 <Text style={styles.actionText}>{Platform.OS === "web" ? "Fullscreen" : "Control"}</Text>
               </TouchableOpacity>
 
@@ -445,7 +445,7 @@ export function BrowserPanel({
                   onPress={destroyCurrentSession}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="close-circle-outline" size={14} color="#FF453A" />
+                  <NativeIcon name="close-circle" size={14} color="#FF453A" />
                   <Text style={[styles.actionText, styles.dangerText]}>Tutup</Text>
                 </TouchableOpacity>
               )}

@@ -16,7 +16,7 @@ import {
   Linking,
   Image,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { CodeBlock } from "@/components/CodeBlock";
@@ -191,29 +191,29 @@ export function FilePanel({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileIcon = (name: string): keyof typeof Ionicons.glyphMap => {
+  const getFileIcon = (name: string): string => {
     const ext = getFileExt(name);
-    const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
-      py: "logo-python",
-      js: "logo-javascript",
-      ts: "code-slash-outline",
-      tsx: "code-slash-outline",
-      html: "code-outline",
-      css: "color-palette-outline",
-      json: "document-text-outline",
-      md: "document-text-outline",
-      txt: "document-text-outline",
-      png: "image-outline",
-      jpg: "image-outline",
-      jpeg: "image-outline",
-      gif: "image-outline",
-      svg: "image-outline",
-      pdf: "document-outline",
-      zip: "archive-outline",
-      tar: "archive-outline",
-      gz: "archive-outline",
+    const iconMap: Record<string, string> = {
+      py: "code-slash",
+      js: "code-slash",
+      ts: "code-slash",
+      tsx: "code-slash",
+      html: "code-slash",
+      css: "code-slash",
+      json: "document-text",
+      md: "document-text",
+      txt: "document-text",
+      png: "image",
+      jpg: "image",
+      jpeg: "image",
+      gif: "image",
+      svg: "image",
+      pdf: "document",
+      zip: "document",
+      tar: "document",
+      gz: "document",
     };
-    return iconMap[ext] || "document-outline";
+    return iconMap[ext] || "document";
   };
 
   if (!isVisible) return null;
@@ -228,14 +228,14 @@ export function FilePanel({
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={closePreview} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={14} color="#636366" />
+            <NativeIcon name="arrow-back" size={14} color="#636366" />
             <Text style={styles.backBtnText}>Files</Text>
           </TouchableOpacity>
           <View style={styles.previewHeaderCenter}>
             <Text style={styles.previewFileName} numberOfLines={1}>{previewFile.name}</Text>
           </View>
           <TouchableOpacity style={styles.downloadBtn} onPress={() => downloadFile(previewFile)} activeOpacity={0.7}>
-            <Ionicons name="download-outline" size={14} color="#636366" />
+            <NativeIcon name="download" size={14} color="#636366" />
           </TouchableOpacity>
         </View>
 
@@ -271,16 +271,16 @@ export function FilePanel({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="folder-open-outline" size={14} color="#FFD60A" />
+          <NativeIcon name="folder-open" size={14} color="#FFD60A" />
           <Text style={styles.headerTitle}>Session Files</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconBtn} onPress={loadFiles} activeOpacity={0.7}>
-            <Ionicons name="refresh-outline" size={14} color="#636366" />
+            <NativeIcon name="refresh" size={14} color="#636366" />
           </TouchableOpacity>
           {onClose && (
             <TouchableOpacity style={styles.iconBtn} onPress={onClose} activeOpacity={0.7}>
-              <Ionicons name="close" size={14} color="#636366" />
+              <NativeIcon name="close" size={14} color="#636366" />
             </TouchableOpacity>
           )}
         </View>
@@ -298,12 +298,12 @@ export function FilePanel({
           </View>
         ) : error ? (
           <View style={styles.errorState}>
-            <Ionicons name="alert-circle-outline" size={20} color="#FF453A" />
+            <NativeIcon name="alert-circle" size={20} color="#FF453A" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : files.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="folder-open-outline" size={24} color="#8a8780" />
+            <NativeIcon name="folder-open" size={24} color="#8a8780" />
             <Text style={styles.emptyText}>No files created yet</Text>
           </View>
         ) : (
@@ -321,7 +321,7 @@ export function FilePanel({
               activeOpacity={0.7}
             >
               <View style={styles.fileIcon}>
-                <Ionicons name={getFileIcon(file.name)} size={14} color="#5AC8FA" />
+                <NativeIcon name={getFileIcon(file.name)} size={14} color="#5AC8FA" />
               </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
@@ -330,7 +330,7 @@ export function FilePanel({
                 )}
               </View>
               {canPreview(file.name) && (
-                <Ionicons name="eye-outline" size={12} color="#8a8780" style={styles.eyeIcon} />
+                <NativeIcon name="eye" size={12} color="#8a8780" />
               )}
               <TouchableOpacity
                 style={styles.downloadBtnSmall}
@@ -340,7 +340,7 @@ export function FilePanel({
                 }}
                 activeOpacity={0.7}
               >
-                <Ionicons name="download-outline" size={12} color="#636366" />
+                <NativeIcon name="download" size={12} color="#636366" />
               </TouchableOpacity>
             </TouchableOpacity>
           ))
