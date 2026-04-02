@@ -302,6 +302,9 @@ check_env "CEREBRAS_API_KEY"  "Cerebras API Key (WAJIB untuk AI)"
 check_env "E2B_API_KEY"      "E2B Sandbox API Key (untuk shell tools)"
 check_env "MONGODB_URI"      "MongoDB URI (untuk session persistence)"
 check_env "REDIS_URL"        "Redis URL (untuk caching)"
+check_env "REDIS_PASSWORD"   "Redis Password (untuk autentikasi Redis)"
+check_env "JWT_SECRET"       "JWT Secret (WAJIB untuk autentikasi token)"
+check_env "TAVILY_API_KEY"   "Tavily API Key (untuk web search tools)"
 
 # ─── Runtime directories ──────────────────────────────────────────────────────
 print_step "Membuat runtime directories..."
@@ -332,6 +335,12 @@ REDIS_URL=
 REDIS_HOST=
 REDIS_PORT=6379
 REDIS_PASSWORD=
+
+# Auth
+JWT_SECRET=
+
+# Tavily Web Search (opsional — untuk tool web_search)
+TAVILY_API_KEY=
 
 # Server
 PORT=5000

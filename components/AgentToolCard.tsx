@@ -310,22 +310,23 @@ function ToolBody({ functionName, functionArgs, toolContent, functionResult, sta
   return null;
 }
 
-// Helper: render custom icon for tool card based on function name
-function renderCardIcon(functionName: string, color: string) {
+// Helper: render custom icon for tool card based on function name (always monochrome)
+function renderCardIcon(functionName: string) {
   const category = getToolCategory(functionName);
+  const iconColor = "#888888";
   switch (category) {
     case "shell":
-      return <ShellIcon size={13} color={color} />;
+      return <ShellIcon size={13} color={iconColor} />;
     case "browser":
-      return <BrowserIcon size={13} color={color} />;
+      return <BrowserIcon size={13} color={iconColor} />;
     case "file":
-      return <EditIcon size={13} color={color} />;
+      return <EditIcon size={13} color={iconColor} />;
     case "search":
-      return <SearchIcon size={13} color={color} />;
+      return <SearchIcon size={13} color={iconColor} />;
     case "mcp":
-      return <McpIcon size={13} color={color} />;
+      return <McpIcon size={13} color={iconColor} />;
     default: {
-      return <ShellIcon size={13} color={color} />;
+      return <ShellIcon size={13} color={iconColor} />;
     }
   }
 }
@@ -339,7 +340,8 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
   const isCalled = event.status === "called";
   const isError = event.status === "error";
 
-  const { icon, color, label } = getToolDisplayInfo(functionName);
+  const { label } = getToolDisplayInfo(functionName);
+  const color = "#888888";
   const verb = getToolActionVerb(functionName);
   const primaryArg = getToolPrimaryArg(functionName, functionArgs);
 
@@ -357,8 +359,8 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
   return (
     <View style={styles.wrapper}>
       <View style={[styles.card, isError && styles.cardError]}>
-        {/* Colored left accent bar */}
-        <View style={[styles.accentBar, { backgroundColor: color }]} />
+        {/* Neutral left accent bar */}
+        <View style={styles.accentBar} />
 
         <View style={styles.cardContent}>
           {/* Header row */}
@@ -368,15 +370,15 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
             activeOpacity={hasContent || isCalling ? 0.6 : 1}
           >
             {/* Icon */}
-            <View style={[styles.iconWrap, { backgroundColor: color + "18" }]}>
-              {renderCardIcon(functionName, color)}
+            <View style={styles.iconWrap}>
+              {renderCardIcon(functionName)}
             </View>
 
             {/* Label + arg */}
             <View style={styles.labelArea}>
               <Text style={styles.labelText}>{label}</Text>
               {primaryArg ? (
-                <Text style={[styles.argText, { color: color + "CC" }]} numberOfLines={1}>
+                <Text style={styles.argText} numberOfLines={1}>
                   {verb} {primaryArg}
                 </Text>
               ) : (
@@ -386,7 +388,7 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
 
             {/* Right: status + expand */}
             <View style={styles.rightArea}>
-              {isCalling && <SpinningIcon size={14} color={color} />}
+              {isCalling && <SpinningIcon size={14} color="#636366" />}
               {isCalled && <SuccessIcon size={14} color="#34C759" />}
               {isError && <ErrorIcon size={14} color="#dc2626" />}
               {(hasContent || isCalling) && (
@@ -466,6 +468,7 @@ const styles = StyleSheet.create({
   accentBar: {
     width: 3,
     borderRadius: 0,
+    backgroundColor: "#3a3a3a",
   },
   header: {
     flexDirection: "row",
@@ -480,6 +483,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#2a2a2a",
   },
   labelArea: {
     flex: 1,

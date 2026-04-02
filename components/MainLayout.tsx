@@ -16,7 +16,7 @@ import { BrowserPanel } from "./BrowserPanel";
 import { FilePanel } from "./FilePanel";
 import { TakeOverView } from "./TakeOverView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { CloseIcon } from "@/components/icons/SvgIcon";
 import { getToolCategory } from "@/lib/tool-constants";
 import type { VncSessionInfo } from "./ChatPage";
 
@@ -305,7 +305,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 onPress={handleCloseToolsModal}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={20} color="#6b7280" />
+                <CloseIcon size={20} color="#6b7280" />
               </TouchableOpacity>
             </View>
 

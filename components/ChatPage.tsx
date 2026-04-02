@@ -6,7 +6,7 @@ import { ChatBox } from "./ChatBox";
 import { AgentPlanView } from "./AgentPlanView";
 import {
   MenuIcon, TerminalIcon, ShareIcon, LogOutIcon, EllipsisIcon,
-  FlashIcon, ChatbubbleIcon, HardwareChipIcon, SettingsIcon, ServerIcon,
+  FlashIcon, ChatbubbleIcon, SettingsIcon, ServerIcon,
   AlertCircleIcon, CheckIcon, HelpCircleIcon, SparklesIcon,
   CheckCircleIcon, CloseCircleIcon, DocumentTextIcon,
   ChevronUpIcon, ChevronDownIcon,
@@ -1433,9 +1433,11 @@ export function ChatPage({
             return (
               <View style={styles.agentTurnBlock}>
                 <View style={styles.agentTurnHeader}>
-                  <View style={styles.agentTurnIcon}>
-                    <HardwareChipIcon size={13} color="#ffffff" />
-                  </View>
+                  <Image
+                    source={require("../assets/images/dzeck-logo.jpg")}
+                    style={styles.agentTurnLogo}
+                    resizeMode="cover"
+                  />
                   <Text style={styles.agentTurnName}>Dzeck</Text>
                   {isPlanRunning && !isPlanDone && (
                     <View style={styles.agentTurnBadgeRunning}>
@@ -1488,9 +1490,11 @@ export function ChatPage({
             return (
               <View style={styles.fileCardsBlock}>
                 <View style={styles.agentTurnHeader}>
-                  <View style={styles.agentTurnIcon}>
-                    <HardwareChipIcon size={13} color="#ffffff" />
-                  </View>
+                  <Image
+                    source={require("../assets/images/dzeck-logo.jpg")}
+                    style={styles.agentTurnLogo}
+                    resizeMode="cover"
+                  />
                   <Text style={styles.agentTurnName}>Dzeck</Text>
                 </View>
                 {item.files.map((f, i) => (
@@ -1837,6 +1841,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#2c4eb0",
     alignItems: "center",
     justifyContent: "center",
+  },
+  agentTurnLogo: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    overflow: "hidden",
   },
   agentTurnName: {
     fontFamily: "Inter_700Bold",
