@@ -1109,6 +1109,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.flushHeaders();
 
     const { apiKey, agentModel } = getCerebrasConfig();
+    const e2bKey = process.env.E2B_API_KEY || "";
 
     if (!apiKey) {
       res.write(`data: ${JSON.stringify({ type: "error", error: "API key tidak dikonfigurasi. Set CEREBRAS_API_KEY di environment lalu restart server." })}\n\n`);

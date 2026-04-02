@@ -815,8 +815,13 @@ sys.exit(1)
 
         self.current_url = url
 
+        # Give Chrome time to start navigation — the old page still has readyState='complete'
+        # right after pressing Enter. Without this wait, _wait_for_page_ready sees 'complete'
+        # on the OLD page and exits immediately, then screenshot captures the wrong page.
+        time.sleep(2)
+
         # Wait for page to reach document.readyState=complete via CDP (with fallback)
-        self._wait_for_page_ready(max_wait=10)
+        self._wait_for_page_ready(max_wait=15)
 
         # Fetch page content via HTTP (parallel to what's shown on screen)
         page = self._fetch_page_content(url)

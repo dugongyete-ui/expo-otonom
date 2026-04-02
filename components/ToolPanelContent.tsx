@@ -1059,12 +1059,6 @@ export function ToolPanelContent({
         <Text style={styles.contentHeaderTitle}>
           {functionName || toolName}
         </Text>
-        {isLive && (
-          <View style={styles.liveBadge}>
-            <View style={[styles.liveIndicator, { backgroundColor: "#34C759" }]} />
-            <Text style={styles.liveText}>LIVE</Text>
-          </View>
-        )}
         <View style={[styles.statusBadge, {
           backgroundColor:
             status === "calling" ? "rgba(108,92,231,0.15)" :

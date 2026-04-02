@@ -1254,17 +1254,6 @@ export function ChatPage({
               {isAgentMode ? "Agent" : "Chat"}
             </Text>
           </TouchableOpacity>
-          {isAgentMode && (
-            <View style={[
-              styles.e2bBadge,
-              e2bStatus === "connected" ? styles.e2bConnected :
-              e2bStatus === "error" ? styles.e2bError : styles.e2bChecking,
-            ]}>
-              <Text style={[styles.e2bBadgeText, e2bStatus === "connected" ? { color: "#16a34a" } : e2bStatus === "error" ? { color: "#dc2626" } : {}]}>
-                {e2bStatus === "connected" ? "● Live" : e2bStatus === "error" ? "● Offline" : "● Connecting"}
-              </Text>
-            </View>
-          )}
         </View>
         <View style={styles.headerRight}>
           {onOpenTools && (
