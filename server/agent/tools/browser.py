@@ -504,24 +504,18 @@ except Exception as e:
         return None
 
     def _navigate_via_xdotool(self, url: str) -> bool:
-        """Navigate Chrome to URL. Tries E2B SDK open(), then xdotool address bar, then xdg-open."""
+        """Navigate Chrome to URL. Always uses Chrome/Chromium — never Firefox or default browser."""
         safe_url = url.replace("'", "")
 
-        # Strategy 1: Use E2B SDK's open() method (most direct — navigates existing browser)
-        from server.agent.tools.e2b_sandbox import get_sandbox
-        sb = get_sandbox()
-        if sb is not None:
-            try:
-                sb.open(safe_url)
-                time.sleep(1)
-                return True
-            except Exception as sdk_err:
-                logger.debug("[Browser] SDK open() failed: %s, falling back to xdotool", sdk_err)
+        # Ensure Chrome is open and running before attempting navigation
+        chrome_ready = self._ensure_chrome_open()
+        if not chrome_ready:
+            logger.warning("[Browser] Chrome could not be started for navigation")
 
-        # Strategy 2: xdotool address bar (Ctrl+L + type URL)
-        # Detect the active display first for reliable VNC desktop interaction
+        # Detect the active display for VNC desktop interaction
         display = self._detect_display()
-        # Focus Chrome window first
+
+        # Strategy 1: xdotool address bar — focus Chrome window, Ctrl+L, type URL, Enter
         chrome_focus_cmd = (
             "DISPLAY={d} wmctrl -a 'Google Chrome' 2>/dev/null || "
             "DISPLAY={d} wmctrl -a 'Chromium' 2>/dev/null || true".format(d=display)
@@ -538,11 +532,24 @@ except Exception as e:
         )
         res2 = self._run(xdo_cmd, timeout=10)
         if res2["exit_code"] == 0:
+            logger.info("[Browser] Navigated Chrome via xdotool address bar to %s", url)
             return True
 
-        # Strategy 3: xdg-open as last resort
-        res3 = self._run("DISPLAY={d} xdg-open '{u}' 2>/dev/null &".format(d=display, u=safe_url), timeout=5)
-        return True  # xdg-open always returns 0 even when successful
+        # Strategy 2: Launch Chrome directly with the URL (never use xdg-open to avoid Firefox)
+        for browser in ["google-chrome", "chromium", "chromium-browser"]:
+            res3 = self._run(
+                "DISPLAY={d} nohup {b} --no-sandbox --disable-dev-shm-usage '{u}' >/dev/null 2>&1 &".format(
+                    d=display, b=browser, u=safe_url
+                ),
+                timeout=5
+            )
+            if res3["exit_code"] == 0:
+                logger.info("[Browser] Opened %s with URL %s", browser, url)
+                time.sleep(2)
+                return True
+
+        logger.warning("[Browser] All Chrome navigation strategies failed for %s", url)
+        return False
 
     def _ensure_page_deps(self) -> None:
         """Preflight: ensure lxml and beautifulsoup4 are installed in sandbox (idempotent).

@@ -1261,7 +1261,7 @@ export function ChatPage({
               e2bStatus === "error" ? styles.e2bError : styles.e2bChecking,
             ]}>
               <Text style={[styles.e2bBadgeText, e2bStatus === "connected" ? { color: "#16a34a" } : e2bStatus === "error" ? { color: "#dc2626" } : {}]}>
-                {e2bStatus === "connected" ? "● E2B" : e2bStatus === "error" ? "✕ E2B" : "… E2B"}
+                {e2bStatus === "connected" ? "● Sandbox" : e2bStatus === "error" ? "✕ Offline" : "… Sandbox"}
               </Text>
             </View>
           )}

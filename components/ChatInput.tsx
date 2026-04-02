@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -61,22 +60,24 @@ export function ChatInput({
     }
   }, [text, attachments, onSend]);
 
-  const handleAttachImage = useCallback(async () => {
+  const handleAttachFile = useCallback(async () => {
     setShowAttachMenu(false);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        allowsMultipleSelection: false,
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+        multiple: false,
       });
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        const isImage = asset.mimeType?.startsWith("image/") ?? false;
         setAttachments((prev) => [
           ...prev,
           {
             uri: asset.uri,
-            type: "image" as const,
-            name: asset.fileName || "image.jpg",
+            type: isImage ? ("image" as const) : ("file" as const),
+            name: asset.name || "file",
+            mimeType: asset.mimeType,
           },
         ]);
         if (Platform.OS !== "web") {
@@ -84,7 +85,7 @@ export function ChatInput({
         }
       }
     } catch (error) {
-      console.error("Image picker error:", error);
+      console.error("File picker error:", error);
     }
   }, []);
 
@@ -163,10 +164,10 @@ export function ChatInput({
         <View style={styles.attachMenu}>
           <TouchableOpacity
             style={styles.attachMenuItem}
-            onPress={handleAttachImage}
+            onPress={handleAttachFile}
           >
-            <Ionicons name="image-outline" size={18} color={COLORS.iconMuted} />
-            <Text style={styles.attachMenuText}>Image</Text>
+            <Ionicons name="attach-outline" size={18} color={COLORS.iconMuted} />
+            <Text style={styles.attachMenuText}>Pilih File</Text>
           </TouchableOpacity>
           {activeSessionId && (
             <TouchableOpacity
@@ -197,7 +198,14 @@ export function ChatInput({
         >
           {attachments.map((att, i) => (
             <View key={i} style={styles.attachmentPreview}>
-              <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+              {att.type === "image" ? (
+                <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+              ) : (
+                <View style={styles.fileThumb}>
+                  <Ionicons name="document-outline" size={22} color={COLORS.accent} />
+                  <Text style={styles.fileThumbName} numberOfLines={1}>{att.name}</Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
@@ -337,6 +345,23 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 10,
+  },
+  fileThumb: {
+    width: 80,
+    height: 60,
+    borderRadius: 10,
+    backgroundColor: "#2a2a2a",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    gap: 2,
+  },
+  fileThumbName: {
+    fontSize: 9,
+    color: COLORS.textMuted,
+    textAlign: "center",
   },
   removeAttachment: {
     position: "absolute",

@@ -136,7 +136,7 @@ export function BrowserPanel({
 
   const startSession = useCallback(async () => {
     setSessionState("creating");
-    setStatusMsg("Membuat E2B Desktop Sandbox...");
+    setStatusMsg("Membuat Cloud Desktop Sandbox...");
     setErrorMsg("");
     setScreenshotUri(null);
 
@@ -274,7 +274,7 @@ export function BrowserPanel({
               </>
             ) : (
               <>
-                <Text style={styles.emptyTitle}>E2B Desktop</Text>
+                <Text style={styles.emptyTitle}>Cloud Desktop</Text>
                 <Text style={styles.emptyText}>
                   Buat sandbox desktop cloud untuk browser automation secara visual
                 </Text>

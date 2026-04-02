@@ -177,6 +177,12 @@ Replit only accepts HTTPS on external ports — plain HTTP (port 3002) is reject
 - **Header icons**: Transparent button backgrounds, icon color `#a0a0a0`–`#b0b0b0`, size 20–22px
 - **Tool icons**: `components/icons/ToolIcons.tsx` — SVG icons with `#2a2a2a` fill, `#3a3a3a` stroke
 
+## Recent Fixes (April 2026)
+- **Icons fix**: Added `...Ionicons.font` to `useFonts` in `app/_layout.tsx` — Ionicons (from @expo/vector-icons) now loads properly; icons no longer appear as squares.
+- **E2B text removed**: Replaced all user-facing "E2B" labels with professional equivalents: "Sandbox" (status badge in ChatPage.tsx), "Cloud Desktop" (BrowserPanel.tsx title), "Membuat Cloud Desktop Sandbox..." (status message).
+- **Chrome-only browsing**: Fixed `_navigate_via_xdotool` in `browser.py` — now always ensures Chrome is running first, then navigates via xdotool Ctrl+L; removed `sb.open()` and `xdg-open` fallbacks that could launch Firefox. Also updated web_agent system prompt to explicitly require Chrome.
+- **File upload (all types)**: ChatInput.tsx now uses DocumentPicker (`type: "*/*"`) for all file attachments, not just images. File type is auto-detected (image vs generic file) by mimeType. Non-image files show a document icon preview. ChatAttachment type updated to include `type: "file"` and optional `mimeType` field.
+
 ## Session Staleness Fix
 - **LeftPanel** uses `isSessionActuallyRunning()` — treats sessions with `updated_at` older than 3 min as idle, even if status is "running"
 - **Server startup** (`server/routes.ts`) marks all sessions with status "running" and `updated_at` older than 5 min as "completed" in MongoDB

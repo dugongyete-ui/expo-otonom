@@ -261,8 +261,9 @@ export interface ChatMessage {
 
 export interface ChatAttachment {
   uri: string;
-  type: "image";
+  type: "image" | "file";
   name?: string;
+  mimeType?: string;
 }
 
 export type ChatListItem =
