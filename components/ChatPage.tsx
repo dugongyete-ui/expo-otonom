@@ -1230,9 +1230,9 @@ export function ChatPage({
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Image
-            source={require("../assets/images/dzeck-logo-transparent.png")}
-            style={{ width: 80, height: 28 }}
-            resizeMode="contain"
+            source={require("../assets/images/dzeck-logo.jpg")}
+            style={{ width: 32, height: 32, borderRadius: 8 }}
+            resizeMode="cover"
           />
           <TouchableOpacity
             onPress={() => onAgentModeChange?.(!isAgentMode)}

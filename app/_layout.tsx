@@ -7,7 +7,6 @@ import {
 } from "@expo-google-fonts/inter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, usePathname } from "expo-router";
-import * as Font from "expo-font";
 import { Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -75,7 +74,7 @@ function SplashLoader() {
         ]}
       >
         <Image
-          source={require("../assets/images/dzeck-logo-transparent.png")}
+          source={require("../assets/images/dzeck-logo.jpg")}
           style={splashStyles.logo}
           resizeMode="contain"
         />
@@ -119,7 +118,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#ffffff" }} />
+      <View style={{ flex: 1, backgroundColor: "#1a1a1a" }} />
     );
   }
 
@@ -142,24 +141,16 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    ...Ionicons.font,
   });
-  const [iconsLoaded, setIconsLoaded] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    Font.loadAsync(Ionicons.font)
-      .catch((err) => {
-        if (__DEV__) console.warn("[Ionicons] Font preload failed:", err);
-      })
-      .finally(() => setIconsLoaded(true));
-  }, []);
-
-  useEffect(() => {
-    if ((fontsLoaded || fontError) && iconsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
       setTimeout(() => setShowSplash(false), 800);
     }
-  }, [fontsLoaded, fontError, iconsLoaded]);
+  }, [fontsLoaded, fontError]);
 
   // Failsafe: never show splash for more than 5 seconds
   useEffect(() => {
@@ -204,7 +195,7 @@ export default function RootLayout() {
 const splashStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#1a1a1a",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -212,23 +203,24 @@ const splashStyles = StyleSheet.create({
     width: 160,
     height: 160,
     marginBottom: 8,
+    borderRadius: 16,
+    overflow: "hidden",
   },
   logo: {
     width: "100%",
     height: "100%",
-    tintColor: "#1a1916",
   },
   title: {
     marginTop: 16,
     fontSize: 24,
     fontWeight: "700",
-    color: "#1a1916",
+    color: "#e0e0e0",
     letterSpacing: -0.5,
   },
   sub: {
     marginTop: 4,
     fontSize: 11,
-    color: "#8a8780",
+    color: "#666666",
     letterSpacing: 2,
   },
   dotsRow: {
@@ -240,7 +232,7 @@ const splashStyles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: "#1a1916",
+    backgroundColor: "#4a7cf0",
   },
 });
 

@@ -113,7 +113,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.logoContainer}>
           <Image
-            source={require("../assets/images/dzeck-logo-transparent.png")}
+            source={require("../assets/images/dzeck-logo.jpg")}
             style={styles.logoImage}
             resizeMode="contain"
           />
@@ -295,8 +295,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logoImage: {
-    width: 180,
-    height: 72,
+    width: 120,
+    height: 120,
+    borderRadius: 12,
   },
   logoSubtitle: {
     fontSize: 11,

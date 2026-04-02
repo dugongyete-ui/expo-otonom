@@ -22,7 +22,7 @@
       width:160px;height:160px;
       animation:splashPulse 1.8s ease-in-out infinite;
     }
-    .splash-logo img{width:100%;height:100%;object-fit:contain;filter:brightness(0) invert(1)}
+    .splash-logo img{width:100%;height:100%;object-fit:cover;border-radius:16px}
     .splash-title{
       margin-top:20px;font-size:22px;font-weight:700;
       color:#fff;letter-spacing:-.03em;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -685,7 +685,7 @@
 <div id="login-screen" class="hidden">
   <div class="login-wrap">
     <div class="login-logo">
-      <img src="/assets/images/dzeck-logo-transparent.png" alt="Dzeck AI" style="width:56px;height:56px;object-fit:contain;filter:brightness(0) invert(1)" onerror="this.style.display='none'">
+      <img src="/assets/images/dzeck-logo.jpg" alt="Dzeck AI" style="width:80px;height:80px;object-fit:cover;border-radius:12px" onerror="this.style.display='none'">
       <div class="login-logo-title">Dzeck AI</div>
       <div class="login-logo-sub">Autonomous AI Agent</div>
     </div>
@@ -737,7 +737,7 @@
 <!-- ═══ SPLASH SCREEN ═══ -->
 <div id="splash">
   <div class="splash-logo">
-    <img src="/assets/images/dzeck-logo-transparent.png" alt="Dzeck AI" onerror="this.src='/assets/images/icon.png'">
+    <img src="/assets/images/dzeck-logo.jpg" alt="Dzeck AI" style="border-radius:16px">
   </div>
   <div class="splash-sub">AUTONOMOUS AI AGENT</div>
   <div class="splash-dots">
