@@ -13,63 +13,58 @@ interface AgentPlanViewProps {
   plan: AgentPlan;
 }
 
-const toolConfig: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
-  web_search: { icon: "search-outline", color: "#5AC8FA", label: "Searching web" },
-  web_browse: { icon: "globe-outline", color: "#FF9F0A", label: "Browsing page" },
-  browser_navigate: { icon: "globe-outline", color: "#FF9F0A", label: "Navigating to webpage" },
-  browser_view: { icon: "eye-outline", color: "#FF9F0A", label: "Reading page" },
-  browser_click: { icon: "finger-print-outline", color: "#FF9F0A", label: "Clicking" },
-  browser_type: { icon: "create-outline", color: "#FF9F0A", label: "Typing" },
-  browser_scroll: { icon: "arrow-down-outline", color: "#FF9F0A", label: "Scrolling" },
-  shell_exec: { icon: "terminal-outline", color: "#34C759", label: "Running command" },
-  shell_view: { icon: "terminal-outline", color: "#34C759", label: "Viewing output" },
-  shell_wait: { icon: "time-outline", color: "#34C759", label: "Waiting" },
-  file_read: { icon: "document-text-outline", color: "#FFD60A", label: "Reading file" },
-  file_write: { icon: "save-outline", color: "#FFD60A", label: "Writing file" },
-  file_str_replace: { icon: "create-outline", color: "#FFD60A", label: "Editing file" },
-  file_find_by_name: { icon: "folder-open-outline", color: "#FFD60A", label: "Finding file" },
-  message_notify_user: { icon: "chatbubble-outline", color: "#BF5AF2", label: "Notification" },
-  message_ask_user: { icon: "help-circle-outline", color: "#BF5AF2", label: "Question" },
-  mcp_call_tool: { icon: "extension-puzzle-outline", color: "#64D2FF", label: "MCP tool" },
+const toolLabelMap: Record<string, string> = {
+  web_search: "Mencari informasi",
+  web_browse: "Membuka halaman",
+  browser_navigate: "Navigasi ke halaman",
+  browser_view: "Membaca halaman",
+  browser_click: "Mengklik elemen",
+  browser_type: "Mengetik teks",
+  browser_scroll: "Scroll halaman",
+  shell_exec: "Menjalankan perintah",
+  shell_view: "Melihat output",
+  shell_wait: "Menunggu",
+  file_read: "Membaca file",
+  file_write: "Menulis file",
+  file_str_replace: "Mengedit file",
+  file_find_by_name: "Mencari file",
+  message_notify_user: "Mengirim notifikasi",
+  message_ask_user: "Mengajukan pertanyaan",
+  mcp_call_tool: "Menggunakan tool MCP",
 };
 
-function getArgPreview(event: AgentEvent): string {
+function getToolDescription(event: AgentEvent): string {
   const fnName = event.function_name || "";
   const args = event.function_args || {};
+  const label = toolLabelMap[fnName] || fnName;
   const argKeyMap: Record<string, string> = {
-    web_search: "query", web_browse: "url", browser_navigate: "url",
-    shell_exec: "command", file_read: "file", file_write: "file",
-    message_notify_user: "text", message_ask_user: "text",
+    web_search: "query",
+    web_browse: "url",
+    browser_navigate: "url",
+    shell_exec: "command",
+    file_read: "file",
+    file_write: "file",
+    message_notify_user: "text",
+    message_ask_user: "text",
     mcp_call_tool: "tool_name",
   };
   const key = argKeyMap[fnName];
   if (key && args[key]) {
     const val = String(args[key]);
-    return val.length > 45 ? val.slice(0, 45) + "…" : val;
+    const preview = val.length > 60 ? val.slice(0, 60) + "…" : val;
+    return `${label}: ${preview}`;
   }
-  const firstKey = Object.keys(args)[0];
-  if (firstKey) {
-    const val = String(args[firstKey]);
-    return val.length > 45 ? val.slice(0, 45) + "…" : val;
-  }
-  return "";
+  return label;
 }
 
-function PulsingDot({ color = "#3b82f6" }: { color?: string }) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
-  const scale = useRef(new Animated.Value(0.8)).current;
+function PulsingDot() {
+  const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
     const anim = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(scale, { toValue: 1.2, duration: 600, useNativeDriver: true }),
-          Animated.timing(scale, { toValue: 0.8, duration: 600, useNativeDriver: true }),
-        ]),
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
       ])
     );
     anim.start();
@@ -77,54 +72,42 @@ function PulsingDot({ color = "#3b82f6" }: { color?: string }) {
   }, []);
 
   return (
-    <Animated.View
-      style={[styles.pulseDot, { backgroundColor: color, opacity, transform: [{ scale }] }]}
-    />
+    <Animated.View style={[styles.runningDot, { opacity }]} />
   );
 }
 
-function ToolChip({ event, isLast }: { event: AgentEvent; isLast: boolean }) {
-  const fnName = event.function_name || "";
-  const isError = event.status === "error";
+function ToolRow({ event, isLast }: { event: AgentEvent; isLast: boolean }) {
   const isCalling = event.status === "calling";
   const isCalled = event.status === "called";
-  const config = toolConfig[fnName] || {
-    icon: "construct-outline" as keyof typeof Ionicons.glyphMap,
-    color: "#6b7280",
-    label: fnName,
-  };
-  const argPreview = getArgPreview(event);
+  const isError = event.status === "error";
+  const description = getToolDescription(event);
 
   return (
-    <View style={styles.toolChipRow}>
-      <View style={styles.toolTimelineCol}>
-        <View style={[
-          styles.toolTimelineDot,
-          { backgroundColor: isError ? "#FF453A" : isCalled ? "#34C759" : "#4a4a4a" }
-        ]} />
-        {!isLast && <View style={styles.toolTimelineLine} />}
+    <View style={[styles.toolRow, !isLast && styles.toolRowNotLast]}>
+      <View style={styles.toolRowLeft}>
+        <View style={[styles.toolDot, isError && styles.toolDotError, isCalled && styles.toolDotDone]} />
+        <View style={styles.toolRowLine} />
       </View>
-      <View style={[styles.toolChip, isError && styles.toolChipError]}>
-        <Ionicons name={config.icon} size={11} color={config.color} />
-        <Text style={[styles.toolChipLabel, { color: config.color }]} numberOfLines={1}>
-          {config.label}
+      <View style={styles.toolRowContent}>
+        <Text
+          style={[
+            styles.toolRowText,
+            isError && styles.toolRowTextError,
+            isCalled && styles.toolRowTextDone,
+          ]}
+          numberOfLines={2}
+        >
+          {description}
         </Text>
-        {argPreview ? (
-          <View style={styles.toolArgPill}>
-            <Text style={styles.toolArgPillText} numberOfLines={1}>{argPreview}</Text>
-          </View>
-        ) : null}
-        <View style={styles.toolChipStatus}>
-          {isCalling && <PulsingDot color="#3b82f6" />}
-          {isCalled && <Ionicons name="checkmark" size={10} color="#34C759" />}
-          {isError && <Ionicons name="close" size={10} color="#FF453A" />}
-        </View>
+        {isCalling && <PulsingDot />}
+        {isCalled && <Ionicons name="checkmark" size={12} color="#34C759" />}
+        {isError && <Ionicons name="close" size={12} color="#FF453A" />}
       </View>
     </View>
   );
 }
 
-function StepBlock({ step }: { step: AgentPlanStep }) {
+function StepRow({ step, index }: { step: AgentPlanStep; index: number }) {
   const isRunning = step.status === "running";
   const isDone = step.status === "completed";
   const isFailed = step.status === "failed";
@@ -133,45 +116,42 @@ function StepBlock({ step }: { step: AgentPlanStep }) {
   const [expanded, setExpanded] = useState(isRunning);
 
   useEffect(() => {
-    if (isRunning) {
-      setExpanded(true);
-    }
+    if (isRunning) setExpanded(true);
   }, [isRunning]);
 
-  const titleColor = isDone
-    ? "#6b7280"
-    : isFailed
-    ? "#FF453A"
-    : isRunning
-    ? "#f9fafb"
-    : "#8a8a8a";
-
   return (
-    <View style={styles.stepBlock}>
+    <View style={styles.stepRow}>
       <TouchableOpacity
         style={styles.stepHeader}
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
+        onPress={() => tools.length > 0 && setExpanded(!expanded)}
+        activeOpacity={tools.length > 0 ? 0.6 : 1}
       >
-        <View style={styles.stepLeadCol}>
+        <View style={styles.stepIconCol}>
           {isDone ? (
             <View style={styles.stepDoneCircle}>
               <Ionicons name="checkmark" size={10} color="#fff" />
             </View>
           ) : isFailed ? (
-            <View style={[styles.stepDoneCircle, styles.stepFailCircle]}>
+            <View style={[styles.stepDoneCircle, { backgroundColor: "#FF453A" }]}>
               <Ionicons name="close" size={10} color="#fff" />
             </View>
           ) : isRunning ? (
-            <PulsingDot color="#3b82f6" />
+            <View style={styles.stepRunningCircle}>
+              <PulsingDot />
+            </View>
           ) : (
             <View style={styles.stepPendingCircle} />
           )}
         </View>
 
         <Text
-          style={[styles.stepTitle, { color: titleColor }]}
-          numberOfLines={2}
+          style={[
+            styles.stepTitle,
+            isDone && styles.stepTitleDone,
+            isFailed && styles.stepTitleFailed,
+            isRunning && styles.stepTitleRunning,
+          ]}
+          numberOfLines={3}
         >
           {step.description}
         </Text>
@@ -179,9 +159,8 @@ function StepBlock({ step }: { step: AgentPlanStep }) {
         {tools.length > 0 && (
           <Ionicons
             name={expanded ? "chevron-up" : "chevron-down"}
-            size={12}
-            color="#555"
-            style={{ marginLeft: 4 }}
+            size={13}
+            color="#374151"
           />
         )}
       </TouchableOpacity>
@@ -189,7 +168,7 @@ function StepBlock({ step }: { step: AgentPlanStep }) {
       {expanded && tools.length > 0 && (
         <View style={styles.toolsContainer}>
           {tools.map((tool, i) => (
-            <ToolChip
+            <ToolRow
               key={tool.tool_call_id || i}
               event={tool}
               isLast={i === tools.length - 1}
@@ -197,110 +176,73 @@ function StepBlock({ step }: { step: AgentPlanStep }) {
           ))}
         </View>
       )}
-
-      {step.result && isDone && (
-        <Text style={styles.stepResultText} numberOfLines={3}>
-          {step.result}
-        </Text>
-      )}
-    </View>
-  );
-}
-
-function PerencanaStrip({ plan }: { plan: AgentPlan }) {
-  const steps = plan.steps || [];
-  const doneCount = steps.filter((s) => s.status === "completed").length;
-  const total = steps.length;
-
-  return (
-    <View style={styles.perencanaStrip}>
-      <View style={styles.perencanaHeader}>
-        <View style={styles.perencanaIconWrap}>
-          <Ionicons name="list-outline" size={11} color="#3b82f6" />
-        </View>
-        <Text style={styles.perencanaTitle}>Perencana</Text>
-        <View style={styles.perencanaProgress}>
-          <Text style={styles.perencanaProgressText}>{doneCount} / {total}</Text>
-        </View>
-      </View>
-      <View style={styles.perencanaSteps}>
-        {steps.map((step, i) => {
-          const isDone = step.status === "completed";
-          const isRunning = step.status === "running";
-          return (
-            <View key={step.id || i} style={styles.perencanaStepRow}>
-              <View style={[
-                styles.perencanaStepDot,
-                isDone && styles.perencanaStepDotDone,
-                isRunning && styles.perencanaStepDotRunning,
-              ]} />
-              <Text
-                style={[
-                  styles.perencanaStepText,
-                  isDone && styles.perencanaStepTextDone,
-                  isRunning && styles.perencanaStepTextRunning,
-                ]}
-                numberOfLines={1}
-              >
-                {isDone ? "✓ " : isRunning ? "▶ " : `${i + 1}. `}
-                {step.description}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
     </View>
   );
 }
 
 export function AgentPlanView({ plan }: AgentPlanViewProps) {
+  const steps = plan.steps || [];
+  const doneCount = steps.filter(s => s.status === "completed").length;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.stepsCard}>
-        <View style={styles.cardHeader}>
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleRow}>
           <Ionicons name="sparkles" size={13} color="#3b82f6" />
-          <Text style={styles.cardTitle}>{plan.title || "Plan"}</Text>
-          {plan.status === "running" && <PulsingDot color="#3b82f6" />}
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {plan.title || "Rencana"}
+          </Text>
+          {plan.status === "running" && <PulsingDot />}
           {plan.status === "completed" && (
-            <View style={styles.completedBadge}>
-              <Ionicons name="checkmark-circle" size={13} color="#34C759" />
-              <Text style={styles.completedBadgeText}>Done</Text>
+            <View style={styles.doneBadge}>
+              <Ionicons name="checkmark-circle" size={12} color="#34C759" />
+              <Text style={styles.doneBadgeText}>Selesai</Text>
             </View>
           )}
         </View>
 
-        <View style={styles.stepsList}>
-          {plan.steps.map((step, index) => (
-            <StepBlock key={step.id || index} step={step} />
-          ))}
+        <View style={styles.progressRow}>
+          <View style={styles.progressBar}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: steps.length > 0 ? `${(doneCount / steps.length) * 100}%` : "0%" },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressText}>{doneCount}/{steps.length}</Text>
         </View>
       </View>
 
-      <PerencanaStrip plan={plan} />
+      <View style={styles.stepsList}>
+        {steps.map((step, index) => (
+          <StepRow key={step.id || index} step={step} index={index} />
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 0,
-  },
-  stepsCard: {
+  card: {
     backgroundColor: "#111827",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#1f2937",
     overflow: "hidden",
-    marginBottom: 1,
   },
   cardHeader: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+    gap: 8,
+  },
+  cardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
   },
   cardTitle: {
     flex: 1,
@@ -309,36 +251,58 @@ const styles = StyleSheet.create({
     color: "#e5e7eb",
     letterSpacing: -0.2,
   },
-  completedBadge: {
+  doneBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  completedBadgeText: {
+  doneBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
     color: "#34C759",
   },
-  stepsList: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 10,
-    gap: 4,
-  },
-  stepBlock: {
-    gap: 4,
-  },
-  stepHeader: {
+  progressRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  progressBar: {
+    flex: 1,
+    height: 3,
+    backgroundColor: "#1f2937",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#3b82f6",
+    borderRadius: 2,
+  },
+  progressText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    color: "#4b5563",
+    minWidth: 28,
+    textAlign: "right",
+  },
+  stepsList: {
     paddingVertical: 6,
   },
-  stepLeadCol: {
+  stepRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 2,
+  },
+  stepHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  stepIconCol: {
     width: 18,
-    height: 18,
     alignItems: "center",
     justifyContent: "center",
+    paddingTop: 1,
     flexShrink: 0,
   },
   stepDoneCircle: {
@@ -349,180 +313,107 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stepFailCircle: {
-    backgroundColor: "#FF453A",
+  stepRunningCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#3b82f6",
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepPendingCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 1.5,
-    borderColor: "#374151",
-  },
-  pulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#3b82f6",
-    flexShrink: 0,
+    borderColor: "#2d3748",
   },
   stepTitle: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#d1d5db",
-    lineHeight: 18,
+    color: "#9ca3af",
+    lineHeight: 19,
     letterSpacing: -0.1,
+  },
+  stepTitleDone: {
+    color: "#6b7280",
+    textDecorationLine: "line-through",
+  },
+  stepTitleFailed: {
+    color: "#f87171",
+  },
+  stepTitleRunning: {
+    color: "#e5e7eb",
+    fontFamily: "Inter_500Medium",
   },
   toolsContainer: {
-    marginLeft: 26,
+    marginLeft: 28,
     marginBottom: 4,
+    borderLeftWidth: 1,
+    borderLeftColor: "#1f2937",
+    paddingLeft: 12,
   },
-  toolChipRow: {
+  toolRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    minHeight: 26,
-  },
-  toolTimelineCol: {
-    width: 14,
-    alignItems: "center",
-    paddingTop: 8,
-    flexShrink: 0,
-  },
-  toolTimelineDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#4a4a4a",
-  },
-  toolTimelineLine: {
-    width: 1,
-    flex: 1,
-    backgroundColor: "#2a2a2a",
-    marginTop: 2,
-    minHeight: 12,
-  },
-  toolChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#1a2133",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 6,
-    marginBottom: 3,
-  },
-  toolChipError: {
-    backgroundColor: "rgba(255,69,58,0.08)",
-  },
-  toolChipLabel: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    letterSpacing: -0.1,
-    flexShrink: 0,
-  },
-  toolArgPill: {
-    flex: 1,
-    backgroundColor: "#0d1117",
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  toolArgPillText: {
-    fontFamily: "monospace",
-    fontSize: 10,
-    color: "#6b7280",
-  },
-  toolChipStatus: {
-    width: 14,
-    alignItems: "center",
-    flexShrink: 0,
-  },
-  stepResultText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#4b5563",
-    lineHeight: 16,
-    letterSpacing: -0.1,
-    marginLeft: 26,
-    marginBottom: 4,
-  },
-  perencanaStrip: {
-    backgroundColor: "#0d1117",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  perencanaHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
-  perencanaIconWrap: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    backgroundColor: "rgba(59,130,246,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  perencanaTitle: {
-    flex: 1,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    color: "#6b7280",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  perencanaProgress: {
-    backgroundColor: "#1a2133",
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  perencanaProgressText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    color: "#3b82f6",
-  },
-  perencanaSteps: {
-    gap: 4,
-  },
-  perencanaStepRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
+    minHeight: 22,
   },
-  perencanaStepDot: {
+  toolRowNotLast: {
+    marginBottom: 0,
+  },
+  toolRowLeft: {
+    width: 10,
+    alignItems: "center",
+    paddingTop: 6,
+    flexShrink: 0,
+  },
+  toolDot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#2d2d2d",
+    backgroundColor: "#2d3748",
     flexShrink: 0,
   },
-  perencanaStepDotDone: {
+  toolDotDone: {
     backgroundColor: "#34C759",
   },
-  perencanaStepDotRunning: {
-    backgroundColor: "#3b82f6",
+  toolDotError: {
+    backgroundColor: "#FF453A",
   },
-  perencanaStepText: {
+  toolRowLine: {
+    flex: 1,
+    width: 1,
+    backgroundColor: "transparent",
+  },
+  toolRowContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  toolRowText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
-    fontSize: 11,
+    fontSize: 12,
     color: "#4b5563",
-    lineHeight: 16,
+    lineHeight: 17,
+    letterSpacing: -0.1,
   },
-  perencanaStepTextDone: {
-    color: "#34C759",
+  toolRowTextDone: {
+    color: "#374151",
   },
-  perencanaStepTextRunning: {
-    color: "#93c5fd",
-    fontFamily: "Inter_500Medium",
+  toolRowTextError: {
+    color: "#f87171",
+  },
+  runningDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#3b82f6",
+    flexShrink: 0,
   },
 });

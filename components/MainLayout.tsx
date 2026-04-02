@@ -354,35 +354,35 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#0d1117",
   },
   mainContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#0d1117",
   },
   leftPanel: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0d1117",
     borderRightWidth: 1,
-    borderRightColor: "#e5e7eb",
+    borderRightColor: "#1f2937",
     overflow: "hidden",
   },
   chatArea: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#0d1117",
     minWidth: 0,
   },
   toolPanel: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0d1117",
     borderLeftWidth: 1,
-    borderLeftColor: "#e5e7eb",
+    borderLeftColor: "#1f2937",
     overflow: "hidden",
   },
   panelSwitcher: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    backgroundColor: "#f9fafb",
+    borderTopColor: "#1f2937",
+    backgroundColor: "#0d1117",
   },
   switchTab: {
     flex: 1,
@@ -395,23 +395,23 @@ const styles = StyleSheet.create({
   },
   switchTabText: {
     fontSize: 11,
-    color: "#6b7280",
+    color: "#4b5563",
   },
   switchTabTextActive: {
-    color: "#111827",
+    color: "#e5e7eb",
   },
   toolsModalContainer: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#0d1117",
   },
   toolsModalHeader: {
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#1f2937",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#0d1117",
   },
   toolsModalTabs: {
     flex: 1,
@@ -424,15 +424,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalTabActive: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
   },
   modalTabText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#6b7280",
+    color: "#4b5563",
   },
   modalTabTextActive: {
-    color: "#111827",
+    color: "#e5e7eb",
   },
   toolsModalClose: {
     width: 36,
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
     marginLeft: 8,
   },
   toolsModalContent: {

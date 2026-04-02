@@ -332,13 +332,13 @@ function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0d1117",
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   collapsedContainer: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0d1117",
     justifyContent: "flex-start",
     alignItems: "center",
     paddingVertical: 12,
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#1f2937",
   },
   runningBadge: {
     flexDirection: "row",
@@ -427,9 +427,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shortcutKey: {
-    color: "#6b7280",
+    color: "#4b5563",
     fontSize: 11,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#1f2937",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

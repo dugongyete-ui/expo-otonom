@@ -303,10 +303,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   aiBubble: {
-    backgroundColor: COLORS.bgAiBubble,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: "#1f2937",
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 2,
   },
   askBubble: {
     backgroundColor: "rgba(234,179,8,0.07)",
