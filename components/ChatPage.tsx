@@ -293,6 +293,7 @@ export function ChatPage({
   const activeSessionIdRef = useRef<string>(externalSessionId || randomUUID());
   const planMsgIdRef = useRef<string | null>(null);
   const currentPlanRef = useRef<AgentPlan | null>(null);
+  const currentRunningStepIdRef = useRef<string | null>(null);
   const isWaitingRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
@@ -325,7 +326,7 @@ export function ChatPage({
       fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
       fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
     ]).then(([prefs, cfg]) => {
-      const m = prefs.model || cfg.G4F_MODEL || cfg.modelName;
+      const m = prefs.model || cfg.modelName || cfg.G4F_MODEL;
       if (m) setActiveModel(m);
     }).catch(() => {});
   }, []);
@@ -606,12 +607,16 @@ export function ChatPage({
         }
 
         if (status === "running" && step?.description) {
+          currentRunningStepIdRef.current = step.id;
           setStepHistory(prev => {
             if (prev.length > 0 && prev[prev.length - 1] === step.description) return prev;
             return [...prev, step.description];
           });
           setThinking({ active: true, label: step.description, stepLabel: step.description });
         } else if (status === "completed" || status === "failed") {
+          if (step?.id === currentRunningStepIdRef.current) {
+            currentRunningStepIdRef.current = null;
+          }
           setThinking({ active: true, label: "Menyelesaikan langkah..." });
         }
         return;
@@ -648,8 +653,34 @@ export function ChatPage({
         };
         const thinkLabel = toolLabels[toolName] || `Menggunakan ${toolName}`;
 
+        // Helper: update a tool entry inside the currently-running plan step
+        const upsertToolInCurrentStep = (updater: (prev: any[]) => any[]) => {
+          if (!currentPlanRef.current || !planMsgIdRef.current) return;
+          const stepId = currentRunningStepIdRef.current;
+          if (!stepId) return;
+          const updatedSteps = currentPlanRef.current.steps.map(s => {
+            if (s.id !== stepId) return s;
+            const stepTools: any[] = (s as any).tools || [];
+            return { ...s, tools: updater(stepTools) };
+          });
+          const updatedPlan: AgentPlan = { ...currentPlanRef.current, steps: updatedSteps };
+          currentPlanRef.current = updatedPlan;
+          setMessages(prev => prev.map(m =>
+            m.id === planMsgIdRef.current ? { ...m, plan: updatedPlan } : m
+          ));
+        };
+
         if (status === "calling") {
           setThinking({ active: true, label: thinkLabel });
+          const newToolEntry = {
+            tool_call_id: callId,
+            type: "tool",
+            name: toolName,
+            function_name: functionName,
+            status: "calling",
+            input: args,
+            function_args: args,
+          };
           setTools(prev => {
             const idx = prev.findIndex(t => t.tool_call_id === callId);
             if (idx >= 0) {
@@ -657,26 +688,24 @@ export function ChatPage({
               updated[idx] = { ...updated[idx], status: "calling", function_name: functionName };
               return updated;
             }
-            return [...prev, {
-              tool_call_id: callId,
-              name: toolName,
-              function_name: functionName,
-              status: "calling",
-              input: args,
-            }];
+            return [...prev, newToolEntry];
+          });
+          upsertToolInCurrentStep(stepTools => {
+            const idx = stepTools.findIndex(t => t.tool_call_id === callId);
+            if (idx >= 0) return stepTools;
+            return [...stepTools, newToolEntry];
           });
         } else if (status === "called") {
+          const normalizeShot = (s: string) =>
+            s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
           setTools(prev => {
             const idx = prev.findIndex(t => t.tool_call_id === callId);
             if (idx >= 0) {
               const updated = [...prev];
               const existing = updated[idx];
-              // Deep-merge tool_content: preserve screenshot_b64/url/title from prior
-              // browser_screenshot/desktop_screenshot events unless new payload provides them
+              // Deep-merge tool_content: preserve screenshot_b64/url/title from prior events
               const prevTc = existing.tool_content || {};
               const newTc = toolContent || {};
-              const normalizeShot = (s: string) =>
-                s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
               const newShot = normalizeShot(newTc.screenshot_b64 || "");
               const mergedTc = {
                 ...prevTc,
@@ -696,6 +725,20 @@ export function ChatPage({
             }
             return prev;
           });
+          upsertToolInCurrentStep(stepTools => {
+            const idx = stepTools.findIndex(t => t.tool_call_id === callId);
+            if (idx >= 0) {
+              const updated = [...stepTools];
+              updated[idx] = {
+                ...updated[idx],
+                status: "called",
+                function_name: functionName,
+                output: result,
+              };
+              return updated;
+            }
+            return stepTools;
+          });
         } else if (status === "error") {
           setTools(prev => {
             const idx = prev.findIndex(t => t.tool_call_id === callId);
@@ -705,6 +748,20 @@ export function ChatPage({
               return updated;
             }
             return prev;
+          });
+          upsertToolInCurrentStep(stepTools => {
+            const idx = stepTools.findIndex(t => t.tool_call_id === callId);
+            if (idx >= 0) {
+              const updated = [...stepTools];
+              updated[idx] = {
+                ...updated[idx],
+                status: "error",
+                function_name: functionName,
+                error: result,
+              };
+              return updated;
+            }
+            return stepTools;
           });
         }
         return;
@@ -1018,6 +1075,7 @@ export function ChatPage({
       setStepHistory([]);
       planMsgIdRef.current = null;
       currentPlanRef.current = null;
+      currentRunningStepIdRef.current = null;
     }
     setThinking({ active: true, label: isAgentMode ? "Dzeck sedang berpikir..." : "Memikirkan jawaban..." });
 

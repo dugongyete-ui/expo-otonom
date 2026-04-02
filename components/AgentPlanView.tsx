@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
+  ScrollView,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import type { AgentPlan, AgentPlanStep, AgentEvent } from "@/lib/chat";
@@ -54,9 +55,9 @@ const toolLabelMap: Record<string, string> = {
   mcp_call_tool: "Menggunakan tool MCP",
 };
 
-function getToolInfo(event: AgentEvent): { label: string; icon: string } {
+function getToolInfo(event: AgentEvent): { label: string; icon: string; argPreview: string } {
   const fnName = event.function_name || "";
-  const args = event.function_args || {};
+  const args = (event as any).function_args || (event as any).input || {};
   const label = toolLabelMap[fnName] || fnName;
   const icon = toolIconMap[fnName] || "settings-outline";
 
@@ -75,11 +76,11 @@ function getToolInfo(event: AgentEvent): { label: string; icon: string } {
   const key = argKeyMap[fnName];
   if (key && args[key]) {
     const val = String(args[key]);
-    const preview = val.length > 55 ? val.slice(0, 55) + "…" : val;
-    return { label: `${label}: ${preview}`, icon };
+    const preview = val.length > 60 ? val.slice(0, 60) + "…" : val;
+    return { label, icon, argPreview: preview };
   }
 
-  return { label, icon };
+  return { label, icon, argPreview: "" };
 }
 
 function PulsingDot() {
@@ -100,37 +101,75 @@ function PulsingDot() {
 }
 
 function ToolRow({ event }: { event: AgentEvent }) {
+  const [expanded, setExpanded] = useState(false);
   const isCalling = event.status === "calling";
   const isCalled = event.status === "called";
   const isError = event.status === "error";
-  const { label, icon } = getToolInfo(event);
+  const { label, icon, argPreview } = getToolInfo(event);
+
+  const output: string = (event as any).output || "";
+  const errorMsg: string = (event as any).error || "";
+  const hasResult = isCalled && (output || errorMsg);
+  const hasError = isError && errorMsg;
+
+  const displayResult = (hasResult ? output : errorMsg) || "";
+  const truncated = displayResult.length > 300 ? displayResult.slice(0, 300) + "…" : displayResult;
 
   return (
-    <View style={styles.toolRow}>
-      <View style={[
-        styles.toolIconBox,
-        isError && styles.toolIconBoxError,
-        isCalled && styles.toolIconBoxDone,
-      ]}>
-        <NativeIcon
-          name={icon}
-          size={10}
-          color={isError ? "#f87171" : isCalled ? "#888888" : "#888888"}
-        />
-      </View>
-      <Text
-        style={[
-          styles.toolLabel,
-          isError && styles.toolLabelError,
-          isCalled && styles.toolLabelDone,
-        ]}
-        numberOfLines={1}
+    <View style={styles.toolRowWrap}>
+      <TouchableOpacity
+        style={styles.toolRow}
+        onPress={() => (hasResult || hasError) && setExpanded(!expanded)}
+        activeOpacity={(hasResult || hasError) ? 0.65 : 1}
       >
-        {label}
-      </Text>
-      {isCalling && <PulsingDot />}
-      {isCalled && <NativeIcon name="checkmark" size={10} color="#666666" />}
-      {isError && <NativeIcon name="close" size={10} color="#f87171" />}
+        <View style={[
+          styles.toolIconBox,
+          isError && styles.toolIconBoxError,
+        ]}>
+          <NativeIcon
+            name={icon}
+            size={10}
+            color={isError ? "#f87171" : "#888888"}
+          />
+        </View>
+        <View style={styles.toolLabelWrap}>
+          <Text
+            style={[
+              styles.toolLabel,
+              isError && styles.toolLabelError,
+              isCalled && styles.toolLabelDone,
+            ]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+          {argPreview ? (
+            <Text style={styles.toolArgPreview} numberOfLines={1}>{argPreview}</Text>
+          ) : null}
+        </View>
+        {isCalling && <PulsingDot />}
+        {isCalled && (
+          <View style={styles.toolStatusRight}>
+            <NativeIcon name="checkmark" size={10} color="#555555" />
+            {hasResult && (
+              <NativeIcon
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={10}
+                color="#444444"
+              />
+            )}
+          </View>
+        )}
+        {isError && <NativeIcon name="close" size={10} color="#f87171" />}
+      </TouchableOpacity>
+
+      {expanded && truncated ? (
+        <View style={styles.toolResultBox}>
+          <Text style={[styles.toolResultText, isError && styles.toolResultTextError]}>
+            {truncated}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -166,9 +205,9 @@ function StepRow({ step }: { step: AgentPlanStep }) {
           isPending && styles.stepCheckBoxPending,
         ]}>
           {isDone ? (
-            <NativeIcon name="checkmark" size={10} color="#fff" />
+            <NativeIcon name="checkmark" size={10} color="#888888" />
           ) : isFailed ? (
-            <NativeIcon name="close" size={10} color="#fff" />
+            <NativeIcon name="close" size={10} color="#f87171" />
           ) : isRunning ? (
             <PulsingDot />
           ) : null}
@@ -195,7 +234,7 @@ function StepRow({ step }: { step: AgentPlanStep }) {
             <NativeIcon
               name={expanded ? "chevron-up" : "chevron-down"}
               size={12}
-              color="#606060"
+              color="#555555"
             />
           </View>
         )}
@@ -215,8 +254,6 @@ function StepRow({ step }: { step: AgentPlanStep }) {
 export function AgentPlanView({ plan, notifyMessages }: AgentPlanViewProps) {
   const steps = plan.steps || [];
 
-  // Only show steps that are active (running, completed, failed).
-  // Hide future pending steps — they'll appear progressively as the agent works.
   const visibleSteps = steps.filter(
     (s) => s.status === "running" || s.status === "completed" || s.status === "failed"
   );
@@ -265,10 +302,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stepCheckBoxDone: {
-    backgroundColor: "#16a34a",
+    backgroundColor: "#2c2c2c",
+    borderWidth: 1.5,
+    borderColor: "#3a3a3a",
   },
   stepCheckBoxFailed: {
-    backgroundColor: "#dc2626",
+    backgroundColor: "#2a1a1a",
+    borderWidth: 1.5,
+    borderColor: "#5a2020",
   },
   stepCheckBoxRunning: {
     borderWidth: 1.5,
@@ -277,7 +318,7 @@ const styles = StyleSheet.create({
   },
   stepCheckBoxPending: {
     borderWidth: 1.5,
-    borderColor: "#3a3a3a",
+    borderColor: "#2e2e2e",
     backgroundColor: "transparent",
   },
   stepTitle: {
@@ -289,7 +330,7 @@ const styles = StyleSheet.create({
     color: "#a0a0a0",
   },
   stepTitleDone: {
-    color: "#888888",
+    color: "#686868",
     fontFamily: "Inter_400Regular",
   },
   stepTitleFailed: {
@@ -300,7 +341,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   stepTitlePending: {
-    color: "#888888",
+    color: "#505050",
   },
   stepRight: {
     flexDirection: "row",
@@ -312,45 +353,79 @@ const styles = StyleSheet.create({
   stepCounter: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#606060",
+    color: "#555555",
   },
   toolsList: {
     marginLeft: 28,
-    gap: 1,
+    gap: 0,
     paddingBottom: 4,
+  },
+  toolRowWrap: {
+    gap: 0,
   },
   toolRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    paddingVertical: 3,
+    paddingVertical: 4,
   },
   toolIconBox: {
     width: 16,
     height: 16,
     borderRadius: 4,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#242424",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  toolIconBoxDone: {
-    backgroundColor: "#222222",
-  },
   toolIconBoxError: {
     backgroundColor: "#2a1a1a",
   },
-  toolLabel: {
+  toolLabelWrap: {
     flex: 1,
+    gap: 1,
+  },
+  toolLabel: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#606060",
+    color: "#707070",
     lineHeight: 17,
   },
   toolLabelDone: {
-    color: "#3a3a3a",
+    color: "#505050",
   },
   toolLabelError: {
+    color: "#f87171",
+  },
+  toolArgPreview: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#505050",
+    lineHeight: 15,
+  },
+  toolStatusRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  toolResultBox: {
+    marginLeft: 23,
+    marginTop: 2,
+    marginBottom: 4,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    padding: 8,
+  },
+  toolResultText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#707070",
+    lineHeight: 16,
+  },
+  toolResultTextError: {
     color: "#f87171",
   },
   pulsingDot: {
@@ -365,17 +440,13 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     gap: 6,
     borderLeftWidth: 2,
-    borderLeftColor: "#2a2a2a",
+    borderLeftColor: "#242424",
     paddingLeft: 10,
   },
   notifyRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 6,
-  },
-  notifyIcon: {
-    marginTop: 1,
-    flexShrink: 0,
   },
   notifyText: {
     flex: 1,
