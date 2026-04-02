@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 
 interface Step {
   id: string;
@@ -64,7 +64,7 @@ export function PlanPanel({ plan }: PlanPanelProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="list" size={16} color="#4a7cf0" />
+        <NativeIcon name="list" size={16} color="#636366" />
         <Text style={styles.headerTitle}>Plan</Text>
       </View>
 
@@ -92,18 +92,14 @@ export function PlanPanel({ plan }: PlanPanelProps) {
                 <Text style={styles.stepStatus}>{step.status}</Text>
               </View>
 
-              <Ionicons
+              <NativeIcon
                 name={getStepIcon(step.status)}
                 size={18}
                 color={getStepColor(step.status)}
               />
 
-              <Ionicons
-                name={
-                  expandedSteps.has(step.id)
-                    ? "chevron-up"
-                    : "chevron-down"
-                }
+              <NativeIcon
+                name={expandedSteps.has(step.id) ? "chevron-up" : "chevron-down"}
                 size={16}
                 color="#8a8780"
               />

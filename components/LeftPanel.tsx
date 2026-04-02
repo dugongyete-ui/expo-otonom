@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Share,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiService, getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { t } from "@/lib/i18n";
@@ -156,7 +156,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
       <View style={styles.collapsedContainer}>
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle}>
           <View>
-            <Ionicons name="menu" size={20} color="#888888" />
+            <NativeIcon name="menu" size={20} color="#888888" />
             {runningCount > 0 && (
               <View style={styles.badgeSmall}>
                 <Text style={styles.badgeSmallText}>{runningCount}</Text>
@@ -173,7 +173,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle}>
-          <Ionicons name="chevron-back" size={20} color="#888888" />
+          <NativeIcon name="chevron-back" size={20} color="#888888" />
         </TouchableOpacity>
 
         {runningCount > 0 && (
@@ -192,7 +192,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         onPress={handleNewTask}
         activeOpacity={0.7}
       >
-        <Ionicons name="add" size={18} color="#888888" />
+        <NativeIcon name="add" size={18} color="#888888" />
         <Text style={styles.newTaskButtonText}>{t("New Task")}</Text>
         <View style={styles.shortcutKeys}>
           <Text style={styles.shortcutKey}>⌘K</Text>
@@ -223,11 +223,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         </ScrollView>
       ) : (
         <View style={styles.emptyState}>
-          <Ionicons
-            name="chatbubble-outline"
-            size={36}
-            color="#555555"
-          />
+          <NativeIcon name="chatbubble-outline" size={36} color="#555555" />
           <Text style={styles.emptyStateText}>{t("Create a task to get started")}</Text>
         </View>
       )}
@@ -239,7 +235,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
           onPress={() => setShowClearConfirm(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="trash-outline" size={14} color="#666666" />
+          <NativeIcon name="trash-outline" size={14} color="#666666" />
           <Text style={styles.clearButtonText}>{t("Clear All History")}</Text>
         </TouchableOpacity>
       )}
@@ -249,7 +245,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         <View style={styles.confirmDialog}>
           <View style={styles.confirmDialogContent}>
             <View style={styles.confirmDialogIcon}>
-              <Ionicons name="trash" size={22} color="#e05050" />
+              <NativeIcon name="trash" size={22} color="#e05050" />
             </View>
             <Text style={styles.confirmDialogTitle}>{t("Clear All History")}</Text>
             <Text style={styles.confirmDialogMessage}>
@@ -274,7 +270,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="trash" size={14} color="#FFFFFF" />
+                    <NativeIcon name="trash" size={14} color="#FFFFFF" />
                     <Text style={styles.confirmDialogDeleteText}>Delete All</Text>
                   </>
                 )}
@@ -336,14 +332,14 @@ function SessionItem({ session, isRunning, onSelect, onDelete, onShare }: Sessio
         onPress={onShare}
         activeOpacity={0.7}
       >
-        <Ionicons name="share-social-outline" size={14} color="#666666" />
+        <NativeIcon name="share-social-outline" size={14} color="#666666" />
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.sessionItemAction}
         onPress={onDelete}
         activeOpacity={0.7}
       >
-        <Ionicons name="close" size={14} color="#666666" />
+        <NativeIcon name="close" size={14} color="#666666" />
       </TouchableOpacity>
     </TouchableOpacity>
   );

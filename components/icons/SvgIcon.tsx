@@ -16,6 +16,16 @@ const defaultStroke = 2;
 
 // ── Navigation & UI ─────────────────────────────────────────────────────────
 
+export function TrashIcon({ size = 24, color = "#b0b0b0" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 6h18" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" />
+      <Path d="M8 6V4h8v2" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M19 6l-1 14H6L5 6" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function MenuIcon({ size = 24, color = "#b0b0b0" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -754,6 +764,8 @@ export function NativeIcon({ name, size = 24, color = "#a0a0a0" }: NativeIconPro
     case "mail": return <MailIcon {...props} />;
     case "open": return <ExternalLinkIcon {...props} />;
     case "share": return <ShareIcon {...props} />;
+    case "share-social": return <ShareIcon {...props} />;
+    case "trash": return <TrashIcon {...props} />;
     case "copy": return <CopyIcon {...props} />;
     case "settings": return <SettingsIcon {...props} />;
     case "server": return <ServerIcon {...props} />;

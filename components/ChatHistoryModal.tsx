@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import {
   loadChatSessions,
   deleteChatSession,
@@ -42,10 +42,10 @@ function SessionItem({
       activeOpacity={0.7}
     >
       <View style={styles.sessionIcon}>
-        <Ionicons
-          name={session.mode === "agent" ? "rocket" : "chatbubble"}
+        <NativeIcon
+          name={session.mode === "agent" ? "flash" : "chatbubble"}
           size={14}
-          color={session.mode === "agent" ? "#2563eb" : "#5AC8FA"}
+          color="#636366"
         />
       </View>
       <View style={styles.sessionContent}>
@@ -83,7 +83,7 @@ function SessionItem({
         onPress={onDelete}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Ionicons name="trash-outline" size={16} color="#636366" />
+        <NativeIcon name="trash-outline" size={16} color="#636366" />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -224,7 +224,7 @@ export function ChatHistoryModal({
                 style={styles.clearAllBtn}
                 activeOpacity={0.7}
               >
-                <Ionicons name="trash-outline" size={16} color="#FF453A" />
+                <NativeIcon name="trash-outline" size={16} color="#FF453A" />
                 <Text style={styles.clearAllText}>Clear All</Text>
               </TouchableOpacity>
             )}
@@ -233,7 +233,7 @@ export function ChatHistoryModal({
               style={styles.closeBtn}
               activeOpacity={0.7}
             >
-              <Ionicons name="close" size={22} color="#8E8E93" />
+              <NativeIcon name="close" size={22} color="#8E8E93" />
             </TouchableOpacity>
           </View>
         </View>
@@ -245,7 +245,7 @@ export function ChatHistoryModal({
         ) : sessions.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="time-outline" size={32} color="#636366" />
+              <NativeIcon name="time-outline" size={32} color="#636366" />
             </View>
             <Text style={styles.emptyTitle}>No History Yet</Text>
             <Text style={styles.emptySubtitle}>

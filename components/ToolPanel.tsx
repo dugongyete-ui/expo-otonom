@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
-import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, TOOL_COLOR_MAP as CONST_TOOL_COLOR_MAP, getToolCategory, TOOL_FUNCTION_MAP } from "@/lib/tool-constants";
+import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, getToolCategory, TOOL_FUNCTION_MAP } from "@/lib/tool-constants";
 import { ToolPanelContent } from "./ToolPanelContent";
 
 export interface ToolItem {
@@ -33,11 +33,6 @@ interface ToolPanelProps {
 function getToolIcon(name: string): string {
   const category = getToolCategory(name);
   return CONST_TOOL_ICON_MAP[category] || "settings-outline";
-}
-
-function getToolColor(name: string): string {
-  const category = getToolCategory(name);
-  return CONST_TOOL_COLOR_MAP[category] || "#8E8E93";
 }
 
 function getStatusColor(status: ToolItem["status"]): string {
@@ -140,11 +135,11 @@ export function ToolPanel({
                 }
                 activeOpacity={0.7}
               >
-                <View style={[styles.toolIcon, { backgroundColor: `${getToolColor(fnName)}18` }]}>
+                <View style={styles.toolIcon}>
                   <NativeIcon
                     name={getToolIcon(fnName)}
                     size={14}
-                    color={getToolColor(fnName)}
+                    color="#636366"
                   />
                 </View>
                 <View style={styles.toolInfo}>
@@ -281,6 +276,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    backgroundColor: "#2a2a2a",
   },
   toolInfo: {
     flex: 1,

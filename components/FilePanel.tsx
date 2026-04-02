@@ -271,7 +271,7 @@ export function FilePanel({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <NativeIcon name="folder-open" size={14} color="#FFD60A" />
+          <NativeIcon name="folder-open" size={14} color="#636366" />
           <Text style={styles.headerTitle}>Session Files</Text>
         </View>
         <View style={styles.headerRight}>
