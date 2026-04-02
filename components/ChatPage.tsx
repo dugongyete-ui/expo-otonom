@@ -110,10 +110,10 @@ function ThinkingIndicator({ label }: { label: string }) {
 const thinkingStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
+    paddingVertical: 6,
+    gap: 10,
   },
   avatar: {
     width: 22,
@@ -123,31 +123,23 @@ const thinkingStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    marginBottom: 2,
   },
   bubble: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#111827",
-    borderRadius: 18,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: "85%",
+    flex: 1,
   },
   dotsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4b5563",
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#374151",
   },
   label: {
     fontFamily: "Inter_400Regular",
@@ -183,14 +175,14 @@ function InlineToolStep({ tool }: { tool: any }) {
   return (
     <View style={inlineToolStyles.row}>
       <View style={[inlineToolStyles.iconWrap, isError && inlineToolStyles.iconWrapError, isDone && inlineToolStyles.iconWrapDone]}>
-        <Ionicons name={cfg.icon} size={11} color={isError ? "#dc2626" : isDone ? "#16a34a" : "#6b7280"} />
+        <Ionicons name={cfg.icon} size={10} color={isError ? "#f87171" : "#6b7280"} />
       </View>
       <Text style={[inlineToolStyles.label, isError && inlineToolStyles.labelError]} numberOfLines={1}>
         {cfg.label}
       </Text>
       {isRunning && <View style={inlineToolStyles.runningDot} />}
-      {isDone && <Ionicons name="checkmark" size={11} color="#16a34a" />}
-      {isError && <Ionicons name="close-circle" size={11} color="#dc2626" />}
+      {isDone && <Ionicons name="checkmark" size={10} color="#4ade80" />}
+      {isError && <Ionicons name="close" size={10} color="#f87171" />}
     </View>
   );
 }
@@ -199,38 +191,38 @@ const inlineToolStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
     paddingVertical: 3,
   },
   iconWrap: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
+    width: 16,
+    height: 16,
+    borderRadius: 4,
     backgroundColor: "#1f2937",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   iconWrapDone: {
-    backgroundColor: "rgba(22,163,74,0.08)",
+    backgroundColor: "#1a2a1a",
   },
   iconWrapError: {
-    backgroundColor: "rgba(220,38,38,0.08)",
+    backgroundColor: "#2a1a1a",
   },
   label: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#6b7280",
+    color: "#4b5563",
   },
   labelError: {
-    color: "#dc2626",
+    color: "#f87171",
   },
   runningDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#2563eb",
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#3b82f6",
     flexShrink: 0,
   },
 });
@@ -1863,20 +1855,20 @@ const styles = StyleSheet.create({
     borderColor: "#1f2937",
   },
   agentTurnBlock: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 6,
   },
   agentTurnHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
   },
   agentTurnIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    backgroundColor: "#2563eb",
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "#1d4ed8",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1890,22 +1882,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(37,99,235,0.1)",
+    backgroundColor: "rgba(59,130,246,0.1)",
     borderWidth: 1,
-    borderColor: "rgba(37,99,235,0.2)",
+    borderColor: "rgba(59,130,246,0.2)",
   },
   agentTurnBadgeDone: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(22,163,74,0.1)",
+    backgroundColor: "rgba(22,163,74,0.08)",
     borderWidth: 1,
     borderColor: "rgba(22,163,74,0.2)",
   },
   agentTurnBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#2563eb",
+    color: "#3b82f6",
     letterSpacing: -0.1,
   },
   fileCardsBlock: {
@@ -1995,13 +1987,14 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   taskCompletedWrap: {
-    marginHorizontal: 12,
-    marginVertical: 4,
+    marginHorizontal: 16,
+    marginVertical: 6,
   },
   taskCompletedSteps: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 6,
+    paddingLeft: 30,
+    paddingTop: 4,
+    paddingBottom: 4,
+    gap: 5,
   },
   taskCompletedStepRow: {
     flexDirection: "row",
@@ -2019,19 +2012,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginHorizontal: 12,
-    marginVertical: 8,
-    backgroundColor: "rgba(22,163,74,0.08)",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(22,163,74,0.25)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
   },
   taskCompletedIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     backgroundColor: "#16a34a",
     alignItems: "center",
     justifyContent: "center",
@@ -2116,15 +2103,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(37,99,235,0.1)",
   },
   inlineToolsBlock: {
-    marginLeft: 46,
+    marginLeft: 30,
     marginTop: 2,
     marginBottom: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    gap: 2,
+    paddingHorizontal: 0,
+    paddingVertical: 2,
+    gap: 1,
   },
 });

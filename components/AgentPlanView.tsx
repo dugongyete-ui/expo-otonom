@@ -13,6 +13,26 @@ interface AgentPlanViewProps {
   plan: AgentPlan;
 }
 
+const toolIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
+  web_search: "search-outline",
+  web_browse: "globe-outline",
+  browser_navigate: "globe-outline",
+  browser_view: "eye-outline",
+  browser_click: "finger-print-outline",
+  browser_type: "create-outline",
+  browser_scroll: "arrow-down-outline",
+  shell_exec: "terminal-outline",
+  shell_view: "terminal-outline",
+  shell_wait: "time-outline",
+  file_read: "document-text-outline",
+  file_write: "save-outline",
+  file_str_replace: "create-outline",
+  file_find_by_name: "search-outline",
+  message_notify_user: "chatbubble-outline",
+  message_ask_user: "help-circle-outline",
+  mcp_call_tool: "extension-puzzle-outline",
+};
+
 const toolLabelMap: Record<string, string> = {
   web_search: "Mencari informasi",
   web_browse: "Membuka halaman",
@@ -33,10 +53,12 @@ const toolLabelMap: Record<string, string> = {
   mcp_call_tool: "Menggunakan tool MCP",
 };
 
-function getToolDescription(event: AgentEvent): string {
+function getToolInfo(event: AgentEvent): { label: string; icon: keyof typeof Ionicons.glyphMap } {
   const fnName = event.function_name || "";
   const args = event.function_args || {};
   const label = toolLabelMap[fnName] || fnName;
+  const icon = toolIconMap[fnName] || "construct-outline";
+
   const argKeyMap: Record<string, string> = {
     web_search: "query",
     web_browse: "url",
@@ -48,13 +70,15 @@ function getToolDescription(event: AgentEvent): string {
     message_ask_user: "text",
     mcp_call_tool: "tool_name",
   };
+
   const key = argKeyMap[fnName];
   if (key && args[key]) {
     const val = String(args[key]);
-    const preview = val.length > 60 ? val.slice(0, 60) + "…" : val;
-    return `${label}: ${preview}`;
+    const preview = val.length > 55 ? val.slice(0, 55) + "…" : val;
+    return { label: `${label}: ${preview}`, icon };
   }
-  return label;
+
+  return { label, icon };
 }
 
 function PulsingDot() {
@@ -71,47 +95,51 @@ function PulsingDot() {
     return () => anim.stop();
   }, []);
 
-  return (
-    <Animated.View style={[styles.runningDot, { opacity }]} />
-  );
+  return <Animated.View style={[styles.pulsingDot, { opacity }]} />;
 }
 
-function ToolRow({ event, isLast }: { event: AgentEvent; isLast: boolean }) {
+function ToolRow({ event }: { event: AgentEvent }) {
   const isCalling = event.status === "calling";
   const isCalled = event.status === "called";
   const isError = event.status === "error";
-  const description = getToolDescription(event);
+  const { label, icon } = getToolInfo(event);
 
   return (
-    <View style={[styles.toolRow, !isLast && styles.toolRowNotLast]}>
-      <View style={styles.toolRowLeft}>
-        <View style={[styles.toolDot, isError && styles.toolDotError, isCalled && styles.toolDotDone]} />
-        <View style={styles.toolRowLine} />
+    <View style={styles.toolRow}>
+      <View style={[
+        styles.toolIconBox,
+        isError && styles.toolIconBoxError,
+        isCalled && styles.toolIconBoxDone,
+      ]}>
+        <Ionicons
+          name={icon}
+          size={10}
+          color={isError ? "#f87171" : isCalled ? "#6b7280" : "#6b7280"}
+        />
       </View>
-      <View style={styles.toolRowContent}>
-        <Text
-          style={[
-            styles.toolRowText,
-            isError && styles.toolRowTextError,
-            isCalled && styles.toolRowTextDone,
-          ]}
-          numberOfLines={2}
-        >
-          {description}
-        </Text>
-        {isCalling && <PulsingDot />}
-        {isCalled && <Ionicons name="checkmark" size={12} color="#34C759" />}
-        {isError && <Ionicons name="close" size={12} color="#FF453A" />}
-      </View>
+      <Text
+        style={[
+          styles.toolLabel,
+          isError && styles.toolLabelError,
+          isCalled && styles.toolLabelDone,
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+      {isCalling && <PulsingDot />}
+      {isCalled && <Ionicons name="checkmark" size={10} color="#4ade80" />}
+      {isError && <Ionicons name="close" size={10} color="#f87171" />}
     </View>
   );
 }
 
-function StepRow({ step, index }: { step: AgentPlanStep; index: number }) {
+function StepRow({ step }: { step: AgentPlanStep }) {
   const isRunning = step.status === "running";
   const isDone = step.status === "completed";
   const isFailed = step.status === "failed";
-  const tools = step.tools || [];
+  const isPending = step.status === "pending";
+  const tools: AgentEvent[] = (step as any).tools || [];
 
   const [expanded, setExpanded] = useState(isRunning);
 
@@ -119,29 +147,30 @@ function StepRow({ step, index }: { step: AgentPlanStep; index: number }) {
     if (isRunning) setExpanded(true);
   }, [isRunning]);
 
+  const doneToolCount = tools.filter(t => t.status === "called").length;
+  const canExpand = tools.length > 0;
+
   return (
     <View style={styles.stepRow}>
       <TouchableOpacity
         style={styles.stepHeader}
-        onPress={() => tools.length > 0 && setExpanded(!expanded)}
-        activeOpacity={tools.length > 0 ? 0.6 : 1}
+        onPress={() => canExpand && setExpanded(!expanded)}
+        activeOpacity={canExpand ? 0.65 : 1}
       >
-        <View style={styles.stepIconCol}>
+        <View style={[
+          styles.stepCheckBox,
+          isDone && styles.stepCheckBoxDone,
+          isFailed && styles.stepCheckBoxFailed,
+          isRunning && styles.stepCheckBoxRunning,
+          isPending && styles.stepCheckBoxPending,
+        ]}>
           {isDone ? (
-            <View style={styles.stepDoneCircle}>
-              <Ionicons name="checkmark" size={10} color="#fff" />
-            </View>
+            <Ionicons name="checkmark" size={10} color="#fff" />
           ) : isFailed ? (
-            <View style={[styles.stepDoneCircle, { backgroundColor: "#FF453A" }]}>
-              <Ionicons name="close" size={10} color="#fff" />
-            </View>
+            <Ionicons name="close" size={10} color="#fff" />
           ) : isRunning ? (
-            <View style={styles.stepRunningCircle}>
-              <PulsingDot />
-            </View>
-          ) : (
-            <View style={styles.stepPendingCircle} />
-          )}
+            <PulsingDot />
+          ) : null}
         </View>
 
         <Text
@@ -150,29 +179,31 @@ function StepRow({ step, index }: { step: AgentPlanStep; index: number }) {
             isDone && styles.stepTitleDone,
             isFailed && styles.stepTitleFailed,
             isRunning && styles.stepTitleRunning,
+            isPending && styles.stepTitlePending,
           ]}
-          numberOfLines={3}
+          numberOfLines={2}
         >
           {step.description}
         </Text>
 
-        {tools.length > 0 && (
-          <Ionicons
-            name={expanded ? "chevron-up" : "chevron-down"}
-            size={13}
-            color="#374151"
-          />
+        {canExpand && (
+          <View style={styles.stepRight}>
+            {tools.length > 0 && (
+              <Text style={styles.stepCounter}>{doneToolCount}/{tools.length}</Text>
+            )}
+            <Ionicons
+              name={expanded ? "chevron-up" : "chevron-down"}
+              size={12}
+              color="#4b5563"
+            />
+          </View>
         )}
       </TouchableOpacity>
 
       {expanded && tools.length > 0 && (
-        <View style={styles.toolsContainer}>
+        <View style={styles.toolsList}>
           {tools.map((tool, i) => (
-            <ToolRow
-              key={tool.tool_call_id || i}
-              event={tool}
-              isLast={i === tools.length - 1}
-            />
+            <ToolRow key={(tool as any).tool_call_id || i} event={tool} />
           ))}
         </View>
       )}
@@ -182,237 +213,133 @@ function StepRow({ step, index }: { step: AgentPlanStep; index: number }) {
 
 export function AgentPlanView({ plan }: AgentPlanViewProps) {
   const steps = plan.steps || [];
-  const doneCount = steps.filter(s => s.status === "completed").length;
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleRow}>
-          <Ionicons name="sparkles" size={13} color="#3b82f6" />
-          <Text style={styles.cardTitle} numberOfLines={2}>
-            {plan.title || "Rencana"}
-          </Text>
-          {plan.status === "running" && <PulsingDot />}
-          {plan.status === "completed" && (
-            <View style={styles.doneBadge}>
-              <Ionicons name="checkmark-circle" size={12} color="#34C759" />
-              <Text style={styles.doneBadgeText}>Selesai</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.progressRow}>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: steps.length > 0 ? `${(doneCount / steps.length) * 100}%` : "0%" },
-              ]}
-            />
-          </View>
-          <Text style={styles.progressText}>{doneCount}/{steps.length}</Text>
-        </View>
-      </View>
-
-      <View style={styles.stepsList}>
-        {steps.map((step, index) => (
-          <StepRow key={step.id || index} step={step} index={index} />
-        ))}
-      </View>
+    <View style={styles.container}>
+      {steps.map((step, index) => (
+        <StepRow key={step.id || index} step={step} />
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#111827",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    overflow: "hidden",
-  },
-  cardHeader: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
-    gap: 8,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  cardTitle: {
-    flex: 1,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
-    color: "#e5e7eb",
-    letterSpacing: -0.2,
-  },
-  doneBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  doneBadgeText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    color: "#34C759",
-  },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  progressBar: {
-    flex: 1,
-    height: 3,
-    backgroundColor: "#1f2937",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#3b82f6",
-    borderRadius: 2,
-  },
-  progressText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    color: "#4b5563",
-    minWidth: 28,
-    textAlign: "right",
-  },
-  stepsList: {
-    paddingVertical: 6,
+  container: {
+    gap: 2,
+    paddingVertical: 2,
   },
   stepRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 2,
+    gap: 0,
   },
   stepHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 4,
   },
-  stepIconCol: {
+  stepCheckBox: {
     width: 18,
+    height: 18,
+    borderRadius: 5,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 1,
+    marginTop: 1,
     flexShrink: 0,
   },
-  stepDoneCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#34C759",
-    alignItems: "center",
-    justifyContent: "center",
+  stepCheckBoxDone: {
+    backgroundColor: "#16a34a",
   },
-  stepRunningCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+  stepCheckBoxFailed: {
+    backgroundColor: "#dc2626",
+  },
+  stepCheckBoxRunning: {
     borderWidth: 1.5,
     borderColor: "#3b82f6",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  stepPendingCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+  stepCheckBoxPending: {
     borderWidth: 1.5,
-    borderColor: "#2d3748",
+    borderColor: "#374151",
+    backgroundColor: "transparent",
   },
   stepTitle: {
     flex: 1,
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#9ca3af",
-    lineHeight: 19,
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    lineHeight: 20,
     letterSpacing: -0.1,
+    color: "#9ca3af",
   },
   stepTitleDone: {
     color: "#6b7280",
-    textDecorationLine: "line-through",
+    fontFamily: "Inter_400Regular",
   },
   stepTitleFailed: {
     color: "#f87171",
   },
   stepTitleRunning: {
     color: "#e5e7eb",
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_600SemiBold",
   },
-  toolsContainer: {
+  stepTitlePending: {
+    color: "#6b7280",
+  },
+  stepRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingTop: 2,
+    flexShrink: 0,
+  },
+  stepCounter: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#4b5563",
+  },
+  toolsList: {
     marginLeft: 28,
-    marginBottom: 4,
-    borderLeftWidth: 1,
-    borderLeftColor: "#1f2937",
-    paddingLeft: 12,
+    gap: 1,
+    paddingBottom: 4,
   },
   toolRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    minHeight: 22,
-  },
-  toolRowNotLast: {
-    marginBottom: 0,
-  },
-  toolRowLeft: {
-    width: 10,
     alignItems: "center",
-    paddingTop: 6,
+    gap: 7,
+    paddingVertical: 3,
+  },
+  toolIconBox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    backgroundColor: "#1f2937",
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
-  toolDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: "#2d3748",
-    flexShrink: 0,
+  toolIconBoxDone: {
+    backgroundColor: "#1a2a1a",
   },
-  toolDotDone: {
-    backgroundColor: "#34C759",
+  toolIconBoxError: {
+    backgroundColor: "#2a1a1a",
   },
-  toolDotError: {
-    backgroundColor: "#FF453A",
-  },
-  toolRowLine: {
-    flex: 1,
-    width: 1,
-    backgroundColor: "transparent",
-  },
-  toolRowContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  toolRowText: {
+  toolLabel: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     color: "#4b5563",
     lineHeight: 17,
-    letterSpacing: -0.1,
   },
-  toolRowTextDone: {
+  toolLabelDone: {
     color: "#374151",
   },
-  toolRowTextError: {
+  toolLabelError: {
     color: "#f87171",
   },
-  runningDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  pulsingDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: "#3b82f6",
     flexShrink: 0,
   },
