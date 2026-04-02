@@ -62,11 +62,43 @@ export async function registerRoutes(app: any): Promise<Server> {
   // ─── Startup: clean up stale running sessions from previous server instance ─
   // Sessions left in status "running" after a server crash/restart are no longer
   // actually running — mark them as completed so they don't show as active.
+  // Also terminates any Python subprocesses whose PIDs were persisted in Redis.
   (async () => {
     try {
       const col = await getCollection("sessions");
       if (col) {
         const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
+        // Collect stale session IDs so we can kill their PIDs from Redis
+        const staleDocs: any[] = await (col as any).find(
+          {
+            status: { $in: ["running", "resuming"] },
+            $or: [
+              { updated_at: { $lt: staleThreshold } },
+              { updated_at: { $exists: false } },
+            ],
+          },
+          { projection: { session_id: 1, _id: 0 } },
+        ).toArray().catch(() => []);
+
+        // Attempt to terminate orphaned Python agent processes via persisted PIDs
+        for (const doc of staleDocs) {
+          const staleSessionId: string = doc.session_id || "";
+          if (!staleSessionId) continue;
+          try {
+            const pidStr = await redisGet(`agent:${staleSessionId}:pid`);
+            if (pidStr) {
+              const pid = parseInt(pidStr, 10);
+              if (!isNaN(pid) && pid > 0) {
+                try {
+                  process.kill(pid, "SIGTERM");
+                  console.log(`[Startup] Sent SIGTERM to orphaned agent PID ${pid} (session ${staleSessionId})`);
+                } catch {}
+              }
+              await redisDel(`agent:${staleSessionId}:pid`).catch(() => {});
+            }
+          } catch {}
+        }
+
         const result = await (col as any).updateMany(
           {
             status: { $in: ["running", "resuming"] },
@@ -427,26 +459,27 @@ export async function registerRoutes(app: any): Promise<Server> {
       let messageStarted = false;
       apiRes.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        // Split on double-newline to get complete SSE events; keep the trailing incomplete event in buffer
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === "data: [DONE]") continue;
-          if (trimmed.startsWith("data: ")) {
-            try {
-              const parsed = JSON.parse(trimmed.slice(6));
-              const content = parsed.response ?? parsed.choices?.[0]?.delta?.content ?? "";
-              if (content) {
-                if (!messageStarted) {
-                  res.write(`data: ${JSON.stringify({ type: "message_start", role: "assistant" })}\n\n`);
-                  messageStarted = true;
-                }
-                res.write(`data: ${JSON.stringify({ type: "message_chunk", chunk: content })}\n\n`);
-                if (typeof (res as any).flush === "function") (res as any).flush();
+        for (const event of events) {
+          // An SSE event may have multiple lines; extract all "data:" lines and concatenate
+          const dataLines = event.split("\n").filter((l) => l.trimStart().startsWith("data:"));
+          const dataStr = dataLines.map((l) => l.replace(/^data:\s?/, "")).join("");
+          if (!dataStr || dataStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(dataStr);
+            const content = parsed.response ?? parsed.choices?.[0]?.delta?.content ?? "";
+            if (content) {
+              if (!messageStarted) {
+                res.write(`data: ${JSON.stringify({ type: "message_start", role: "assistant" })}\n\n`);
+                messageStarted = true;
               }
-            } catch (e) {}
-          }
+              res.write(`data: ${JSON.stringify({ type: "message_chunk", chunk: content })}\n\n`);
+              if (typeof (res as any).flush === "function") (res as any).flush();
+            }
+          } catch (_e) {}
         }
       });
 
@@ -475,6 +508,9 @@ export async function registerRoutes(app: any): Promise<Server> {
     stderrBuffer: string;
   }
   const activeAgentSessions = new Map<string, AgentSession>();
+
+  // Orphaned Python agent processes from previous crashes are cleaned up in the startup
+  // IIFE above (via Redis-persisted PIDs). This map is always empty on a fresh process start.
 
   // Clean up sessions older than 30 minutes
   setInterval(() => {
@@ -705,10 +741,17 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({ session_id: sessionId, is_shared: isShared, share_url: isShared ? shareUrl : null });
   });
 
-  app.get("/api/sessions/:sessionId/events", async (req: any, res: any) => {
+  app.get("/api/sessions/:sessionId/events", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+
+    // Allow access if: (a) user owns the session, or (b) session is publicly shared
     const isShared = await getIsShared(sessionId);
-    if (!isShared) return res.status(403).json({ error: "Session is not shared" });
+    if (!isShared) {
+      const ownership = await verifySessionOwnership(sessionId, requestingUserId);
+      if (ownership === "not_found") return res.status(404).json({ error: "Session not found" });
+      if (ownership === "denied") return res.status(403).json({ error: "Access denied" });
+    }
 
     // Serve from in-memory if session is still active
     const session = activeAgentSessions.get(sessionId);
@@ -1091,11 +1134,10 @@ export async function registerRoutes(app: any): Promise<Server> {
     }).catch(() => {});
 
     // All execution now happens in E2B cloud sandbox — no local VNC needed
-    const e2bKey = process.env.E2B_API_KEY || "";
-    if (!e2bKey) {
+    if (!isE2BEnabled()) {
       console.warn("[Agent] E2B_API_KEY not set — sandbox features will be unavailable");
     } else {
-      console.log(`[Agent] E2B_API_KEY available (${e2bKey.length} chars) for session ${sid}`);
+      console.log(`[Agent] E2B_API_KEY available for session ${sid}`);
     }
 
     // ── Task 1 & 2: Unify sandboxes ───────────────────────────────────────────
@@ -1253,6 +1295,11 @@ export async function registerRoutes(app: any): Promise<Server> {
     (session as any)._userId = userId;
     (session as any)._userMessage = message || (messages && messages.length > 0 ? messages[messages.length - 1]?.content : "") || null;
     activeAgentSessions.set(sid, session);
+
+    // Persist agent PID to Redis so startup cleanup can terminate orphaned processes
+    if (proc.pid) {
+      redisSet(`agent:${sid}:pid`, String(proc.pid), 86400).catch(() => {});
+    }
 
     // Activity-based inactivity watchdog: force-close if no SSE events are emitted
     // for more than 10 minutes (inactivity, not wall-clock session age).
@@ -1466,6 +1513,10 @@ export async function registerRoutes(app: any): Promise<Server> {
         // Also clear any stale pause key left over from a crashed takeover
         try {
           await redisDel(`agent:${sid}:paused`);
+        } catch {}
+        // Clear persisted PID now that the process has exited cleanly
+        try {
+          await redisDel(`agent:${sid}:pid`);
         } catch {}
       })();
     });
@@ -1907,6 +1958,17 @@ export async function registerRoutes(app: any): Promise<Server> {
       e2bSessionId = e2bSess?.id || null;
     }
 
+    if (!e2bSessionId && !vncUrl) {
+      return res.status(503).json({
+        error: "Browser session unavailable: no active desktop session is connected to this agent.",
+        paused: true,
+        session_id: sid,
+        vnc_url: null,
+        e2b_session_id: null,
+        sandbox_id: agentSandboxId || null,
+      });
+    }
+
     res.json({
       paused: true,
       session_id: sid,
@@ -2222,7 +2284,7 @@ export async function registerRoutes(app: any): Promise<Server> {
     // ── Mode 1: E2B proxy — stream file directly from E2B sandbox ─────────────
     // sandbox_id in query takes priority; fall back to active sandbox
     const sandboxId = rawSandboxId || getActiveE2BSandboxId();
-    if (sandboxId && process.env.E2B_API_KEY) {
+    if (sandboxId && isE2BEnabled()) {
       try {
         console.log(`[FileDownload] E2B proxy: sandbox=${sandboxId} path=${filePath} name=${fileName}`);
 
@@ -2341,9 +2403,8 @@ except Exception as ex:
         }
 
         const sandboxId = getActiveE2BSandboxId();
-        const e2bKey = process.env.E2B_API_KEY || "";
 
-        if (!sandboxId || !e2bKey) {
+        if (!sandboxId || !isE2BEnabled()) {
           return res.status(503).json({
             error: "File upload requires an active E2B sandbox. No sandbox is currently connected.",
           });
@@ -2491,9 +2552,8 @@ except Exception as ex:
         // This prevents cross-session sandbox contamination when multiple users are active.
         const sessionBoundSandboxId: string = (liveSession as any)?._sandboxId || "";
         const sandboxId = sessionBoundSandboxId || getActiveE2BSandboxId();
-        const e2bKey = process.env.E2B_API_KEY || "";
 
-        if (!sandboxId || !e2bKey) {
+        if (!sandboxId || !isE2BEnabled()) {
           return res.status(503).json({
             error: "File upload requires an active E2B sandbox. No sandbox is currently connected.",
           });
@@ -2666,9 +2726,8 @@ asyncio.run(main())
   // ─── File list endpoint (files in E2B sandbox output directory) ─────────────
   app.get("/api/files/list", async (_req: any, res: any) => {
     const sandboxId = getActiveE2BSandboxId();
-    const e2bKey = process.env.E2B_API_KEY || "";
 
-    if (!sandboxId || !e2bKey) {
+    if (!sandboxId || !isE2BEnabled()) {
       return res.json({ files: [] });
     }
 
@@ -3074,7 +3133,7 @@ print(json.dumps(results))
     const e2bOn = isE2BEnabled();
     res.json({
       e2b_enabled: e2bOn,
-      e2b_api_key_set: !!process.env.E2B_API_KEY,
+      e2b_api_key_set: isE2BEnabled(),
       status: e2bOn ? "ready" : "disabled",
       timestamp: new Date().toISOString(),
       message: e2bOn

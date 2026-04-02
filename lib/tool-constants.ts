@@ -182,20 +182,20 @@ export const TOOL_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 // ─── Tool Category → Color ─────────────────────────────────────────────────
 export const TOOL_COLOR_MAP: Record<string, string> = {
-  shell: "#34C759",
-  file: "#FFD60A",
-  browser: "#FF9F0A",
-  desktop: "#6E4FF6",
-  search: "#5AC8FA",
-  info: "#5AC8FA",
-  message: "#BF5AF2",
-  mcp: "#64D2FF",
-  todo: "#30D158",
-  task: "#0A84FF",
-  image: "#FF9F0A",
-  multimedia: "#FF6B6B",
-  email: "#1E90FF",
-  idle: "#8E8E93",
+  shell: "#888888",
+  file: "#888888",
+  browser: "#888888",
+  desktop: "#888888",
+  search: "#888888",
+  info: "#888888",
+  message: "#888888",
+  mcp: "#888888",
+  todo: "#888888",
+  task: "#888888",
+  image: "#888888",
+  multimedia: "#888888",
+  email: "#888888",
+  idle: "#888888",
 };
 
 // ─── Tool Function → Detailed Display Info ─────────────────────────────────
@@ -208,82 +208,82 @@ export interface ToolDisplayInfo {
 
 export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayInfo> = {
   // Shell tools
-  shell_exec:             { icon: "terminal-outline",         color: "#34C759", label: "Terminal",       argKey: "command" },
-  shell_view:             { icon: "terminal-outline",         color: "#34C759", label: "Terminal",       argKey: "id" },
-  shell_wait:             { icon: "time-outline",             color: "#34C759", label: "Terminal",       argKey: "id" },
-  shell_write_to_process: { icon: "terminal-outline",         color: "#34C759", label: "Terminal",       argKey: "input" },
-  shell_kill_process:     { icon: "close-circle-outline",     color: "#FF453A", label: "Terminal",       argKey: "id" },
+  shell_exec:             { icon: "terminal-outline",         color: "#888888", label: "Terminal",       argKey: "command" },
+  shell_view:             { icon: "terminal-outline",         color: "#888888", label: "Terminal",       argKey: "id" },
+  shell_wait:             { icon: "time-outline",             color: "#888888", label: "Terminal",       argKey: "id" },
+  shell_write_to_process: { icon: "terminal-outline",         color: "#888888", label: "Terminal",       argKey: "input" },
+  shell_kill_process:     { icon: "close-circle-outline",     color: "#888888", label: "Terminal",       argKey: "id" },
 
   // File tools
-  file_read:              { icon: "document-text-outline",    color: "#FFD60A", label: "File Editor",    argKey: "file" },
-  file_write:             { icon: "save-outline",             color: "#FFD60A", label: "File Editor",    argKey: "file" },
-  file_str_replace:       { icon: "create-outline",           color: "#FFD60A", label: "File Editor",    argKey: "file" },
-  file_find_by_name:      { icon: "folder-open-outline",      color: "#FFD60A", label: "File Editor",    argKey: "path" },
-  file_find_in_content:   { icon: "search-outline",           color: "#FFD60A", label: "File Editor",    argKey: "file" },
-  image_view:             { icon: "image-outline",            color: "#FF9F0A", label: "Image Viewer",   argKey: "image" },
+  file_read:              { icon: "document-text-outline",    color: "#888888", label: "File Editor",    argKey: "file" },
+  file_write:             { icon: "save-outline",             color: "#888888", label: "File Editor",    argKey: "file" },
+  file_str_replace:       { icon: "create-outline",           color: "#888888", label: "File Editor",    argKey: "file" },
+  file_find_by_name:      { icon: "folder-open-outline",      color: "#888888", label: "File Editor",    argKey: "path" },
+  file_find_in_content:   { icon: "search-outline",           color: "#888888", label: "File Editor",    argKey: "file" },
+  image_view:             { icon: "image-outline",            color: "#888888", label: "Image Viewer",   argKey: "image" },
 
   // Browser tools
-  browser_navigate:       { icon: "globe-outline",            color: "#FF9F0A", label: "Browser",        argKey: "url" },
-  browser_view:           { icon: "eye-outline",              color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_click:          { icon: "hand-left-outline",        color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_input:          { icon: "create-outline",           color: "#FF9F0A", label: "Browser",        argKey: "text" },
-  browser_scroll_up:      { icon: "arrow-up-outline",         color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_scroll_down:    { icon: "arrow-down-outline",       color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_console_exec:   { icon: "code-slash-outline",       color: "#FF9F0A", label: "Browser",        argKey: "javascript" },
-  browser_console_view:   { icon: "code-slash-outline",       color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_save_image:     { icon: "image-outline",            color: "#FF9F0A", label: "Browser",        argKey: "save_dir" },
-  browser_move_mouse:     { icon: "locate-outline",           color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_press_key:      { icon: "keypad-outline",           color: "#FF9F0A", label: "Browser",        argKey: "key" },
-  browser_select_option:  { icon: "list-outline",             color: "#FF9F0A", label: "Browser",        argKey: "option" },
-  browser_restart:        { icon: "refresh-outline",          color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_screenshot:     { icon: "camera-outline",           color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_tab_list:       { icon: "browsers-outline",         color: "#FF9F0A", label: "Browser",        argKey: "" },
-  browser_tab_new:        { icon: "add-circle-outline",       color: "#FF9F0A", label: "Browser",        argKey: "url" },
-  browser_tab_close:      { icon: "close-circle-outline",     color: "#FF9F0A", label: "Browser",        argKey: "tab_id" },
-  browser_tab_switch:     { icon: "swap-horizontal-outline",  color: "#FF9F0A", label: "Browser",        argKey: "tab_id" },
-  browser_drag:           { icon: "move-outline",             color: "#FF9F0A", label: "Browser",        argKey: "element" },
-  browser_file_upload:    { icon: "cloud-upload-outline",     color: "#FF9F0A", label: "Browser",        argKey: "element" },
+  browser_navigate:       { icon: "globe-outline",            color: "#888888", label: "Browser",        argKey: "url" },
+  browser_view:           { icon: "eye-outline",              color: "#888888", label: "Browser",        argKey: "" },
+  browser_click:          { icon: "hand-left-outline",        color: "#888888", label: "Browser",        argKey: "" },
+  browser_input:          { icon: "create-outline",           color: "#888888", label: "Browser",        argKey: "text" },
+  browser_scroll_up:      { icon: "arrow-up-outline",         color: "#888888", label: "Browser",        argKey: "" },
+  browser_scroll_down:    { icon: "arrow-down-outline",       color: "#888888", label: "Browser",        argKey: "" },
+  browser_console_exec:   { icon: "code-slash-outline",       color: "#888888", label: "Browser",        argKey: "javascript" },
+  browser_console_view:   { icon: "code-slash-outline",       color: "#888888", label: "Browser",        argKey: "" },
+  browser_save_image:     { icon: "image-outline",            color: "#888888", label: "Browser",        argKey: "save_dir" },
+  browser_move_mouse:     { icon: "locate-outline",           color: "#888888", label: "Browser",        argKey: "" },
+  browser_press_key:      { icon: "keypad-outline",           color: "#888888", label: "Browser",        argKey: "key" },
+  browser_select_option:  { icon: "list-outline",             color: "#888888", label: "Browser",        argKey: "option" },
+  browser_restart:        { icon: "refresh-outline",          color: "#888888", label: "Browser",        argKey: "" },
+  browser_screenshot:     { icon: "camera-outline",           color: "#888888", label: "Browser",        argKey: "" },
+  browser_tab_list:       { icon: "browsers-outline",         color: "#888888", label: "Browser",        argKey: "" },
+  browser_tab_new:        { icon: "add-circle-outline",       color: "#888888", label: "Browser",        argKey: "url" },
+  browser_tab_close:      { icon: "close-circle-outline",     color: "#888888", label: "Browser",        argKey: "tab_id" },
+  browser_tab_switch:     { icon: "swap-horizontal-outline",  color: "#888888", label: "Browser",        argKey: "tab_id" },
+  browser_drag:           { icon: "move-outline",             color: "#888888", label: "Browser",        argKey: "element" },
+  browser_file_upload:    { icon: "cloud-upload-outline",     color: "#888888", label: "Browser",        argKey: "element" },
 
   // Desktop tools
-  desktop_open_app:       { icon: "desktop-outline",          color: "#6E4FF6", label: "Desktop",        argKey: "app_name" },
-  desktop_app_type:       { icon: "create-outline",           color: "#6E4FF6", label: "Desktop",        argKey: "text" },
-  desktop_app_screenshot: { icon: "camera-outline",           color: "#6E4FF6", label: "Desktop",        argKey: "" },
+  desktop_open_app:       { icon: "desktop-outline",          color: "#888888", label: "Desktop",        argKey: "app_name" },
+  desktop_app_type:       { icon: "create-outline",           color: "#888888", label: "Desktop",        argKey: "text" },
+  desktop_app_screenshot: { icon: "camera-outline",           color: "#888888", label: "Desktop",        argKey: "" },
 
   // Search tools
-  web_search:             { icon: "search-outline",           color: "#5AC8FA", label: "Web Search",     argKey: "query" },
-  info_search_web:        { icon: "search-outline",           color: "#5AC8FA", label: "Web Search",     argKey: "query" },
-  web_browse:             { icon: "globe-outline",            color: "#5AC8FA", label: "Web Search",     argKey: "url" },
+  web_search:             { icon: "search-outline",           color: "#888888", label: "Web Search",     argKey: "query" },
+  info_search_web:        { icon: "search-outline",           color: "#888888", label: "Web Search",     argKey: "query" },
+  web_browse:             { icon: "globe-outline",            color: "#888888", label: "Web Search",     argKey: "url" },
 
   // MCP tools
-  mcp_call_tool:          { icon: "extension-puzzle-outline", color: "#64D2FF", label: "MCP",            argKey: "tool_name" },
-  mcp_list_tools:         { icon: "list-outline",             color: "#64D2FF", label: "MCP",            argKey: "" },
+  mcp_call_tool:          { icon: "extension-puzzle-outline", color: "#888888", label: "MCP",            argKey: "tool_name" },
+  mcp_list_tools:         { icon: "list-outline",             color: "#888888", label: "MCP",            argKey: "" },
 
   // Message tools
-  message_notify_user:    { icon: "chatbubble-outline",       color: "#BF5AF2", label: "Message",        argKey: "text" },
-  message_ask_user:       { icon: "chatbubble-ellipses-outline", color: "#BF5AF2", label: "Message",     argKey: "text" },
+  message_notify_user:    { icon: "chatbubble-outline",       color: "#888888", label: "Message",        argKey: "text" },
+  message_ask_user:       { icon: "chatbubble-ellipses-outline", color: "#888888", label: "Message",     argKey: "text" },
 
   // Todo tools
-  todo_write:             { icon: "checkmark-circle-outline", color: "#30D158", label: "Todo",           argKey: "title" },
-  todo_update:            { icon: "checkmark-circle-outline", color: "#30D158", label: "Todo",           argKey: "item_text" },
-  todo_read:              { icon: "checkmark-circle-outline", color: "#30D158", label: "Todo",           argKey: "" },
+  todo_write:             { icon: "checkmark-circle-outline", color: "#888888", label: "Todo",           argKey: "title" },
+  todo_update:            { icon: "checkmark-circle-outline", color: "#888888", label: "Todo",           argKey: "item_text" },
+  todo_read:              { icon: "checkmark-circle-outline", color: "#888888", label: "Todo",           argKey: "" },
 
   // Task tools
-  task_create:            { icon: "list-circle-outline",      color: "#0A84FF", label: "Task",           argKey: "description" },
-  task_complete:          { icon: "list-circle-outline",      color: "#0A84FF", label: "Task",           argKey: "task_id" },
-  task_list:              { icon: "list-circle-outline",      color: "#0A84FF", label: "Task",           argKey: "" },
+  task_create:            { icon: "list-circle-outline",      color: "#888888", label: "Task",           argKey: "description" },
+  task_complete:          { icon: "list-circle-outline",      color: "#888888", label: "Task",           argKey: "task_id" },
+  task_list:              { icon: "list-circle-outline",      color: "#888888", label: "Task",           argKey: "" },
 
   // Multimedia tools
-  export_pdf:             { icon: "document-outline",         color: "#FF6B6B", label: "Multimedia",     argKey: "file" },
-  render_diagram:         { icon: "git-branch-outline",       color: "#FF6B6B", label: "Multimedia",     argKey: "code" },
-  speech_to_text:         { icon: "mic-outline",              color: "#FF6B6B", label: "Multimedia",     argKey: "audio_file" },
-  export_slides:          { icon: "easel-outline",            color: "#FF6B6B", label: "Multimedia",     argKey: "file" },
-  upload_file:            { icon: "cloud-upload-outline",     color: "#FF6B6B", label: "Multimedia",     argKey: "file" },
+  export_pdf:             { icon: "document-outline",         color: "#888888", label: "Multimedia",     argKey: "file" },
+  render_diagram:         { icon: "git-branch-outline",       color: "#888888", label: "Multimedia",     argKey: "code" },
+  speech_to_text:         { icon: "mic-outline",              color: "#888888", label: "Multimedia",     argKey: "audio_file" },
+  export_slides:          { icon: "easel-outline",            color: "#888888", label: "Multimedia",     argKey: "file" },
+  upload_file:            { icon: "cloud-upload-outline",     color: "#888888", label: "Multimedia",     argKey: "file" },
 
   // Email tools
-  send_email:             { icon: "mail-outline",             color: "#1E90FF", label: "Email",          argKey: "to" },
+  send_email:             { icon: "mail-outline",             color: "#888888", label: "Email",          argKey: "to" },
 
   // Idle tool
-  idle:                   { icon: "time-outline",             color: "#8E8E93", label: "Idle",           argKey: "duration" },
+  idle:                   { icon: "time-outline",             color: "#888888", label: "Idle",           argKey: "duration" },
 };
 
 // ─── Helper Functions ──────────────────────────────────────────────────────

@@ -98,6 +98,7 @@ export function TakeOverView({
 }: TakeOverViewProps) {
   const [vncConnected, setVncConnected] = useState(false);
   const [resolvedVncSessionId, setResolvedVncSessionId] = useState<string>("");
+  const [browserUnavailable, setBrowserUnavailable] = useState(false);
   const pausedRef = useRef(false);
 
   const handleVNCConnected = useCallback(() => {
@@ -120,7 +121,12 @@ export function TakeOverView({
     if (!agentSessionId) return;
     if (visible && !pausedRef.current) {
       pausedRef.current = true;
+      setBrowserUnavailable(false);
       callTakeover(agentSessionId).then((result) => {
+        if (!result.ok || (!result.e2b_session_id && !e2bSessionId)) {
+          setBrowserUnavailable(true);
+          return;
+        }
         // Use e2b_session_id (desktop session UUID) from takeover response for VNCViewer;
         // fall back to props-provided e2bSessionId, then agentSessionId
         const sessionToUse = result.e2b_session_id || e2bSessionId || agentSessionId;
@@ -130,6 +136,7 @@ export function TakeOverView({
       pausedRef.current = false;
       setVncConnected(false);
       setResolvedVncSessionId("");
+      setBrowserUnavailable(false);
       callResume(agentSessionId);
     }
   }, [visible, agentSessionId, e2bSessionId]);
@@ -154,6 +161,20 @@ export function TakeOverView({
 
   const content = (
     <View style={styles.container}>
+      {/* Browser session unavailable error */}
+      {browserUnavailable ? (
+        <View style={styles.unavailableContainer}>
+          <Ionicons name="alert-circle-outline" size={40} color="#FF453A" />
+          <Text style={styles.unavailableTitle}>Browser Session Unavailable</Text>
+          <Text style={styles.unavailableText}>
+            No active desktop session is connected to this agent. The browser takeover requires an E2B sandbox session.
+          </Text>
+          <TouchableOpacity style={styles.unavailableCloseButton} onPress={handleClose} activeOpacity={0.8}>
+            <Text style={styles.unavailableCloseText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+      <>
       {/* VNC Viewer - full screen, interactive, connected via E2B session ID */}
       <View style={styles.vncContainer}>
         <VNCViewer
@@ -191,6 +212,8 @@ export function TakeOverView({
           <Text style={styles.exitButtonText}>Exit Takeover</Text>
         </TouchableOpacity>
       </View>
+      </>
+      )}
     </View>
   );
 
@@ -301,6 +324,39 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   exitButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  unavailableContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    gap: 12,
+  },
+  unavailableTitle: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  unavailableText: {
+    color: "#9ca3af",
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  unavailableCloseButton: {
+    marginTop: 16,
+    backgroundColor: "#374151",
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  unavailableCloseText: {
     color: "#ffffff",
     fontSize: 14,
     fontFamily: "Inter_500Medium",

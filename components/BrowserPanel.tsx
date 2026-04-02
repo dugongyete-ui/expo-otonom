@@ -99,7 +99,12 @@ export function BrowserPanel({
 
   // Auto-connect to agent's sandbox when vnc_stream_url event is received
   useEffect(() => {
-    if (agentVncSession && agentVncSession.e2bSessionId) {
+    if (agentVncSession) {
+      if (!agentVncSession.e2bSessionId) {
+        setSessionState("error");
+        setErrorMsg("Browser session unavailable: no active desktop session is connected to this agent.");
+        return;
+      }
       setSessionId(agentVncSession.e2bSessionId);
       setSessionState("connecting");
       setStatusMsg("Menghubungkan ke sandbox agen...");
@@ -116,8 +121,8 @@ export function BrowserPanel({
         setStatusMsg(health?.ready ? "Desktop agen terhubung!" : "Desktop agen aktif");
         refreshScreenshot(agentVncSession.e2bSessionId);
       }).catch(() => {
-        setSessionState("ready");
-        setStatusMsg("Desktop agen aktif");
+        setSessionState("error");
+        setErrorMsg("Browser session unavailable: could not connect to the agent desktop.");
       });
     }
   }, [agentVncSession, refreshScreenshot]);
