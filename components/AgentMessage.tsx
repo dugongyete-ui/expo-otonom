@@ -119,18 +119,18 @@ const styles = StyleSheet.create({
   agentName: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   agentBadge: {
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   agentBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   agentBadgeAgent: {
     backgroundColor: "rgba(37,99,235,0.1)",
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontFamily: "Inter_400Regular",
     fontSize: 15,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 23,
     letterSpacing: -0.1,
   },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   titleText: {
     fontFamily: "Inter_700Bold",
     fontSize: 17,
-    color: "#1a1916",
+    color: "#f3f4f6",
     letterSpacing: -0.3,
     flex: 1,
   },

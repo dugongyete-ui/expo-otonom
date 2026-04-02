@@ -215,26 +215,26 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   assistantLabel: {
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 13,
     fontWeight: "600",
   },
   assistantBubble: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     paddingHorizontal: 16,
     paddingVertical: 12,
     maxWidth: "85%",
   },
   assistantText: {
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 15,
     lineHeight: 20,
   },
   timestamp: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 12,
     marginTop: 4,
   },
@@ -243,12 +243,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   toolCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 12,
     borderLeftWidth: 4,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   toolHeader: {
     flexDirection: "row",
@@ -266,12 +266,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toolName: {
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 13,
     fontWeight: "600",
   },
   toolArgs: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 11,
     marginTop: 2,
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   loadingText: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 12,
   },
   stepContainer: {
@@ -300,12 +300,12 @@ const styles = StyleSheet.create({
   stepHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   stepStatus: {
     width: 20,
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     flex: 1,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -332,13 +332,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   stepDetails: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 12,
   },
 });

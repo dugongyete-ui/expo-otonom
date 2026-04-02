@@ -77,7 +77,7 @@ function ToolChip({ event, isLast }: { event: AgentEvent; isLast: boolean }) {
   const isError = event.status === "error";
   const isCalling = event.status === "calling";
   const isCalled = event.status === "called";
-  const config = toolConfig[fnName] || { icon: "construct-outline" as keyof typeof Ionicons.glyphMap, color: "#8a8780", label: fnName };
+  const config = toolConfig[fnName] || { icon: "construct-outline" as keyof typeof Ionicons.glyphMap, color: "#9ca3af", label: fnName };
   const argPreview = getArgPreview(event);
 
   return (
@@ -192,10 +192,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   stepCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     overflow: "hidden",
   },
   stepCardHeader: {
@@ -218,18 +218,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 18,
     letterSpacing: -0.1,
   },
   stepCardTitleDone: {
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   stepCardTitleFailed: {
     color: "#dc2626",
   },
   stepCardTitlePending: {
-    color: "#ccc8be",
+    color: "#374151",
   },
   pulseDot: {
     width: 7,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   toolTimelineLine: {
     width: 1.5,
     flex: 1,
-    backgroundColor: "#ddd9d0",
+    backgroundColor: "#374151",
     marginTop: 2,
     minHeight: 14,
   },
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   toolArgPillText: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#6a6762",
+    color: "#9ca3af",
   },
   toolChipStatus: {
     width: 14,
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   stepResultText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     lineHeight: 17,
     letterSpacing: -0.1,
     paddingHorizontal: 4,

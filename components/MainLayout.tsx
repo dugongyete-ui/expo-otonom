@@ -302,7 +302,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 onPress={handleCloseToolsModal}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={20} color="#8a8780" />
+                <Ionicons name="close" size={20} color="#9ca3af" />
               </TouchableOpacity>
             </View>
 
@@ -351,35 +351,35 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#030712",
   },
   mainContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#edebe3",
+    backgroundColor: "#030712",
   },
   leftPanel: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRightWidth: 1,
-    borderRightColor: "#ddd9d0",
+    borderRightColor: "#1f2937",
     overflow: "hidden",
   },
   chatArea: {
     flex: 1,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#030712",
     minWidth: 0,
   },
   toolPanel: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderLeftWidth: 1,
-    borderLeftColor: "#ddd9d0",
+    borderLeftColor: "#1f2937",
     overflow: "hidden",
   },
   panelSwitcher: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
-    backgroundColor: "#ffffff",
+    borderTopColor: "#1f2937",
+    backgroundColor: "#111827",
   },
   switchTab: {
     flex: 1,
@@ -392,23 +392,23 @@ const styles = StyleSheet.create({
   },
   switchTabText: {
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   switchTabTextActive: {
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   toolsModalContainer: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   toolsModalHeader: {
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   toolsModalTabs: {
     flex: 1,
@@ -421,15 +421,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalTabActive: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   modalTabText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   modalTabTextActive: {
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   toolsModalClose: {
     width: 36,
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     marginLeft: 8,
   },
   toolsModalContent: {

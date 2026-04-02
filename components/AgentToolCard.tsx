@@ -117,7 +117,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
       ) : validScreenshot && imgError ? (
         <View style={[styles.screenshotWrapper, { alignItems: "center", justifyContent: "center", height: 60 }]}>
           <Ionicons name="image-outline" size={20} color="#8a8780" />
-          <Text style={{ fontSize: 11, color: "#8a8780", marginTop: 4 }}>Screenshot tersedia</Text>
+          <Text style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>Screenshot tersedia</Text>
         </View>
       ) : null}
     </View>
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     overflow: "hidden",
   },
   cardError: {
@@ -476,13 +476,13 @@ const styles = StyleSheet.create({
   labelText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 16,
   },
   argText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     lineHeight: 15,
   },
   rightArea: {
@@ -499,8 +499,8 @@ const styles = StyleSheet.create({
   shellBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
-    backgroundColor: "#f5f3ee",
+    borderTopColor: "#1f2937",
+    backgroundColor: "#1f2937",
   },
   shellCommand: {
     flexDirection: "row",
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 18,
   },
   shellOutput: {
@@ -529,14 +529,14 @@ const styles = StyleSheet.create({
   shellOutputText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 17,
   },
   // Search
   searchBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     padding: 10,
     gap: 6,
   },
@@ -557,18 +557,18 @@ const styles = StyleSheet.create({
   searchResultTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 17,
   },
   searchResultUrl: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   searchResultSnippet: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 16,
     marginTop: 2,
   },
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   browserBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     padding: 10,
     gap: 6,
   },
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 5,
     paddingHorizontal: 7,
     paddingVertical: 4,
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   browserTitle: {
     fontFamily: "Inter_500Medium",
@@ -607,15 +607,15 @@ const styles = StyleSheet.create({
   browserContentText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 16,
   },
   screenshotWrapper: {
     borderRadius: 6,
     overflow: "hidden",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   screenshotImage: {
     width: "100%",
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   fileBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     overflow: "hidden",
   },
   fileHeader: {
@@ -634,9 +634,9 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   fileName: {
     flex: 1,
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
   fileOp: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
     textTransform: "capitalize",
   },
   fileContent: {
@@ -657,13 +657,13 @@ const styles = StyleSheet.create({
   fileContentText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 17,
   },
   todoBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     padding: 10,
     gap: 6,
   },
@@ -676,18 +676,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 17,
   },
   todoChecked: {
     textDecorationLine: "line-through",
-    color: "#ccc8be",
+    color: "#374151",
   },
   // MCP
   mcpBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     padding: 10,
     gap: 6,
   },
@@ -703,33 +703,33 @@ const styles = StyleSheet.create({
   },
   mcpArgs: {
     maxHeight: 120,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 5,
     padding: 8,
   },
   mcpArgsText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 16,
   },
   mcpResult: {
     maxHeight: 160,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 5,
     padding: 8,
   },
   mcpResultText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 17,
   },
   // Message
   messageBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     padding: 10,
     gap: 6,
   },
@@ -746,7 +746,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 18,
   },
 });

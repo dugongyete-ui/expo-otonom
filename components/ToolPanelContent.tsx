@@ -1094,7 +1094,7 @@ export function ToolPanelContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   contentHeader: {
     flexDirection: "row",
@@ -1103,14 +1103,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
     borderLeftWidth: 3,
   },
   contentHeaderTitle: {
     flex: 1,
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   liveBadge: {
     flexDirection: "row",
@@ -1155,11 +1155,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   shellPromptContainer: {
     flex: 1,
@@ -1176,11 +1176,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 18,
   },
   backendBadge: {
-    backgroundColor: "#f0ede7",
+    backgroundColor: "#1f2937",
     borderRadius: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,
@@ -1188,12 +1188,12 @@ const styles = StyleSheet.create({
   },
   backendBadgeText: {
     fontSize: 9,
-    color: "#4a4740",
+    color: "#d1d5db",
     fontWeight: "600",
   },
   shellOutputScroll: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   shellOutputContent: {
     padding: 10,
@@ -1201,7 +1201,7 @@ const styles = StyleSheet.create({
   shellOutputText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 17,
   },
   shellBadgeRow: {
@@ -1227,7 +1227,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   refreshBtn: {
     width: 24,
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   returnCodeBadge: {
     alignSelf: "flex-start",
@@ -1254,28 +1254,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   browserUrlText: {
     flex: 1,
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   browserTitle: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   browserPreview: {
     flex: 1,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1289,7 +1289,7 @@ const styles = StyleSheet.create({
   },
   browserLoadingText: {
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   browserEmpty: {
     alignItems: "center",
@@ -1297,7 +1297,7 @@ const styles = StyleSheet.create({
   },
   browserEmptyText: {
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   browserActions: {
     flexDirection: "row",
@@ -1305,7 +1305,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   browserActionBtn: {
     flexDirection: "row",
@@ -1314,13 +1314,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   browserActionText: {
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     fontWeight: "500",
   },
   takeOverBtn: {
@@ -1339,8 +1339,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
-    backgroundColor: "#f5f3ee",
+    borderBottomColor: "#1f2937",
+    backgroundColor: "#1f2937",
   },
   fileHeaderLeft: {
     flex: 1,
@@ -1356,7 +1356,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   languageBadge: {
@@ -1385,11 +1385,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   fileContentScroll: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   fileContentContainer: {
     padding: 10,
@@ -1400,7 +1400,7 @@ const styles = StyleSheet.create({
   lineNumberGutter: {
     paddingRight: 8,
     borderRightWidth: 1,
-    borderRightColor: "#ddd9d0",
+    borderRightColor: "#1f2937",
     marginRight: 8,
     minWidth: 30,
     alignItems: "flex-end",
@@ -1417,7 +1417,7 @@ const styles = StyleSheet.create({
   fileContentText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 17,
   },
   downloadBtn: {
@@ -1427,7 +1427,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   downloadBtnText: {
     fontSize: 11,
@@ -1443,13 +1443,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
-    backgroundColor: "#f5f3ee",
+    borderBottomColor: "#1f2937",
+    backgroundColor: "#1f2937",
   },
   searchQueryText: {
     flex: 1,
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   searchResultsScroll: {
@@ -1460,16 +1460,16 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   searchResultItem: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     padding: 10,
     gap: 3,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   searchResultTitle: {
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   searchResultUrl: {
@@ -1479,7 +1479,7 @@ const styles = StyleSheet.create({
   },
   searchResultSnippet: {
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     lineHeight: 16,
     marginTop: 2,
   },
@@ -1487,11 +1487,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   searchCountText: {
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
 
   // MCP styles
@@ -1502,13 +1502,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   mcpToolName: {
     flex: 1,
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   mcpServerRow: {
@@ -1517,11 +1517,11 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   mcpServerText: {
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
     fontFamily: "monospace",
   },
   mcpSection: {
@@ -1531,7 +1531,7 @@ const styles = StyleSheet.create({
   },
   mcpSectionLabel: {
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1540,16 +1540,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   codeBlock: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 6,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   codeText: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 15,
   },
 
@@ -1561,22 +1561,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   todoTitle: {
     flex: 1,
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   todoCount: {
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     fontWeight: "600",
   },
   todoProgressBar: {
     height: 3,
-    backgroundColor: "#ddd9d0",
+    backgroundColor: "#374151",
   },
   todoProgressFill: {
     height: 3,
@@ -1596,16 +1596,16 @@ const styles = StyleSheet.create({
   todoItemText: {
     flex: 1,
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 18,
   },
   todoItemDone: {
-    color: "#8a8780",
+    color: "#9ca3af",
     textDecorationLine: "line-through",
   },
   todoMessage: {
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     padding: 10,
   },
 
@@ -1617,12 +1617,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   taskTitle: {
     flex: 1,
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontWeight: "500",
   },
   taskTypeBadge: {
@@ -1641,13 +1641,13 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   taskItem: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 6,
     padding: 8,
     marginBottom: 6,
     gap: 4,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   taskItemHeader: {
     flexDirection: "row",
@@ -1657,7 +1657,7 @@ const styles = StyleSheet.create({
   taskItemId: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
     fontWeight: "600",
   },
   taskStatusBadge: {
@@ -1671,12 +1671,12 @@ const styles = StyleSheet.create({
   },
   taskItemDesc: {
     fontSize: 11,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 16,
   },
   taskMessage: {
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     padding: 10,
   },
 
@@ -1688,11 +1688,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   messageType: {
     fontSize: 12,
-    color: "#4a4740",
+    color: "#d1d5db",
     fontWeight: "500",
   },
   messageContent: {
@@ -1700,7 +1700,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 20,
   },
 
@@ -1713,11 +1713,11 @@ const styles = StyleSheet.create({
   },
   runningLabel: {
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   emptyOutputText: {
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     fontStyle: "italic",
   },
 });

@@ -321,7 +321,7 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
               />
             ) : (
               <>
-                <Ionicons name="desktop-outline" size={32} color="#ddd9d0" />
+                <Ionicons name="desktop-outline" size={32} color="#374151" />
                 <Text style={styles.compactPreviewText}>
                   Tap untuk buka VNC live
                 </Text>
@@ -351,10 +351,10 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
 const styles = StyleSheet.create({
   // ─── Compact card ─────────────────────────────────────────────────────────
   compactCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     overflow: "hidden",
     marginHorizontal: 16,
     marginVertical: 6,
@@ -365,9 +365,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   compactHeaderLeft: {
     flexDirection: "row",
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   compactTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   liveBadge: {
     flexDirection: "row",
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   compactPreviewText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   compactScreenshot: {
     width: "100%",
@@ -464,13 +464,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     marginBottom: 8,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   webview: {
     flex: 1,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
 
   // ─── Live indicator ───────────────────────────────────────────────────────
@@ -496,9 +496,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   navBtn: {
     padding: 4,
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 9,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   takeoverBtnActive: {
     backgroundColor: "rgba(37,99,235,0.1)",
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
   takeoverText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   takeoverTextActive: {
     color: "#2563eb",
@@ -531,14 +531,14 @@ const styles = StyleSheet.create({
 
   // ─── Plan bottom bar ──────────────────────────────────────────────────────
   planBar: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     paddingBottom: 8,
   },
   progressBarTrack: {
     height: 2,
-    backgroundColor: "#ddd9d0",
+    backgroundColor: "#374151",
   },
   progressBarFill: {
     height: 2,
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
     letterSpacing: -0.2,
   },
   planBarRight: {
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
   planBarCount: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   planBarSteps: {
     paddingHorizontal: 16,
@@ -588,9 +588,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     lineHeight: 17,
   },
-  planBarStepDone: { color: "#ccc8be" },
-  planBarStepRunning: { color: "#1a1916" },
+  planBarStepDone: { color: "#374151" },
+  planBarStepRunning: { color: "#f3f4f6" },
 });

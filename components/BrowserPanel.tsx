@@ -435,14 +435,14 @@ export function BrowserPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   header: {
     flexDirection: "row",
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   headerLeft: {
     flexDirection: "row",
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   liveBadge: {
     flexDirection: "row",
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   content: {
     flex: 1,
@@ -504,13 +504,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#8a8780",
+    color: "#9ca3af",
     marginTop: 4,
   },
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     textAlign: "center",
     lineHeight: 16,
     marginBottom: 8,
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     textAlign: "center",
   },
   errorState: {
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     textAlign: "center",
     lineHeight: 16,
     marginBottom: 8,
@@ -566,17 +566,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   retryButtonText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   readyState: {
     flex: 1,
@@ -586,9 +586,9 @@ const styles = StyleSheet.create({
   screenshotContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     position: "relative",
   },
   screenshot: {
@@ -615,20 +615,20 @@ const styles = StyleSheet.create({
   noScreenshot: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     paddingVertical: 30,
     gap: 8,
   },
   noScreenshotText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   sessionInfo: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     padding: 10,
     gap: 6,
@@ -641,14 +641,14 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   infoValue: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#4a4740",
+    color: "#d1d5db",
   },
   actions: {
     flexDirection: "row",
@@ -661,17 +661,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 6,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     minWidth: 80,
   },
   actionText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#4a4740",
+    color: "#d1d5db",
   },
   dangerButton: {
     borderColor: "rgba(220,38,38,0.2)",
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#1a1a1a",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     height: 200,
   },
   vncActiveBtn: {
@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   currentUrl: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     padding: 10,
     gap: 4,
@@ -716,11 +716,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   pageTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
 });

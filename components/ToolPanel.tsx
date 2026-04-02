@@ -204,14 +204,14 @@ export function ToolPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   header: {
     flexDirection: "row",
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   headerLeft: {
     flexDirection: "row",
@@ -230,10 +230,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   badge: {
-    backgroundColor: "#f0ede7",
+    backgroundColor: "#1f2937",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 1,
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 10,
-    color: "#4a4740",
+    color: "#d1d5db",
   },
   collapseButton: {
     width: 28,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   toolsList: {
     flex: 1,
@@ -271,8 +271,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   toolItemSelected: {
-    borderColor: "#ddd9d0",
-    backgroundColor: "#f5f3ee",
+    borderColor: "#374151",
+    backgroundColor: "#1f2937",
   },
   toolIcon: {
     width: 28,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   toolName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#4a4740",
+    color: "#d1d5db",
   },
   toolStatusRow: {
     flexDirection: "row",
@@ -312,13 +312,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#8a8780",
+    color: "#9ca3af",
     marginTop: 4,
   },
   emptyStateText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     textAlign: "center",
     lineHeight: 16,
   },
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   detailContainer: {
     flex: 1,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   detailHeaderBar: {
     flexDirection: "row",
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   closeDetailBtn: {
     width: 24,
@@ -347,6 +347,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
 });

@@ -57,10 +57,10 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     marginVertical: 8,
     overflow: "hidden",
     shadowColor: "#000",
@@ -76,13 +76,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
-    backgroundColor: "#f5f3ee",
+    borderBottomColor: "#1f2937",
+    backgroundColor: "#1f2937",
   },
   language: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     textTransform: "lowercase",
   },
   copyButton: {
@@ -107,6 +107,6 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
     fontSize: 12,
     lineHeight: 20,
-    color: "#4a4740",
+    color: "#d1d5db",
   },
 });

@@ -83,7 +83,7 @@ export function ChatBox({
 
   const bottomPad = Platform.OS === "ios"
     ? Math.max(insets.bottom, 16)
-    : Math.max(insets.bottom > 0 ? insets.bottom + 8 : 24, 24);
+    : Math.max(insets.bottom > 0 ? insets.bottom + 12 : 36, 36);
 
   return (
     <View style={[styles.container, { paddingBottom: bottomPad }]}>

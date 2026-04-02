@@ -1104,7 +1104,7 @@ export function ChatPage({
           style={styles.settingsBtn}
           hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
         >
-          <Ionicons name="menu-outline" size={20} color="#8a8780" />
+          <Ionicons name="menu-outline" size={20} color="#9ca3af" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { marginLeft: 8 }]}>{title}</Text>
         <View style={styles.headerRight}>
@@ -1126,7 +1126,7 @@ export function ChatPage({
               hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
             >
               <View>
-                <Ionicons name="terminal-outline" size={18} color={activeToolsCount > 0 ? "#6C5CE7" : "#8a8780"} />
+                <Ionicons name="terminal-outline" size={18} color={activeToolsCount > 0 ? "#6C5CE7" : "#9ca3af"} />
                 {toolsCount > 0 && (
                   <View style={styles.toolsBadge}>
                     <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
@@ -1143,7 +1143,7 @@ export function ChatPage({
             <Ionicons
               name={isAgentMode ? "flash" : "flash-outline"}
               size={18}
-              color={isAgentMode ? "#d97706" : "#8a8780"}
+              color={isAgentMode ? "#d97706" : "#9ca3af"}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -1155,7 +1155,7 @@ export function ChatPage({
             <Ionicons
               name={isShared ? "share-social" : "share-social-outline"}
               size={18}
-              color={messages.length === 0 ? "#ccc8be" : isShared ? "#6C5CE7" : "#8a8780"}
+              color={messages.length === 0 ? "#374151" : isShared ? "#6C5CE7" : "#9ca3af"}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -1163,7 +1163,7 @@ export function ChatPage({
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Ionicons name="settings-outline" size={18} color="#8a8780" />
+            <Ionicons name="settings-outline" size={18} color="#9ca3af" />
           </TouchableOpacity>
         </View>
       </View>
@@ -1437,14 +1437,14 @@ export function ChatPage({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#030712",
   },
   header: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#111827",
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1452,7 +1452,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1a1916",
+    color: "#f3f4f6",
     flex: 1,
   },
   headerRight: {
@@ -1466,7 +1466,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   agentModeActive: {
     backgroundColor: "rgba(234,179,8,0.15)",
@@ -1479,20 +1479,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   settingsPanel: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderRadius: 16,
     padding: 20,
     gap: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 10,
   },
   settingsPanelTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1a1916",
+    color: "#f3f4f6",
     marginBottom: 4,
   },
   settingsSection: {
@@ -1500,7 +1500,7 @@ const styles = StyleSheet.create({
   },
   settingsSectionTitle: {
     fontSize: 13,
-    color: "#8a8780",
+    color: "#9ca3af",
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1514,16 +1514,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     alignItems: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   langBtnActive: {
     backgroundColor: "#2563eb",
     borderColor: "#2563eb",
   },
   langBtnText: {
-    color: "#6a6762",
+    color: "#9ca3af",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1536,10 +1536,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
   },
   logoutBtnText: {
-    color: "#dc2626",
+    color: "#f87171",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1559,12 +1559,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(220,38,38,0.15)",
   },
   e2bChecking: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   e2bBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#8a8780",
+    color: "#9ca3af",
     letterSpacing: 0.3,
   },
   fileCardContainer: {
@@ -1580,16 +1580,16 @@ const styles = StyleSheet.create({
   fileCardTitle: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#636366",
+    color: "#9ca3af",
   },
   fileCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1f2937",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 6,
@@ -1598,7 +1598,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   fileCardAction: {
     fontSize: 13,
@@ -1616,9 +1616,9 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     aspectRatio: 16 / 10,
     borderRadius: 10,
-    backgroundColor: "#f0efea",
+    backgroundColor: "#111827",
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
   },
   agentTurnBlock: {
     paddingHorizontal: 12,
@@ -1641,7 +1641,7 @@ const styles = StyleSheet.create({
   agentTurnName: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: "#1a1916",
+    color: "#f3f4f6",
     letterSpacing: -0.2,
   },
   agentTurnBadgeRunning: {
@@ -1675,10 +1675,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1f2937",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -1698,13 +1698,13 @@ const styles = StyleSheet.create({
   fileDocName: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 18,
   },
   fileDocType: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
     letterSpacing: 0.2,
   },
   fileDocDownloadBtn: {
@@ -1740,7 +1740,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "#ccc8be",
+    backgroundColor: "#374151",
   },
   thinkingDotPulse: {
     backgroundColor: "#2563eb",
@@ -1749,7 +1749,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#8a8780",
+    color: "#6b7280",
     fontStyle: "italic",
   },
   taskCompletedWrap: {
@@ -1769,7 +1769,7 @@ const styles = StyleSheet.create({
   taskCompletedStepText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
     flex: 1,
     lineHeight: 17,
   },
@@ -1821,14 +1821,14 @@ const styles = StyleSheet.create({
   welcomeGreeting: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: "#1a1916",
+    color: "#f3f4f6",
     letterSpacing: -0.5,
     lineHeight: 34,
   },
   welcomeSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 16,
-    color: "#6a6762",
+    color: "#9ca3af",
     lineHeight: 22,
   },
   suggestionScrollView: {
@@ -1841,17 +1841,17 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     width: 160,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1f2937",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#ddd9d0",
+    borderColor: "#374151",
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   suggestionChipText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#4a4740",
+    color: "#d1d5db",
     lineHeight: 18,
   },
   toolsBadge: {

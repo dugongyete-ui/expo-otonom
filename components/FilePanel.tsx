@@ -347,9 +347,9 @@ export function FilePanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderLeftWidth: 1,
-    borderLeftColor: "#ddd9d0",
+    borderLeftColor: "#1f2937",
   },
   header: {
     flexDirection: "row",
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd9d0",
+    borderBottomColor: "#1f2937",
   },
   headerLeft: {
     flexDirection: "row",
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   headerRight: {
     flexDirection: "row",
@@ -409,12 +409,12 @@ const styles = StyleSheet.create({
   fileName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   fileSize: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   eyeIcon: {
     marginHorizontal: 2,
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   downloadBtnSmall: {
     width: 24,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
   },
   loadingState: {
     alignItems: "center",
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   errorState: {
     alignItems: "center",
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8a8780",
+    color: "#9ca3af",
   },
   backBtn: {
     flexDirection: "row",
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   previewFileName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#1a1916",
+    color: "#f3f4f6",
   },
   previewArea: {
     flex: 1,
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     padding: 12,
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   previewImage: {
     width: "100%",
@@ -508,16 +508,16 @@ const styles = StyleSheet.create({
   },
   markdownPreviewContainer: {
     padding: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   textPreviewContainer: {
     padding: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
   },
   previewText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#1a1916",
+    color: "#f3f4f6",
     lineHeight: 22,
   },
 });

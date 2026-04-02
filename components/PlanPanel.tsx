@@ -158,9 +158,9 @@ export function PlanPanel({ plan }: PlanPanelProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#111827",
     borderTopWidth: 1,
-    borderTopColor: "#ddd9d0",
+    borderTopColor: "#1f2937",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   headerTitle: {
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   stepHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -209,16 +209,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   stepDescription: {
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 12,
     fontWeight: "500",
   },
   stepStatus: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 11,
   },
   stepDetails: {
-    backgroundColor: "#f5f3ee",
+    backgroundColor: "#1f2937",
     borderRadius: 6,
     marginTop: 8,
     paddingHorizontal: 10,
@@ -229,17 +229,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   detailLabel: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 11,
     fontWeight: "500",
   },
   detailValue: {
-    color: "#1a1916",
+    color: "#f3f4f6",
     fontSize: 12,
   },
   stepDivider: {
     height: 1,
-    backgroundColor: "#ddd9d0",
+    backgroundColor: "#374151",
     marginVertical: 8,
   },
   progressContainer: {
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 4,
-    backgroundColor: "#ddd9d0",
+    backgroundColor: "#374151",
     borderRadius: 2,
     overflow: "hidden",
   },
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
   },
   progressText: {
-    color: "#8a8780",
+    color: "#9ca3af",
     fontSize: 11,
   },
 });

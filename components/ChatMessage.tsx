@@ -151,8 +151,8 @@ function renderInline(text: string, color: string): React.ReactNode[] {
           key={`icode-${key++}`}
           style={{
             fontFamily: "monospace",
-            backgroundColor: "#f0ede7",
-            color: "#2563eb",
+            backgroundColor: "#1f2937",
+            color: "#93c5fd",
             fontSize: 12,
             paddingHorizontal: 5,
             borderRadius: 4,
