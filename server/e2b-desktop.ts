@@ -964,34 +964,48 @@ export function registerE2BDesktopRoutes(app: any, httpServer: http.Server) {
 
       if (needsRecovery && session.status === "running") {
         const reason = !vncAlive ? "VNC process crashed" : "browser process crashed";
-        console.warn(
-          `[E2B-Desktop] ${reason} for session ${session.id} — attempting recovery`,
-        );
-        try {
-          if (!vncAlive) {
-            // VNC is down — need full re-bootstrap (restart VNC stream + browser)
-            const { streamUrl, vncUrl } = await bootstrapDesktop(session.sandboxId);
-            session.streamUrl = streamUrl;
-            session.vncUrl = vncUrl;
-            session.wsProxyUrl = streamUrl;
-            console.log(
-              `[E2B-Desktop] Full re-bootstrap successful for session ${session.id}: ${streamUrl}`,
-            );
-          } else {
-            // VNC is alive — only the browser crashed, restart browser only
-            await restartBrowserOnly(session.sandboxId);
-            console.log(
-              `[E2B-Desktop] Browser-only restart successful for session ${session.id}`,
-            );
-          }
-        } catch (rebootErr: any) {
-          console.error(
-            `[E2B-Desktop] Recovery failed for session ${session.id}: ${rebootErr.message}`,
+
+        // When the Python agent is actively using this sandbox, it manages Chrome itself —
+        // it kills and restarts Chrome with --remote-debugging-port for CDP access.
+        // Auto-recovering the browser here would conflict by launching a second Chrome
+        // process without CDP, breaking the agent's browser control entirely.
+        // Skip browser-only recovery when an agent session is linked; only recover if VNC itself is down.
+        const agentIsActive = !!session.agentSessionId;
+        if (!vncAlive || !agentIsActive) {
+          console.warn(
+            `[E2B-Desktop] ${reason} for session ${session.id} — attempting recovery`,
           );
-          session.status = "error";
-          session.error = `Desktop crashed and recovery failed: ${rebootErr.message}`;
-          res.json({ ready: false, status: "error", error: session.error });
-          return;
+          try {
+            if (!vncAlive) {
+              // VNC is down — need full re-bootstrap (restart VNC stream + browser)
+              const { streamUrl, vncUrl } = await bootstrapDesktop(session.sandboxId);
+              session.streamUrl = streamUrl;
+              session.vncUrl = vncUrl;
+              session.wsProxyUrl = streamUrl;
+              console.log(
+                `[E2B-Desktop] Full re-bootstrap successful for session ${session.id}: ${streamUrl}`,
+              );
+            } else {
+              // VNC is alive — only the browser crashed, restart browser only
+              await restartBrowserOnly(session.sandboxId);
+              console.log(
+                `[E2B-Desktop] Browser-only restart successful for session ${session.id}`,
+              );
+            }
+          } catch (rebootErr: any) {
+            console.error(
+              `[E2B-Desktop] Recovery failed for session ${session.id}: ${rebootErr.message}`,
+            );
+            session.status = "error";
+            session.error = `Desktop crashed and recovery failed: ${rebootErr.message}`;
+            res.json({ ready: false, status: "error", error: session.error });
+            return;
+          }
+        } else {
+          // Agent is actively managing Chrome — browser will restart itself with CDP
+          console.log(
+            `[E2B-Desktop] ${reason} for session ${session.id} — agent ${session.agentSessionId} is active, skipping auto-recovery (agent manages Chrome)`,
+          );
         }
       }
 
