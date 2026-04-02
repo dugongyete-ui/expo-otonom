@@ -131,7 +131,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
       ) : validScreenshot && imgError ? (
         <View style={[styles.screenshotWrapper, { alignItems: "center", justifyContent: "center", height: 60 }]}>
           <Ionicons name="image-outline" size={20} color="#8a8780" />
-          <Text style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>Screenshot tersedia</Text>
+          <Text style={{ fontSize: 11, color: "#a0a0a0", marginTop: 4 }}>Screenshot tersedia</Text>
         </View>
       ) : null}
     </View>
@@ -395,7 +395,7 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
                 <Ionicons
                   name={expanded ? "chevron-up" : "chevron-down"}
                   size={12}
-                  color="#9ca3af"
+                  color="#a0a0a0"
                   style={{ marginLeft: 4 }}
                 />
               )}
@@ -434,9 +434,9 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     borderRadius: 10,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e0e0e0",
     overflow: "hidden",
   },
   cardError: {
@@ -490,13 +490,13 @@ const styles = StyleSheet.create({
   labelText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#111827",
+    color: "#c8c8c8",
     lineHeight: 16,
   },
   argText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#6b7280",
+    color: "#888888",
     lineHeight: 15,
   },
   rightArea: {
@@ -513,8 +513,8 @@ const styles = StyleSheet.create({
   shellBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    backgroundColor: "#111827",
+    borderTopColor: "#333333",
+    backgroundColor: "#242424",
   },
   shellCommand: {
     flexDirection: "row",
@@ -550,14 +550,14 @@ const styles = StyleSheet.create({
   searchBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#333333",
     padding: 10,
     gap: 6,
   },
   searchQuery: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
   searchResults: {
     maxHeight: 200,
@@ -565,24 +565,24 @@ const styles = StyleSheet.create({
   searchResultItem: {
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e0e0e0",
     gap: 2,
   },
   searchResultTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#111827",
+    color: "#c8c8c8",
     lineHeight: 17,
   },
   searchResultUrl: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
   searchResultSnippet: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#6b7280",
+    color: "#888888",
     lineHeight: 16,
     marginTop: 2,
   },
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   browserBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#333333",
     padding: 10,
     gap: 6,
   },
@@ -603,18 +603,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e0e0e0",
   },
   browserUrl: {
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#6b7280",
+    color: "#888888",
   },
   browserTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#111827",
+    color: "#c8c8c8",
     lineHeight: 17,
   },
   browserContent: {
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
   browserContentText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#374151",
+    color: "#a8a8a8",
     lineHeight: 16,
   },
   screenshotWrapper: {
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#f3f4f6",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e0e0e0",
   },
   screenshotImage: {
     width: "100%",
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
   fileBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#333333",
     overflow: "hidden",
   },
   fileHeader: {
@@ -650,9 +650,9 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#2a2a2a",
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#e0e0e0",
   },
   fileName: {
     flex: 1,
@@ -663,24 +663,24 @@ const styles = StyleSheet.create({
   fileOp: {
     fontFamily: "Inter_400Regular",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     textTransform: "capitalize",
   },
   fileContent: {
     maxHeight: 160,
     padding: 10,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   fileContentText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 17,
   },
   todoBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#333333",
     padding: 10,
     gap: 6,
   },
@@ -693,18 +693,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#374151",
+    color: "#a8a8a8",
     lineHeight: 17,
   },
   todoChecked: {
     textDecorationLine: "line-through",
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   // MCP
   mcpBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#333333",
     padding: 10,
     gap: 6,
   },
@@ -716,37 +716,37 @@ const styles = StyleSheet.create({
   mcpToolName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
   mcpArgs: {
     maxHeight: 120,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 5,
     padding: 8,
   },
   mcpArgsText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 16,
   },
   mcpResult: {
     maxHeight: 160,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 5,
     padding: 8,
   },
   mcpResultText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 17,
   },
   // Message
   messageBody: {
     marginLeft: 3,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#333333",
     padding: 10,
     gap: 6,
   },
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#374151",
+    color: "#a8a8a8",
     lineHeight: 18,
   },
 });

@@ -128,7 +128,7 @@ function PlanBottomBar({ plan }: { plan: AgentPlan }) {
                 size={13}
                 color={
                   step.status === "completed" ? "#16a34a" :
-                  step.status === "running" ? "#2563eb" :
+                  step.status === "running" ? "#4a7cf0" :
                   step.status === "failed" ? "#dc2626" : "#ccc8be"
                 }
               />
@@ -241,7 +241,7 @@ function FullScreenVNC({
           </TouchableOpacity>
 
           <View style={styles.fullHeaderCenter}>
-            <Ionicons name="desktop-outline" size={16} color="#2563eb" />
+            <Ionicons name="desktop-outline" size={16} color="#4a7cf0" />
             <Text style={styles.fullHeaderTitle}>Komputer Dzeck</Text>
           </View>
 
@@ -272,7 +272,7 @@ function FullScreenVNC({
           <Ionicons
             name={isTakeover ? "pause-circle-outline" : "hand-left-outline"}
             size={15}
-            color={isTakeover ? "#2563eb" : "#1a1916"}
+            color={isTakeover ? "#4a7cf0" : "#1a1916"}
           />
           <Text style={[styles.takeoverText, isTakeover && styles.takeoverTextActive]}>
             {isTakeover ? "Lepas Kendali" : "Ambil Kendali"}
@@ -303,7 +303,7 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
       >
         <View style={styles.compactHeader}>
           <View style={styles.compactHeaderLeft}>
-            <Ionicons name="desktop-outline" size={14} color="#2563eb" />
+            <Ionicons name="desktop-outline" size={14} color="#4a7cf0" />
             <Text style={styles.compactTitle}>Komputer Dzeck</Text>
             <View style={styles.liveBadge}>
               <View style={[styles.liveBadgeDot, connected && styles.liveBadgeDotOn]} />
@@ -321,7 +321,7 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
               />
             ) : (
               <>
-                <Ionicons name="desktop-outline" size={32} color="#374151" />
+                <Ionicons name="desktop-outline" size={32} color="#3a3a3a" />
                 <Text style={styles.compactPreviewText}>
                   Tap untuk buka VNC live
                 </Text>
@@ -351,10 +351,10 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
 const styles = StyleSheet.create({
   // ─── Compact card ─────────────────────────────────────────────────────────
   compactCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
     overflow: "hidden",
     marginHorizontal: 16,
     marginVertical: 6,
@@ -365,9 +365,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   compactHeaderLeft: {
     flexDirection: "row",
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   liveBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 9,
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
   compactPreview: {
     height: 100,
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   compactPreviewText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   compactScreenshot: {
     width: "100%",
@@ -464,13 +464,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
     marginBottom: 8,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   webview: {
     flex: 1,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
 
   // ─── Live indicator ───────────────────────────────────────────────────────
@@ -496,9 +496,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   navBtn: {
     padding: 4,
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 9,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   takeoverBtnActive: {
     backgroundColor: "rgba(37,99,235,0.1)",
@@ -526,23 +526,23 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
   },
   takeoverTextActive: {
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
 
   // ─── Plan bottom bar ──────────────────────────────────────────────────────
   planBar: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
     paddingBottom: 8,
   },
   progressBarTrack: {
     height: 2,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
   },
   progressBarFill: {
     height: 2,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
   },
   planBarHeader: {
     flexDirection: "row",
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
   planBarCount: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   planBarSteps: {
     paddingHorizontal: 16,
@@ -588,9 +588,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     lineHeight: 17,
   },
-  planBarStepDone: { color: "#374151" },
+  planBarStepDone: { color: "#3a3a3a" },
   planBarStepRunning: { color: "#f3f4f6" },
 });

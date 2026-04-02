@@ -353,7 +353,7 @@ export function FilePanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#242424",
     borderLeftWidth: 1,
     borderLeftColor: "#e5e7eb",
   },
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#111827",
+    color: "#242424",
   },
   headerRight: {
     flexDirection: "row",
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   fileName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#111827",
+    color: "#242424",
   },
   fileSize: {
     fontFamily: "Inter_400Regular",
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#2a2a2a",
   },
   downloadBtnSmall: {
     width: 24,
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#2a2a2a",
   },
   loadingState: {
     alignItems: "center",
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   previewFileName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#111827",
+    color: "#242424",
   },
   previewArea: {
     flex: 1,
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     padding: 12,
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#242424",
   },
   previewImage: {
     width: "100%",
@@ -514,16 +514,16 @@ const styles = StyleSheet.create({
   },
   markdownPreviewContainer: {
     padding: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#242424",
   },
   textPreviewContainer: {
     padding: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#242424",
   },
   previewText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#111827",
+    color: "#242424",
     lineHeight: 22,
   },
 });

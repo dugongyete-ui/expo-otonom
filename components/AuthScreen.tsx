@@ -100,7 +100,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   if (authMode === null) {
     return (
       <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#4a7cf0" />
       </View>
     );
   }
@@ -281,7 +281,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
   },
   scroll: {
     flexGrow: 1,
@@ -300,15 +300,15 @@ const styles = StyleSheet.create({
   },
   logoSubtitle: {
     fontSize: 11,
-    color: "#4b5563",
+    color: "#606060",
     letterSpacing: 2,
   },
   card: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     gap: 16,
   },
   title: {
@@ -358,10 +358,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   input: {
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
@@ -370,10 +370,10 @@ const styles = StyleSheet.create({
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
   },
   passwordInput: {
     flex: 1,
@@ -391,11 +391,11 @@ const styles = StyleSheet.create({
     marginTop: -8,
   },
   forgotLinkText: {
-    color: "#2563eb",
+    color: "#4a7cf0",
     fontSize: 13,
   },
   button: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   switchLinkBold: {
-    color: "#2563eb",
+    color: "#4a7cf0",
     fontWeight: "600",
   },
 });

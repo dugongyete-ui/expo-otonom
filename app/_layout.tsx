@@ -173,7 +173,7 @@ export default function RootLayout() {
   if (showSplash) {
     return (
       <>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <SplashLoader />
       </>
     );
@@ -187,7 +187,7 @@ export default function RootLayout() {
             <KeyboardProviderWrapper>
               <AuthProvider>
                 <View style={layoutStyles.root}>
-                  <StatusBar style="dark" />
+                  <StatusBar style="light" />
                   <AuthGate>
                     <RootLayoutNav />
                   </AuthGate>
@@ -247,6 +247,6 @@ const splashStyles = StyleSheet.create({
 const layoutStyles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1a1a1a",
   },
 });

@@ -65,7 +65,7 @@ export function ChatCard({
       <View style={styles.assistantMessageContainer}>
         <View style={styles.assistantHeader}>
           <View style={styles.assistantIcon}>
-            <Ionicons name="sparkles" size={20} color="#2563eb" />
+            <Ionicons name="sparkles" size={20} color="#4a7cf0" />
           </View>
           <Text style={styles.assistantLabel}>Dzeck AI</Text>
         </View>
@@ -85,8 +85,8 @@ export function ChatCard({
         shell_exec: "#16a34a",
         file_read: "#d97706",
         browser_navigate: "#d97706",
-        web_search: "#2563eb",
-        mcp_call_tool: "#2563eb",
+        web_search: "#4a7cf0",
+        mcp_call_tool: "#4a7cf0",
       };
       return map[name || ""] || "#8a8780";
     };
@@ -220,10 +220,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   assistantBubble: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
     paddingHorizontal: 16,
     paddingVertical: 12,
     maxWidth: "85%",
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   timestamp: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 12,
     marginTop: 4,
   },
@@ -243,12 +243,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   toolCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 12,
     borderLeftWidth: 4,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   toolHeader: {
     flexDirection: "row",
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   toolArgs: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 11,
     marginTop: 2,
   },
@@ -285,12 +285,12 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: "#2563eb",
+    borderColor: "#4a7cf0",
     borderTopColor: "transparent",
     marginRight: 6,
   },
   loadingText: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 12,
   },
   stepContainer: {
@@ -300,12 +300,12 @@ const styles = StyleSheet.create({
   stepHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   stepStatus: {
     width: 20,
@@ -332,13 +332,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   stepDetails: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 12,
   },
 });

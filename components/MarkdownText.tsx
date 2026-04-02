@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   },
   hr: {
     height: 1,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
     marginVertical: 8,
   },
   spacer: {
@@ -343,8 +343,8 @@ const styles = StyleSheet.create({
   },
   inlineCode: {
     fontFamily: "monospace",
-    backgroundColor: "#1f2937",
-    color: "#d1d5db",
+    backgroundColor: "#2a2a2a",
+    color: "#c8c8c8",
     paddingHorizontal: 5,
     borderRadius: 4,
   },
@@ -358,9 +358,9 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   img: {
     width: "100%",
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   imgCaption: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     textAlign: "center",
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -377,14 +377,14 @@ const styles = StyleSheet.create({
   imgError: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 6,
     marginVertical: 4,
   },
   imgErrorText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontStyle: "italic",
   },
 });

@@ -115,7 +115,7 @@ function ToolRow({ event }: { event: AgentEvent }) {
         <Ionicons
           name={icon}
           size={10}
-          color={isError ? "#f87171" : isCalled ? "#6b7280" : "#6b7280"}
+          color={isError ? "#f87171" : isCalled ? "#888888" : "#888888"}
         />
       </View>
       <Text
@@ -195,7 +195,7 @@ function StepRow({ step }: { step: AgentPlanStep }) {
             <Ionicons
               name={expanded ? "chevron-up" : "chevron-down"}
               size={12}
-              color="#4b5563"
+              color="#606060"
             />
           </View>
         )}
@@ -230,7 +230,7 @@ export function AgentPlanView({ plan, notifyMessages }: AgentPlanViewProps) {
         <View style={styles.notifyBlock}>
           {notifyMessages.map((msg, i) => (
             <View key={i} style={styles.notifyRow}>
-              <Ionicons name="chatbubble-ellipses-outline" size={12} color="#6b7280" style={styles.notifyIcon} />
+              <Ionicons name="chatbubble-ellipses-outline" size={12} color="#888888" style={styles.notifyIcon} />
               <Text style={styles.notifyText}>{msg}</Text>
             </View>
           ))}
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   },
   stepCheckBoxPending: {
     borderWidth: 1.5,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
     backgroundColor: "transparent",
   },
   stepTitle: {
@@ -286,21 +286,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     letterSpacing: -0.1,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   stepTitleDone: {
-    color: "#6b7280",
+    color: "#888888",
     fontFamily: "Inter_400Regular",
   },
   stepTitleFailed: {
     color: "#f87171",
   },
   stepTitleRunning: {
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     fontFamily: "Inter_600SemiBold",
   },
   stepTitlePending: {
-    color: "#6b7280",
+    color: "#888888",
   },
   stepRight: {
     flexDirection: "row",
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   stepCounter: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#4b5563",
+    color: "#606060",
   },
   toolsList: {
     marginLeft: 28,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -344,11 +344,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4b5563",
+    color: "#606060",
     lineHeight: 17,
   },
   toolLabelDone: {
-    color: "#374151",
+    color: "#3a3a3a",
   },
   toolLabelError: {
     color: "#f87171",
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     gap: 6,
     borderLeftWidth: 2,
-    borderLeftColor: "#1f2937",
+    borderLeftColor: "#2a2a2a",
     paddingLeft: 10,
   },
   notifyRow: {
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     lineHeight: 18,
   },
 });

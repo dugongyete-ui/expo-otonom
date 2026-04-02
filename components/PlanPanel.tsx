@@ -51,7 +51,7 @@ export function PlanPanel({ plan }: PlanPanelProps) {
   const getStepColor = (status: string) => {
     switch (status) {
       case "running":
-        return "#2563eb";
+        return "#4a7cf0";
       case "completed":
         return "#34C759";
       case "failed":
@@ -64,7 +64,7 @@ export function PlanPanel({ plan }: PlanPanelProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="list" size={16} color="#2563eb" />
+        <Ionicons name="list" size={16} color="#4a7cf0" />
         <Text style={styles.headerTitle}>Plan</Text>
       </View>
 
@@ -158,9 +158,9 @@ export function PlanPanel({ plan }: PlanPanelProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   stepHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -214,11 +214,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   stepStatus: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 11,
   },
   stepDetails: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 6,
     marginTop: 8,
     paddingHorizontal: 10,
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   detailLabel: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 11,
     fontWeight: "500",
   },
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   stepDivider: {
     height: 1,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
     marginVertical: 8,
   },
   progressContainer: {
@@ -247,16 +247,16 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 4,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
     borderRadius: 2,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
   },
   progressText: {
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontSize: 11,
   },
 });

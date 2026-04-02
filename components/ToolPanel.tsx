@@ -42,7 +42,7 @@ function getToolColor(name: string): string {
 
 function getStatusColor(status: ToolItem["status"]): string {
   switch (status) {
-    case "calling": return "#2563eb";
+    case "calling": return "#4a7cf0";
     case "called": return "#30D158";
     case "error": return "#FF453A";
   }
@@ -92,7 +92,7 @@ export function ToolPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="terminal-outline" size={14} color="#2563eb" />
+          <Ionicons name="terminal-outline" size={14} color="#4a7cf0" />
           <Text style={styles.headerTitle}>Tools</Text>
           {tools.length > 0 && (
             <View style={styles.badge}>
@@ -153,7 +153,7 @@ export function ToolPanel({
                   </Text>
                   <View style={styles.toolStatusRow}>
                     {tool.status === "calling" && (
-                      <ActivityIndicator size="small" color="#2563eb" style={styles.spinner} />
+                      <ActivityIndicator size="small" color="#4a7cf0" style={styles.spinner} />
                     )}
                     <Text style={[styles.toolStatus, { color: getStatusColor(tool.status) }]}>
                       {getStatusLabel(tool.status)}
@@ -204,14 +204,14 @@ export function ToolPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   header: {
     flexDirection: "row",
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   headerLeft: {
     flexDirection: "row",
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
   },
   badge: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 1,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   toolsList: {
     flex: 1,
@@ -271,8 +271,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   toolItemSelected: {
-    borderColor: "#374151",
-    backgroundColor: "#1f2937",
+    borderColor: "#3a3a3a",
+    backgroundColor: "#2a2a2a",
   },
   toolIcon: {
     width: 28,
@@ -312,13 +312,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     marginTop: 4,
   },
   emptyStateText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     textAlign: "center",
     lineHeight: 16,
   },
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   detailContainer: {
     flex: 1,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   detailHeaderBar: {
     flexDirection: "row",
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   closeDetailBtn: {
     width: 24,
@@ -347,6 +347,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
 });

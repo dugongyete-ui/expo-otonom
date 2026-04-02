@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
   },
   attachMenu: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,

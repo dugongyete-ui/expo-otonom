@@ -232,7 +232,7 @@ export function BrowserPanel({
         onPress={onToggleVisible}
         activeOpacity={0.7}
       >
-        <Ionicons name="chevron-back" size={16} color="#6b7280" />
+        <Ionicons name="chevron-back" size={16} color="#888888" />
       </TouchableOpacity>
     );
   }
@@ -242,7 +242,7 @@ export function BrowserPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="desktop-outline" size={14} color="#2563eb" />
+          <Ionicons name="desktop-outline" size={14} color="#4a7cf0" />
           <Text style={styles.headerTitle}>Browser</Text>
           {sessionState === "ready" && (
             <View style={styles.liveBadge}>
@@ -256,7 +256,7 @@ export function BrowserPanel({
           onPress={onToggleVisible}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-forward" size={16} color="#6b7280" />
+          <Ionicons name="chevron-forward" size={16} color="#888888" />
         </TouchableOpacity>
       </View>
 
@@ -293,7 +293,7 @@ export function BrowserPanel({
 
         {(sessionState === "creating" || sessionState === "waiting" || sessionState === "connecting") && (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color="#2563eb" />
+            <ActivityIndicator size="large" color="#4a7cf0" />
             <Text style={styles.loadingText}>{statusMsg}</Text>
           </View>
         )}
@@ -345,7 +345,7 @@ export function BrowserPanel({
               </TouchableOpacity>
             ) : (
               <View style={styles.noScreenshot}>
-                <ActivityIndicator size="small" color="#2563eb" />
+                <ActivityIndicator size="small" color="#4a7cf0" />
                 <Text style={styles.noScreenshotText}>Memuat preview...</Text>
               </View>
             )}
@@ -382,7 +382,7 @@ export function BrowserPanel({
                 onPress={() => refreshScreenshot()}
                 activeOpacity={0.7}
               >
-                <Ionicons name="camera-outline" size={14} color="#6b7280" />
+                <Ionicons name="camera-outline" size={14} color="#888888" />
                 <Text style={styles.actionText}>Screenshot</Text>
               </TouchableOpacity>
 
@@ -399,7 +399,7 @@ export function BrowserPanel({
                   <Ionicons
                     name={useVNC ? "videocam" : "videocam-outline"}
                     size={14}
-                    color={useVNC ? "#FFFFFF" : "#2563eb"}
+                    color={useVNC ? "#FFFFFF" : "#4a7cf0"}
                   />
                   <Text style={[
                     styles.actionText,
@@ -434,7 +434,7 @@ export function BrowserPanel({
                 onPress={openInBrowser}
                 activeOpacity={0.7}
               >
-                <Ionicons name="open-outline" size={14} color="#6b7280" />
+                <Ionicons name="open-outline" size={14} color="#888888" />
                 <Text style={styles.actionText}>{Platform.OS === "web" ? "Fullscreen" : "Control"}</Text>
               </TouchableOpacity>
 
@@ -460,14 +460,14 @@ export function BrowserPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   header: {
     flexDirection: "row",
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   headerLeft: {
     flexDirection: "row",
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   content: {
     flex: 1,
@@ -529,13 +529,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#6b7280",
+    color: "#888888",
     marginTop: 4,
   },
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#4b5563",
+    color: "#606060",
     textAlign: "center",
     lineHeight: 16,
     marginBottom: 8,
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#6b7280",
+    color: "#888888",
     textAlign: "center",
   },
   errorState: {
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#6b7280",
+    color: "#888888",
     textAlign: "center",
     lineHeight: 16,
     marginBottom: 8,
@@ -591,17 +591,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   retryButtonText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#e5e7eb",
+    color: "#e0e0e0",
   },
   readyState: {
     flex: 1,
@@ -611,9 +611,9 @@ const styles = StyleSheet.create({
   screenshotContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     position: "relative",
   },
   screenshot: {
@@ -640,20 +640,20 @@ const styles = StyleSheet.create({
   noScreenshot: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     paddingVertical: 30,
     gap: 8,
   },
   noScreenshotText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#6b7280",
+    color: "#888888",
   },
   sessionInfo: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 8,
     padding: 10,
     gap: 6,
@@ -666,14 +666,14 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#6b7280",
+    color: "#888888",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   infoValue: {
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   actions: {
     flexDirection: "row",
@@ -686,17 +686,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 6,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
     minWidth: 80,
   },
   actionText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   dangerButton: {
     borderColor: "rgba(255,69,58,0.25)",
@@ -713,21 +713,21 @@ const styles = StyleSheet.create({
   vncContainer: {
     borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     height: 200,
   },
   vncActiveBtn: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
+    borderColor: "#4a7cf0",
   },
   vncActiveText: {
     color: "#FFFFFF",
     fontFamily: "Inter_600SemiBold",
   },
   currentUrl: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 8,
     padding: 10,
     gap: 4,
@@ -741,11 +741,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "monospace",
     fontSize: 10,
-    color: "#6b7280",
+    color: "#888888",
   },
   pageTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#e5e7eb",
+    color: "#e0e0e0",
   },
 });

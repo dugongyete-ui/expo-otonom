@@ -59,6 +59,33 @@ export async function registerRoutes(app: any): Promise<Server> {
     console.warn("[WARNING] CEREBRAS_API_KEY is not set. AI features will not work.");
   }
 
+  // ─── Startup: clean up stale running sessions from previous server instance ─
+  // Sessions left in status "running" after a server crash/restart are no longer
+  // actually running — mark them as completed so they don't show as active.
+  (async () => {
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
+        const result = await (col as any).updateMany(
+          {
+            status: { $in: ["running", "resuming"] },
+            $or: [
+              { updated_at: { $lt: staleThreshold } },
+              { updated_at: { $exists: false } },
+            ],
+          },
+          { $set: { status: "completed", is_running: false, updated_at: new Date() } },
+        );
+        if (result.modifiedCount > 0) {
+          console.log(`[Startup] Marked ${result.modifiedCount} stale running session(s) as completed.`);
+        }
+      }
+    } catch (err: any) {
+      console.warn("[Startup] Failed to clean up stale sessions:", err.message);
+    }
+  })();
+
   app.get("/status", (_req: any, res: any) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });

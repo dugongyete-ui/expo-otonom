@@ -171,6 +171,17 @@ Replit only accepts HTTPS on external ports — plain HTTP (port 3002) is reject
 - `GET /metro-proxy/*` → proxies all requests to Metro bundler on port 3002
 - `GET /mobile` → landing page with QR code
 
+## UI Theme
+- **Palette**: Charcoal dark — bg `#1a1a1a`, surfaces `#242424`/`#2a2a2a`, borders `#333333`/`#3a3a3a`, text `#e0e0e0`, muted `#888888`, accent `#4a7cf0`
+- **Defined in**: `lib/theme.ts` — all components import COLORS from here
+- **Header icons**: Transparent button backgrounds, icon color `#a0a0a0`–`#b0b0b0`, size 20–22px
+- **Tool icons**: `components/icons/ToolIcons.tsx` — SVG icons with `#2a2a2a` fill, `#3a3a3a` stroke
+
+## Session Staleness Fix
+- **LeftPanel** uses `isSessionActuallyRunning()` — treats sessions with `updated_at` older than 3 min as idle, even if status is "running"
+- **Server startup** (`server/routes.ts`) marks all sessions with status "running" and `updated_at` older than 5 min as "completed" in MongoDB
+- **Polling interval**: LeftPanel polls every 8s (down from 5s)
+
 ## Critical Patches Applied
 - **`node_modules/@expo/metro-config/build/serializer/fork/js.js`**: Patched undefined `dependency.absolutePath` bug (line ~72) that caused `TypeError: The "to" argument must be of type string` when bundling Android. Fix: wrap `path.relative()` call in null-check.
 - **`babel.config.cjs`**: Added `react-native-reanimated/plugin` (required for TypingIndicator worklets)

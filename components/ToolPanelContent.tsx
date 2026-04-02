@@ -1094,7 +1094,7 @@ export function ToolPanelContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   contentHeader: {
     flexDirection: "row",
@@ -1103,7 +1103,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
     borderLeftWidth: 3,
   },
   contentHeaderTitle: {
@@ -1155,11 +1155,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   shellPromptContainer: {
     flex: 1,
@@ -1180,7 +1180,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   backendBadge: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,
@@ -1193,7 +1193,7 @@ const styles = StyleSheet.create({
   },
   shellOutputScroll: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   shellOutputContent: {
     padding: 10,
@@ -1227,7 +1227,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   refreshBtn: {
     width: 24,
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   returnCodeBadge: {
     alignSelf: "flex-start",
@@ -1254,11 +1254,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   browserUrlText: {
     flex: 1,
@@ -1275,7 +1275,7 @@ const styles = StyleSheet.create({
   },
   browserPreview: {
     flex: 1,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1305,7 +1305,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   browserActionBtn: {
     flexDirection: "row",
@@ -1314,9 +1314,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   browserActionText: {
     fontSize: 11,
@@ -1339,8 +1339,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
-    backgroundColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
+    backgroundColor: "#2a2a2a",
   },
   fileHeaderLeft: {
     flex: 1,
@@ -1389,7 +1389,7 @@ const styles = StyleSheet.create({
   },
   fileContentScroll: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
   },
   fileContentContainer: {
     padding: 10,
@@ -1400,7 +1400,7 @@ const styles = StyleSheet.create({
   lineNumberGutter: {
     paddingRight: 8,
     borderRightWidth: 1,
-    borderRightColor: "#1f2937",
+    borderRightColor: "#2a2a2a",
     marginRight: 8,
     minWidth: 30,
     alignItems: "flex-end",
@@ -1427,7 +1427,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   downloadBtnText: {
     fontSize: 11,
@@ -1443,8 +1443,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
-    backgroundColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
+    backgroundColor: "#2a2a2a",
   },
   searchQueryText: {
     flex: 1,
@@ -1460,12 +1460,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   searchResultItem: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 8,
     padding: 10,
     gap: 3,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   searchResultTitle: {
     fontSize: 12,
@@ -1487,7 +1487,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   searchCountText: {
     fontSize: 10,
@@ -1502,7 +1502,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   mcpToolName: {
     flex: 1,
@@ -1517,7 +1517,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   mcpServerText: {
     fontSize: 10,
@@ -1540,11 +1540,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   codeBlock: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 6,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   codeText: {
     fontFamily: "monospace",
@@ -1561,7 +1561,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   todoTitle: {
     flex: 1,
@@ -1576,7 +1576,7 @@ const styles = StyleSheet.create({
   },
   todoProgressBar: {
     height: 3,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
   },
   todoProgressFill: {
     height: 3,
@@ -1617,7 +1617,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   taskTitle: {
     flex: 1,
@@ -1641,13 +1641,13 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   taskItem: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 6,
     padding: 8,
     marginBottom: 6,
     gap: 4,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   taskItemHeader: {
     flexDirection: "row",
@@ -1688,7 +1688,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
   },
   messageType: {
     fontSize: 12,

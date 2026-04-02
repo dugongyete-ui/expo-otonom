@@ -211,16 +211,16 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   sheet: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: "80%",
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
     borderLeftWidth: 1,
-    borderLeftColor: "#1f2937",
+    borderLeftColor: "#2a2a2a",
     borderRightWidth: 1,
-    borderRightColor: "#1f2937",
+    borderRightColor: "#2a2a2a",
   },
   safeArea: {
     padding: 20,
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   handle: {
     width: 36,
     height: 4,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 4,
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   headerStatus: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     marginTop: 1,
   },
   closeBtn: {
@@ -269,20 +269,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 8,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   argsContainer: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     padding: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   argsTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 4,
@@ -293,12 +293,12 @@ const styles = StyleSheet.create({
   argKey: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   argVal: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 18,
   },
   resultSection: {
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   resultTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -318,16 +318,16 @@ const styles = StyleSheet.create({
   waitingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   // Shell
   shellContainer: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     padding: 12,
     maxHeight: 280,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   shellScroll: {
     maxHeight: 256,
@@ -352,29 +352,29 @@ const styles = StyleSheet.create({
   searchTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#2563eb",
+    color: "#4a7cf0",
     lineHeight: 18,
   },
   searchUrl: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   searchSnippet: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 17,
     marginTop: 2,
   },
   // Browser
   browserContainer: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     padding: 12,
     maxHeight: 300,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
     gap: 8,
   },
   browserBar: {
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   browserUrl: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     flex: 1,
   },
   browserTitle: {
@@ -403,17 +403,17 @@ const styles = StyleSheet.create({
   browserContent: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 18,
   },
   // File
   fileContainer: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 10,
     maxHeight: 280,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#3a3a3a",
   },
   fileHeader: {
     flexDirection: "row",
@@ -422,8 +422,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
-    backgroundColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
+    backgroundColor: "#2a2a2a",
   },
   fileName: {
     fontFamily: "monospace",
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   fileText: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#c8c8c8",
     lineHeight: 18,
   },
 });

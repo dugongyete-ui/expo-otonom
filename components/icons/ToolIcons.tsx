@@ -28,51 +28,51 @@ function WebSvgIcon({ size, svgContent }: { size: number; svgContent: string }) 
 export function ShellIcon({ size = 21, color }: IconProps) {
   if (Platform.OS === "web") {
     const svg = `<svg width="${size}" height="${size}" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#1f2937" stroke="#374151" stroke-width="0.857"/>
-      <path d="M5.25 7L7 9L5.25 11" stroke="${color || '#535350'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8.625 11H12" stroke="${color || '#535350'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.857"/>
+      <path d="M5.25 7L7 9L5.25 11" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8.625 11H12" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="terminal-outline" size={size * 0.7} color={color || "#535350"} />;
+  return <Ionicons name="terminal-outline" size={size * 0.7} color={color || "#888888"} />;
 }
 
 // Browser Icon - Compass in circle
 export function BrowserIcon({ size = 21, color }: IconProps) {
   if (Platform.OS === "web") {
     const svg = `<svg width="${size}" height="${size}" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1.5" y="1.5" width="15" height="15" rx="7.5" fill="#1f2937" stroke="#374151" stroke-width="0.857"/>
-      <path d="M7.52 7.76C7.56 7.65 7.65 7.56 7.76 7.52L11.2 6.29C11.52 6.17 11.83 6.48 11.71 6.8L10.48 10.24C10.44 10.35 10.35 10.44 10.24 10.48L6.8 11.71C6.48 11.83 6.17 11.52 6.29 11.2L7.52 7.76Z" stroke="${color || '#535350'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="1.5" y="1.5" width="15" height="15" rx="7.5" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.857"/>
+      <path d="M7.52 7.76C7.56 7.65 7.65 7.56 7.76 7.52L11.2 6.29C11.52 6.17 11.83 6.48 11.71 6.8L10.48 10.24C10.44 10.35 10.35 10.44 10.24 10.48L6.8 11.71C6.48 11.83 6.17 11.52 6.29 11.2L7.52 7.76Z" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="globe-outline" size={size * 0.7} color={color || "#535350"} />;
+  return <Ionicons name="globe-outline" size={size * 0.7} color={color || "#888888"} />;
 }
 
 // Edit/File Icon - Pencil in rounded rectangle
 export function EditIcon({ size = 21, color }: IconProps) {
   if (Platform.OS === "web") {
     const svg = `<svg width="${size}" height="${size}" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#1f2937" stroke="#374151" stroke-width="0.857"/>
-      <path d="M9.24 5.71C9.63 5.32 10.27 5.32 10.66 5.71C11.05 6.1 11.05 6.73 10.66 7.12L7.12 10.66H5.71V9.24L9.24 5.71Z" stroke="${color || '#535350'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M8 12H12" stroke="${color || '#535350'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.857"/>
+      <path d="M9.24 5.71C9.63 5.32 10.27 5.32 10.66 5.71C11.05 6.1 11.05 6.73 10.66 7.12L7.12 10.66H5.71V9.24L9.24 5.71Z" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 12H12" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="document-text-outline" size={size * 0.7} color={color || "#535350"} />;
+  return <Ionicons name="document-text-outline" size={size * 0.7} color={color || "#888888"} />;
 }
 
 // Search Icon - Magnifying glass in rounded rectangle
 export function SearchIcon({ size = 21, color }: IconProps) {
   if (Platform.OS === "web") {
     const svg = `<svg width="${size}" height="${size}" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#f0ede7" stroke="#5F5F5F" stroke-width="0.857"/>
-      <circle cx="8.57" cy="8.63" r="3" stroke="#ACACAC" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M10.82 10.88L12.32 12.38" stroke="#ACACAC" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.857"/>
+      <circle cx="8.57" cy="8.63" r="3" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M10.82 10.88L12.32 12.38" stroke="${color || '#888888'}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }
-  return <Ionicons name="search-outline" size={size * 0.7} color={color || "#535350"} />;
+  return <Ionicons name="search-outline" size={size * 0.7} color={color || "#888888"} />;
 }
 
 // TakeOver Icon - Cursor with rays
@@ -90,8 +90,8 @@ export function TakeOverIcon({ size = 16, color }: IconProps) {
 export function McpIcon({ size = 21, color }: IconProps) {
   if (Platform.OS === "web") {
     const svg = `<svg width="${size}" height="${size}" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#1f2937" stroke="#374151" stroke-width="0.857"/>
-      <path d="M12 9.5H11.25C11.25 9.09 10.91 8.75 10.5 8.75C10.09 8.75 9.75 9.09 9.75 9.5H9V7.5H9.75C9.75 7.09 10.09 6.75 10.5 6.75C10.91 6.75 11.25 7.09 11.25 7.5H12V5.5H6V11.5H12V9.5Z" stroke="${color || '#535350'}" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.857"/>
+      <path d="M12 9.5H11.25C11.25 9.09 10.91 8.75 10.5 8.75C10.09 8.75 9.75 9.09 9.75 9.5H9V7.5H9.75C9.75 7.09 10.09 6.75 10.5 6.75C10.91 6.75 11.25 7.09 11.25 7.5H12V5.5H6V11.5H12V9.5Z" stroke="${color || '#888888'}" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
     return <WebSvgIcon size={size} svgContent={svg} />;
   }

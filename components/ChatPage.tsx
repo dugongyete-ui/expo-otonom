@@ -120,7 +120,7 @@ const thinkingStyles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "#1d4ed8",
+    backgroundColor: "#2c4eb0",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -140,12 +140,12 @@ const thinkingStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#374151",
+    backgroundColor: "#3a3a3a",
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#6b7280",
+    color: "#888888",
     fontStyle: "italic",
     flex: 1,
   },
@@ -176,7 +176,7 @@ function InlineToolStep({ tool }: { tool: any }) {
   return (
     <View style={inlineToolStyles.row}>
       <View style={[inlineToolStyles.iconWrap, isError && inlineToolStyles.iconWrapError, isDone && inlineToolStyles.iconWrapDone]}>
-        <Ionicons name={cfg.icon} size={10} color={isError ? "#f87171" : "#6b7280"} />
+        <Ionicons name={cfg.icon} size={10} color={isError ? "#f87171" : "#888888"} />
       </View>
       <Text style={[inlineToolStyles.label, isError && inlineToolStyles.labelError]} numberOfLines={1}>
         {cfg.label}
@@ -199,7 +199,7 @@ const inlineToolStyles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -214,7 +214,7 @@ const inlineToolStyles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4b5563",
+    color: "#606060",
   },
   labelError: {
     color: "#f87171",
@@ -1226,7 +1226,7 @@ export function ChatPage({
           style={styles.settingsBtn}
           hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
         >
-          <Ionicons name="menu-outline" size={20} color="#6b7280" />
+          <Ionicons name="menu-outline" size={22} color="#b0b0b0" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Image
@@ -1243,7 +1243,7 @@ export function ChatPage({
             <Ionicons
               name={isAgentMode ? "flash" : "chatbubble-ellipses-outline"}
               size={10}
-              color={isAgentMode ? "#d97706" : "#2563eb"}
+              color={isAgentMode ? "#d97706" : "#4a7cf0"}
             />
             <Text style={[styles.modeBadgeText, isAgentMode ? styles.modeBadgeTextAgent : styles.modeBadgeTextChat]}>
               {isAgentMode ? "Agent" : "Chat"}
@@ -1269,7 +1269,7 @@ export function ChatPage({
               hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
             >
               <View>
-                <Ionicons name="terminal-outline" size={18} color={activeToolsCount > 0 ? "#2563eb" : "#6b7280"} />
+                <Ionicons name="terminal-outline" size={20} color={activeToolsCount > 0 ? "#4a7cf0" : "#a0a0a0"} />
                 {toolsCount > 0 && (
                   <View style={styles.toolsBadge}>
                     <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
@@ -1286,8 +1286,8 @@ export function ChatPage({
           >
             <Ionicons
               name={isShared ? "share-social" : "share-social-outline"}
-              size={18}
-              color={messages.length === 0 ? "#d1d5db" : isShared ? "#2563eb" : "#6b7280"}
+              size={20}
+              color={messages.length === 0 ? "#555555" : isShared ? "#4a7cf0" : "#a0a0a0"}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -1295,14 +1295,14 @@ export function ChatPage({
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Ionicons name="log-out-outline" size={18} color="#6b7280" />
+            <Ionicons name="log-out-outline" size={20} color="#a0a0a0" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSettings(true)}
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Ionicons name="ellipsis-horizontal" size={18} color="#6b7280" />
+            <Ionicons name="ellipsis-horizontal" size={20} color="#a0a0a0" />
           </TouchableOpacity>
         </View>
       </View>
@@ -1350,8 +1350,8 @@ export function ChatPage({
                 setShowModelSettings(true);
               }}
             >
-              <Ionicons name="options-outline" size={16} color="#2563eb" />
-              <Text style={[styles.logoutBtnText, { color: "#2563eb" }]}>Model & Config</Text>
+              <Ionicons name="options-outline" size={16} color="#4a7cf0" />
+              <Text style={[styles.logoutBtnText, { color: "#4a7cf0" }]}>Model & Config</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1361,8 +1361,8 @@ export function ChatPage({
                 setShowMCPPanel(true);
               }}
             >
-              <Ionicons name="server-outline" size={16} color="#2563eb" />
-              <Text style={[styles.logoutBtnText, { color: "#2563eb" }]}>MCP Servers</Text>
+              <Ionicons name="server-outline" size={16} color="#4a7cf0" />
+              <Text style={[styles.logoutBtnText, { color: "#4a7cf0" }]}>MCP Servers</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1497,14 +1497,14 @@ export function ChatPage({
                     onPress={() => openFile(f)}
                   >
                     <View style={styles.fileDocIconWrap}>
-                      <Ionicons name="document-text-outline" size={20} color="#2563eb" />
+                      <Ionicons name="document-text-outline" size={20} color="#4a7cf0" />
                     </View>
                     <View style={styles.fileDocInfo}>
                       <Text style={styles.fileDocName} numberOfLines={1}>{f.filename}</Text>
                       <Text style={styles.fileDocType}>{getFileExt(f.filename)}</Text>
                     </View>
                     <View style={styles.fileDocDownloadBtn}>
-                      <Ionicons name="download-outline" size={16} color="#2563eb" />
+                      <Ionicons name="download-outline" size={16} color="#4a7cf0" />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -1594,14 +1594,14 @@ export function ChatPage({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
   },
   header: {
     paddingBottom: 10,
     paddingHorizontal: 16,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#2a2a2a",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1616,13 +1616,13 @@ const styles = StyleSheet.create({
   headerBrand: {
     fontSize: 16,
     fontFamily: "Inter_700Bold",
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     letterSpacing: -0.3,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     flex: 1,
   },
   modeBadge: {
@@ -1635,8 +1635,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   modeBadgeChat: {
-    backgroundColor: "rgba(37,99,235,0.08)",
-    borderColor: "rgba(37,99,235,0.2)",
+    backgroundColor: "rgba(74,124,240,0.08)",
+    borderColor: "rgba(74,124,240,0.2)",
   },
   modeBadgeAgent: {
     backgroundColor: "rgba(234,179,8,0.1)",
@@ -1648,7 +1648,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   modeBadgeTextChat: {
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
   modeBadgeTextAgent: {
     color: "#d97706",
@@ -1659,12 +1659,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   settingsBtn: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "transparent",
   },
   settingsOverlay: {
     flex: 1,
@@ -1674,12 +1674,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   settingsPanel: {
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 16,
     padding: 20,
     gap: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.4,
@@ -1689,7 +1689,7 @@ const styles = StyleSheet.create({
   settingsPanelTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     marginBottom: 4,
   },
   settingsSection: {
@@ -1697,7 +1697,7 @@ const styles = StyleSheet.create({
   },
   settingsSectionTitle: {
     fontSize: 13,
-    color: "#4b5563",
+    color: "#606060",
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1711,16 +1711,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     alignItems: "center",
-    backgroundColor: "#1a2133",
+    backgroundColor: "#222222",
   },
   langBtnActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
+    borderColor: "#4a7cf0",
   },
   langBtnText: {
-    color: "#6b7280",
+    color: "#888888",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1733,7 +1733,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    borderTopColor: "#2a2a2a",
   },
   logoutBtnText: {
     color: "#f87171",
@@ -1756,12 +1756,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(220,38,38,0.1)",
   },
   e2bChecking: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   e2bBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#6b7280",
+    color: "#888888",
     letterSpacing: 0.3,
   },
   fileCardContainer: {
@@ -1777,16 +1777,16 @@ const styles = StyleSheet.create({
   fileCardTitle: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   fileCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#2a2a2a",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e0e0e0",
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 6,
@@ -1795,7 +1795,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    color: "#111827",
+    color: "#242424",
   },
   fileCardAction: {
     fontSize: 13,
@@ -1813,9 +1813,9 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     aspectRatio: 16 / 10,
     borderRadius: 10,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
   },
   agentTurnBlock: {
     paddingHorizontal: 16,
@@ -1831,23 +1831,23 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "#1d4ed8",
+    backgroundColor: "#2c4eb0",
     alignItems: "center",
     justifyContent: "center",
   },
   agentTurnName: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     letterSpacing: -0.2,
   },
   agentTurnBadgeRunning: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(59,130,246,0.1)",
+    backgroundColor: "rgba(74,124,240,0.1)",
     borderWidth: 1,
-    borderColor: "rgba(59,130,246,0.2)",
+    borderColor: "rgba(74,124,240,0.2)",
   },
   agentTurnBadgeDone: {
     paddingHorizontal: 6,
@@ -1872,10 +1872,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -1883,7 +1883,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "rgba(37,99,235,0.08)",
+    backgroundColor: "rgba(74,124,240,0.08)",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1895,20 +1895,20 @@ const styles = StyleSheet.create({
   fileDocName: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     lineHeight: 18,
   },
   fileDocType: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#6b7280",
+    color: "#888888",
     letterSpacing: 0.2,
   },
   fileDocDownloadBtn: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "rgba(37,99,235,0.08)",
+    backgroundColor: "rgba(74,124,240,0.08)",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1916,7 +1916,7 @@ const styles = StyleSheet.create({
   fileViewAllLink: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#2563eb",
+    color: "#4a7cf0",
     paddingLeft: 2,
     paddingTop: 2,
   },
@@ -1937,16 +1937,16 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "#d1d5db",
+    backgroundColor: "#c8c8c8",
   },
   thinkingDotPulse: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
   },
   thinkingLabel: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#9ca3af",
+    color: "#a0a0a0",
     fontStyle: "italic",
   },
   taskCompletedWrap: {
@@ -1967,7 +1967,7 @@ const styles = StyleSheet.create({
   taskCompletedStepText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#6b7280",
+    color: "#888888",
     flex: 1,
     lineHeight: 17,
   },
@@ -2013,14 +2013,14 @@ const styles = StyleSheet.create({
   welcomeGreeting: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: "#e5e7eb",
+    color: "#e0e0e0",
     letterSpacing: -0.5,
     lineHeight: 34,
   },
   welcomeSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 16,
-    color: "#6b7280",
+    color: "#888888",
     lineHeight: 22,
   },
   suggestionScrollView: {
@@ -2033,17 +2033,17 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     width: 160,
-    backgroundColor: "#111827",
+    backgroundColor: "#242424",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#2a2a2a",
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   suggestionChipText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#6b7280",
+    color: "#888888",
     lineHeight: 18,
   },
   toolsBadge: {
@@ -2053,7 +2053,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
     alignItems: "center",
     justifyContent: "center",
   },

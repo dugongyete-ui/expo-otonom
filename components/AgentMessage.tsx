@@ -53,7 +53,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.titleRow}>
-            <Ionicons name="rocket" size={15} color="#2563eb" />
+            <Ionicons name="rocket" size={15} color="#4a7cf0" />
             <Text style={styles.titleText} numberOfLines={2}>
               {event.title || ""}
             </Text>
@@ -125,12 +125,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#2a2a2a",
   },
   agentBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#a0a0a0",
   },
   agentBadgeAgent: {
     backgroundColor: "rgba(37,99,235,0.1)",
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(37,99,235,0.2)",
   },
   agentBadgeTextAgent: {
-    color: "#2563eb",
+    color: "#4a7cf0",
   },
   agentBadgeWait: {
     backgroundColor: "rgba(217,119,6,0.1)",
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   cursor: {
-    color: "#2563eb",
+    color: "#4a7cf0",
     fontSize: 14,
   },
   titleRow: {

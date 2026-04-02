@@ -152,8 +152,8 @@ function renderInline(text: string, color: string): React.ReactNode[] {
           key={`icode-${key++}`}
           style={{
             fontFamily: "monospace",
-            backgroundColor: isBg ? "rgba(255,255,255,0.1)" : "#f1f5f9",
-            color: isBg ? "#93c5fd" : "#1e40af",
+            backgroundColor: "rgba(255,255,255,0.08)",
+            color: "#88b4ff",
             fontSize: 12,
             paddingHorizontal: 5,
             borderRadius: 4,
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   },
   askBadgeText: {
     fontSize: 12,
-    color: "#92400e",
+    color: "#c8a060",
   },
   messageText: {
     fontFamily: "Inter_400Regular",

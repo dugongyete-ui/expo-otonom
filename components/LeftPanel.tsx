@@ -20,12 +20,24 @@ interface Session {
   timestamp: number;
   preview?: string;
   is_running?: boolean;
+  updated_at?: number;
 }
 
 interface LeftPanelProps {
   isOpen: boolean;
   onToggle: () => void;
   onNewSession: (sessionId: string) => void;
+}
+
+const STALE_THRESHOLD_MS = 3 * 60 * 1000;
+
+function isSessionActuallyRunning(session: Session): boolean {
+  if (!session.is_running) return false;
+  if (session.updated_at) {
+    const age = Date.now() - session.updated_at;
+    if (age > STALE_THRESHOLD_MS) return false;
+  }
+  return true;
 }
 
 export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
@@ -49,12 +61,18 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
           const title = rawMsg.trim()
             ? (rawMsg.length > 48 ? rawMsg.slice(0, 48) + "…" : rawMsg)
             : `Session ${s.session_id.slice(-6)}`;
+          const updatedAt = s.updated_at
+            ? new Date(s.updated_at).getTime()
+            : s.startedAt
+            ? new Date(s.startedAt).getTime()
+            : undefined;
           return {
             session_id: s.session_id,
             title,
             timestamp: s.startedAt || Date.now(),
             preview: s.eventCount ? `${s.eventCount} events` : undefined,
             is_running: s.is_running || false,
+            updated_at: updatedAt,
           };
         });
         setSessions(mapped);
@@ -68,7 +86,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
 
   useEffect(() => {
     fetchSessions();
-    const interval = setInterval(fetchSessions, 5000);
+    const interval = setInterval(fetchSessions, 8000);
     return () => clearInterval(interval);
   }, [fetchSessions]);
 
@@ -131,14 +149,14 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
     }
   }, []);
 
-  const runningCount = sessions.filter(s => s.is_running).length;
+  const runningCount = sessions.filter(s => isSessionActuallyRunning(s)).length;
 
   if (!isOpen) {
     return (
       <View style={styles.collapsedContainer}>
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle}>
           <View>
-            <Ionicons name="menu" size={20} color="#8a8780" />
+            <Ionicons name="menu" size={20} color="#888888" />
             {runningCount > 0 && (
               <View style={styles.badgeSmall}>
                 <Text style={styles.badgeSmallText}>{runningCount}</Text>
@@ -155,13 +173,13 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle}>
-          <Ionicons name="chevron-back" size={20} color="#8a8780" />
+          <Ionicons name="chevron-back" size={20} color="#888888" />
         </TouchableOpacity>
 
         {runningCount > 0 && (
           <View style={styles.runningBadge}>
             <View style={styles.runningDot} />
-            <Text style={styles.runningBadgeText}>
+            <Text style={styles.runningBadgeText} numberOfLines={1}>
               {runningCount} {t("Background agent running")}
             </Text>
           </View>
@@ -174,7 +192,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         onPress={handleNewTask}
         activeOpacity={0.7}
       >
-        <Ionicons name="add" size={18} color="#6a6762" />
+        <Ionicons name="add" size={18} color="#888888" />
         <Text style={styles.newTaskButtonText}>{t("New Task")}</Text>
         <View style={styles.shortcutKeys}>
           <Text style={styles.shortcutKey}>⌘K</Text>
@@ -184,7 +202,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
       {/* Sessions List */}
       {isLoading && sessions.length === 0 ? (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="small" color="#8a8780" />
+          <ActivityIndicator size="small" color="#888888" />
         </View>
       ) : sessions.length > 0 ? (
         <ScrollView
@@ -196,6 +214,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
             <SessionItem
               key={session.session_id}
               session={session}
+              isRunning={isSessionActuallyRunning(session)}
               onSelect={() => handleSessionSelect(session.session_id)}
               onDelete={() => handleDeleteSession(session.session_id)}
               onShare={() => handleShareSession(session.session_id)}
@@ -206,8 +225,8 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         <View style={styles.emptyState}>
           <Ionicons
             name="chatbubble-outline"
-            size={40}
-            color="#8a8780"
+            size={36}
+            color="#555555"
           />
           <Text style={styles.emptyStateText}>{t("Create a task to get started")}</Text>
         </View>
@@ -220,7 +239,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
           onPress={() => setShowClearConfirm(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="trash-outline" size={16} color="#8a8780" />
+          <Ionicons name="trash-outline" size={14} color="#666666" />
           <Text style={styles.clearButtonText}>{t("Clear All History")}</Text>
         </TouchableOpacity>
       )}
@@ -230,7 +249,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         <View style={styles.confirmDialog}>
           <View style={styles.confirmDialogContent}>
             <View style={styles.confirmDialogIcon}>
-              <Ionicons name="trash" size={24} color="#dc2626" />
+              <Ionicons name="trash" size={22} color="#e05050" />
             </View>
             <Text style={styles.confirmDialogTitle}>{t("Clear All History")}</Text>
             <Text style={styles.confirmDialogMessage}>
@@ -255,7 +274,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="trash" size={16} color="#FFFFFF" />
+                    <Ionicons name="trash" size={14} color="#FFFFFF" />
                     <Text style={styles.confirmDialogDeleteText}>Delete All</Text>
                   </>
                 )}
@@ -270,12 +289,13 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
 
 interface SessionItemProps {
   session: Session;
+  isRunning: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onShare: () => void;
 }
 
-function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps) {
+function SessionItem({ session, isRunning, onSelect, onDelete, onShare }: SessionItemProps) {
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -297,7 +317,7 @@ function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps)
     >
       <View style={styles.sessionItemContent}>
         <View style={styles.sessionItemTitleRow}>
-          {session.is_running && (
+          {isRunning && (
             <View style={styles.runningDotSmall} />
           )}
           <Text style={styles.sessionItemTitle} numberOfLines={1}>
@@ -316,14 +336,14 @@ function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps)
         onPress={onShare}
         activeOpacity={0.7}
       >
-        <Ionicons name="share-social-outline" size={15} color="#8a8780" />
+        <Ionicons name="share-social-outline" size={14} color="#666666" />
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.sessionItemAction}
         onPress={onDelete}
         activeOpacity={0.7}
       >
-        <Ionicons name="close" size={16} color="#8a8780" />
+        <Ionicons name="close" size={14} color="#666666" />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -332,13 +352,13 @@ function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0d1117",
-    paddingHorizontal: 12,
+    backgroundColor: "#1a1a1a",
+    paddingHorizontal: 10,
     paddingVertical: 12,
   },
   collapsedContainer: {
     flex: 1,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#1a1a1a",
     justifyContent: "flex-start",
     alignItems: "center",
     paddingVertical: 12,
@@ -347,7 +367,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -3,
     right: -3,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4a7cf0",
     borderRadius: 7,
     width: 14,
     height: 14,
@@ -356,69 +376,69 @@ const styles = StyleSheet.create({
   },
   badgeSmallText: {
     color: "#FFFFFF",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "700",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 10,
     height: 40,
     gap: 8,
   },
   toggleButton: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#252525",
   },
   runningBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(48,209,88,0.1)",
+    backgroundColor: "rgba(50,200,80,0.08)",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 8,
     flex: 1,
   },
   runningDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#30D158",
-  },
-  runningDotSmall: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#30D158",
-    marginRight: 4,
+    backgroundColor: "#40c060",
+  },
+  runningDotSmall: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#40c060",
+    marginRight: 5,
+    flexShrink: 0,
   },
   runningBadgeText: {
-    color: "#30D158",
+    color: "#40c060",
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
     flex: 1,
   },
   newTaskButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
+    backgroundColor: "#252525",
     borderRadius: 10,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#d1d5db",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 16,
+    marginBottom: 14,
     gap: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
   },
   newTaskButtonText: {
     flex: 1,
-    color: "#6b7280",
+    color: "#888888",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -427,28 +447,26 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shortcutKey: {
-    color: "#4b5563",
-    fontSize: 11,
-    backgroundColor: "#1f2937",
-    paddingHorizontal: 6,
+    color: "#555555",
+    fontSize: 10,
+    backgroundColor: "#333333",
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
   },
   sessionsList: {
     flex: 1,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sessionItem: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "transparent",
-    borderRadius: 9,
+    borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 2,
     gap: 6,
-    borderWidth: 1,
-    borderColor: "transparent",
   },
   sessionItemContent: {
     flex: 1,
@@ -459,30 +477,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sessionItemTitle: {
-    color: "#374151",
-    fontSize: 13,
+    color: "#c0c0c0",
+    fontSize: 12,
     fontWeight: "400",
     flex: 1,
   },
   sessionItemPreview: {
-    color: "#6b7280",
-    fontSize: 12,
+    color: "#606060",
+    fontSize: 11,
     marginTop: 2,
   },
   sessionItemTime: {
-    color: "#9ca3af",
-    fontSize: 11,
+    color: "#555555",
+    fontSize: 10,
+    flexShrink: 0,
   },
   sessionItemDelete: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
   },
   sessionItemAction: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
@@ -491,26 +510,29 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 10,
   },
   emptyStateText: {
-    color: "#9ca3af",
+    color: "#606060",
     fontSize: 12,
     fontWeight: "400",
+    textAlign: "center",
   },
   clearButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#252525",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    paddingVertical: 9,
+    gap: 7,
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#333333",
   },
   clearButtonText: {
-    color: "#6b7280",
-    fontSize: 14,
+    color: "#666666",
+    fontSize: 13,
     fontWeight: "500",
   },
   confirmDialog: {
@@ -519,79 +541,77 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.35)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 1000,
   },
   confirmDialogContent: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
+    backgroundColor: "#252525",
+    borderRadius: 14,
     padding: 20,
-    width: "80%",
+    width: "88%",
     maxWidth: 300,
     gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 32,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
   },
   confirmDialogIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(220,38,38,0.1)",
+    backgroundColor: "rgba(220,60,60,0.12)",
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
   },
   confirmDialogTitle: {
-    color: "#111827",
-    fontSize: 16,
+    color: "#e0e0e0",
+    fontSize: 15,
     fontWeight: "600",
     textAlign: "center",
   },
   confirmDialogMessage: {
-    color: "#6b7280",
-    fontSize: 13,
+    color: "#888888",
+    fontSize: 12,
     textAlign: "center",
+    lineHeight: 17,
   },
   confirmDialogButtons: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 12,
+    marginTop: 4,
   },
   confirmDialogCancel: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#404040",
     alignItems: "center",
     justifyContent: "center",
   },
   confirmDialogCancelText: {
-    color: "#374151",
-    fontSize: 14,
+    color: "#a0a0a0",
+    fontSize: 13,
     fontWeight: "500",
   },
   confirmDialogDelete: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#dc2626",
+    backgroundColor: "#c03030",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 6,
   },
   confirmDialogDeleteDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   confirmDialogDeleteText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
   },
 });
