@@ -83,7 +83,7 @@ export function BrowserPanel({
     if (sessionState === "ready" && sessionId && !shouldSkipPolling) {
       autoRefreshRef.current = setInterval(() => {
         refreshScreenshot();
-      }, 5000);
+      }, 2000);
       return () => {
         if (autoRefreshRef.current) {
           clearInterval(autoRefreshRef.current);
@@ -122,16 +122,17 @@ export function BrowserPanel({
     }
   }, [agentVncSession, refreshScreenshot]);
 
-  // Update screenshot from agent browser events
+  // Update screenshot from agent browser events — always update, not just when idle
   useEffect(() => {
     if (lastBrowserEvent?.screenshot_b64) {
       setScreenshotUri(lastBrowserEvent.screenshot_b64);
-      if (sessionState === "idle") {
+      // Auto-activate panel to show agent's browser without requiring manual session start
+      if (sessionState === "idle" || sessionState === "error") {
         setSessionState("ready");
         setStatusMsg("Browser aktif dari agen");
       }
     }
-  }, [lastBrowserEvent, sessionState]);
+  }, [lastBrowserEvent]);
 
   const startSession = useCallback(async () => {
     setSessionState("creating");
@@ -265,18 +266,29 @@ export function BrowserPanel({
         {sessionState === "idle" && (
           <View style={styles.emptyState}>
             <Ionicons name="globe-outline" size={32} color="#2A2A32" />
-            <Text style={styles.emptyTitle}>E2B Desktop</Text>
-            <Text style={styles.emptyText}>
-              Buat sandbox desktop cloud untuk browser automation secara visual
-            </Text>
-            <TouchableOpacity
-              style={styles.startButton}
-              onPress={startSession}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="play" size={14} color="#fff" />
-              <Text style={styles.startButtonText}>Mulai Desktop</Text>
-            </TouchableOpacity>
+            {agentVncSession ? (
+              <>
+                <Text style={styles.emptyTitle}>Desktop Agen Aktif</Text>
+                <Text style={styles.emptyText}>
+                  Agen sedang menggunakan desktop ini. Screenshot akan muncul otomatis saat agen berinteraksi dengan browser.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>E2B Desktop</Text>
+                <Text style={styles.emptyText}>
+                  Buat sandbox desktop cloud untuk browser automation secara visual
+                </Text>
+                <TouchableOpacity
+                  style={styles.startButton}
+                  onPress={startSession}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="play" size={14} color="#fff" />
+                  <Text style={styles.startButtonText}>Mulai Desktop</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
 
@@ -427,14 +439,17 @@ export function BrowserPanel({
                 <Text style={styles.actionText}>{Platform.OS === "web" ? "Fullscreen" : "Control"}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.actionButton, styles.dangerButton]}
-                onPress={destroyCurrentSession}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close-circle-outline" size={14} color="#FF453A" />
-                <Text style={[styles.actionText, styles.dangerText]}>Tutup</Text>
-              </TouchableOpacity>
+              {/* Only show Destroy button for manually-started sessions, not the agent's session */}
+              {sessionId && sessionId !== agentVncSession?.e2bSessionId && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.dangerButton]}
+                  onPress={destroyCurrentSession}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close-circle-outline" size={14} color="#FF453A" />
+                  <Text style={[styles.actionText, styles.dangerText]}>Tutup</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}

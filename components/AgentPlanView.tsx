@@ -215,9 +215,15 @@ function StepRow({ step }: { step: AgentPlanStep }) {
 export function AgentPlanView({ plan, notifyMessages }: AgentPlanViewProps) {
   const steps = plan.steps || [];
 
+  // Only show steps that are active (running, completed, failed).
+  // Hide future pending steps — they'll appear progressively as the agent works.
+  const visibleSteps = steps.filter(
+    (s) => s.status === "running" || s.status === "completed" || s.status === "failed"
+  );
+
   return (
     <View style={styles.container}>
-      {steps.map((step, index) => (
+      {visibleSteps.map((step, index) => (
         <StepRow key={step.id || index} step={step} />
       ))}
       {notifyMessages && notifyMessages.length > 0 && (
