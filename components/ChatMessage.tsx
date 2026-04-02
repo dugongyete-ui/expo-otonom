@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import { Ionicons } from "@expo/vector-icons";
+import { HelpIcon, AlertCircleIcon, CheckIcon, CopyOutlineIcon } from "@/components/icons/SvgIcon";
 import { CodeBlock } from "@/components/CodeBlock";
 import type { ChatMessage as ChatMessageType } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
@@ -207,7 +207,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
         <View style={styles.avatarContainer}>
           {isAsk ? (
             <View style={[styles.avatar, styles.avatarAsk]}>
-              <Ionicons name="help" size={14} color="#FFFFFF" />
+              <HelpIcon size={14} color="#FFFFFF" />
             </View>
           ) : (
             <Image
@@ -245,7 +245,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
 
           {message.error && (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={14} color={COLORS.errorText} />
+              <AlertCircleIcon size={14} color={COLORS.errorText} />
               <Text style={styles.errorText}>{message.error}</Text>
             </View>
           )}
@@ -257,11 +257,10 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
             style={styles.actionButton}
             activeOpacity={0.6}
           >
-            <Ionicons
-              name={copied ? "checkmark" : "copy-outline"}
-              size={14}
-              color={copied ? "#4ade80" : COLORS.iconMuted}
-            />
+            {copied
+              ? <CheckIcon size={14} color="#4ade80" />
+              : <CopyOutlineIcon size={14} color={COLORS.iconMuted} />
+            }
           </TouchableOpacity>
         )}
       </View>

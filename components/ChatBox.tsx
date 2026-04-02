@@ -8,12 +8,12 @@ import {
   Image,
   ScrollView,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
+import { ImageOutlineIcon, FlashIcon, ArrowUpIcon, StopIcon, CloseCircleIcon } from "@/components/icons/SvgIcon";
 
 interface ChatBoxProps {
   value: string;
@@ -104,7 +104,7 @@ export function ChatBox({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <Ionicons name="close-circle" size={18} color="#f87171" />
+                <CloseCircleIcon size={18} color="#f87171" />
               </TouchableOpacity>
             </View>
           ))}
@@ -134,10 +134,12 @@ export function ChatBox({
             style={styles.toolbarBtn}
             activeOpacity={0.6}
           >
-            <Ionicons name="image-outline" size={20} color={COLORS.iconMuted} />
+            <ImageOutlineIcon size={20} color={COLORS.iconMuted} />
           </TouchableOpacity>
           {isAgentMode && (
-            <Ionicons name="flash" size={18} color="#d97706" style={styles.modeIcon} />
+            <View style={styles.modeIcon}>
+              <FlashIcon size={18} color="#d97706" />
+            </View>
           )}
         </View>
 
@@ -149,13 +151,13 @@ export function ChatBox({
               activeOpacity={0.6}
             >
               <View style={[styles.sendIconContainer]}>
-                <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                <ArrowUpIcon size={16} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
           ) : isLoading && !isWaitingForUser ? (
             <TouchableOpacity onPress={onStop} style={styles.toolbarBtn} activeOpacity={0.6}>
               <View style={styles.stopIcon}>
-                <Ionicons name="stop" size={14} color={COLORS.stopIcon} />
+                <StopIcon size={14} color={COLORS.stopIcon} />
               </View>
             </TouchableOpacity>
           ) : (
@@ -165,7 +167,7 @@ export function ChatBox({
               disabled={true}
             >
               <View style={[styles.sendIconContainer, styles.sendIconDisabled]}>
-                <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                <ArrowUpIcon size={16} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
           )}
@@ -250,6 +252,8 @@ const styles = StyleSheet.create({
   },
   modeIcon: {
     marginLeft: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendButtonDisabled: {
     opacity: 0.4,

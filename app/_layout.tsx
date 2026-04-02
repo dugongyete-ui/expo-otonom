@@ -7,7 +7,6 @@ import {
 } from "@expo-google-fonts/inter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, usePathname } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
@@ -141,7 +140,6 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    ...Ionicons.font,
   });
   const [showSplash, setShowSplash] = useState(true);
 

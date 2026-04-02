@@ -12,7 +12,11 @@ import {
   Image,
   Linking,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  LockClosedIcon, ImageOutlineIcon, DocumentTextIcon, CheckCircleIcon,
+  CircleOutlineIcon, ListIcon, ExtensionPuzzleIcon, ChatbubbleIcon,
+  AlertCircleIcon, ChevronUpIcon, ChevronDownIcon,
+} from "@/components/icons/SvgIcon";
 import type { AgentEvent, ToolContent } from "@/lib/chat";
 import { getToolDisplayInfo, getToolActionVerb, getToolPrimaryArg, getToolCategory } from "@/lib/tool-constants";
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, McpIcon, SpinningIcon, SuccessIcon, ErrorIcon } from "./icons/ToolIcons";
@@ -106,7 +110,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
           onPress={() => Linking.openURL(url)}
           activeOpacity={0.7}
         >
-          <Ionicons name="lock-closed" size={10} color="#34C759" />
+          <LockClosedIcon size={10} color="#34C759" />
           <Text style={[styles.browserUrl, { textDecorationLine: "underline" }]} numberOfLines={1}>{url}</Text>
         </TouchableOpacity>
       ) : null}
@@ -130,7 +134,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
         </ScrollView>
       ) : validScreenshot && imgError ? (
         <View style={[styles.screenshotWrapper, { alignItems: "center", justifyContent: "center", height: 60 }]}>
-          <Ionicons name="image-outline" size={20} color="#8a8780" />
+          <ImageOutlineIcon size={20} color="#8a8780" />
           <Text style={{ fontSize: 11, color: "#a0a0a0", marginTop: 4 }}>Screenshot tersedia</Text>
         </View>
       ) : null}
@@ -144,7 +148,7 @@ function FileContent({ file, content, operation }: { file?: string; content?: st
     <View style={styles.fileBody}>
       {displayFile ? (
         <View style={styles.fileHeader}>
-          <Ionicons name="document-text-outline" size={11} color="#FFD60A" />
+          <DocumentTextIcon size={11} color="#FFD60A" />
           <Text style={styles.fileName} numberOfLines={1}>{displayFile}</Text>
           {operation ? <Text style={styles.fileOp}>{operation}</Text> : null}
         </View>
@@ -168,11 +172,10 @@ function TodoContent({ content }: { content?: string }) {
         const text = line.replace(/^\s*-?\s*\[[ x]\]\s*/i, "").replace(/^#+\s*/, "").trim();
         return (
           <View key={i} style={styles.todoItem}>
-            <Ionicons
-              name={checked ? "checkmark-circle" : "ellipse-outline"}
-              size={14}
-              color={checked ? "#30D158" : "#555555"}
-            />
+            {checked
+              ? <CheckCircleIcon size={14} color="#30D158" />
+              : <CircleOutlineIcon size={14} color="#555555" />
+            }
             <Text style={[styles.todoText, checked && styles.todoChecked]}>{text}</Text>
           </View>
         );
@@ -188,7 +191,7 @@ function TaskContent({ content }: { content?: string }) {
     <View style={styles.todoBody}>
       {lines.map((line, i) => (
         <View key={i} style={styles.todoItem}>
-          <Ionicons name="list-circle-outline" size={14} color="#0A84FF" />
+          <ListIcon size={14} color="#0A84FF" />
           <Text style={styles.todoText}>{line.trim()}</Text>
         </View>
       ))}
@@ -201,7 +204,7 @@ function McpContent({ tool, args, result }: { tool?: string; args?: string; resu
     <View style={styles.mcpBody}>
       {tool ? (
         <View style={styles.mcpHeader}>
-          <Ionicons name="extension-puzzle-outline" size={11} color="#64D2FF" />
+          <ExtensionPuzzleIcon size={11} color="#64D2FF" />
           <Text style={styles.mcpToolName}>{tool}</Text>
         </View>
       ) : null}
@@ -224,11 +227,7 @@ function MessageContent({ text, isAsk }: { text?: string; isAsk?: boolean }) {
   return (
     <View style={styles.messageBody}>
       <View style={styles.messageHeader}>
-        <Ionicons
-          name={isAsk ? "chatbubble-ellipses-outline" : "chatbubble-outline"}
-          size={11}
-          color="#7c3aed"
-        />
+        <ChatbubbleIcon size={11} color="#7c3aed" />
         <Text style={styles.messageLabel}>{isAsk ? "Question" : "Notification"}</Text>
       </View>
       <Text style={styles.messageText}>{text}</Text>
@@ -326,8 +325,7 @@ function renderCardIcon(functionName: string, color: string) {
     case "mcp":
       return <McpIcon size={13} color={color} />;
     default: {
-      const { icon } = getToolDisplayInfo(functionName);
-      return <Ionicons name={icon} size={13} color={color} />;
+      return <ShellIcon size={13} color={color} />;
     }
   }
 }
@@ -392,19 +390,19 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
               {isCalled && <SuccessIcon size={14} color="#34C759" />}
               {isError && <ErrorIcon size={14} color="#dc2626" />}
               {(hasContent || isCalling) && (
-                <Ionicons
-                  name={expanded ? "chevron-up" : "chevron-down"}
-                  size={12}
-                  color="#a0a0a0"
-                  style={{ marginLeft: 4 }}
-                />
+                <View style={{ marginLeft: 4 }}>
+                  {expanded
+                    ? <ChevronUpIcon size={12} color="#a0a0a0" />
+                    : <ChevronDownIcon size={12} color="#a0a0a0" />
+                  }
+                </View>
               )}
             </View>
           </TouchableOpacity>
 
           {isError && event.function_result ? (
             <View style={styles.errorBody}>
-              <Ionicons name="alert-circle" size={13} color="#dc2626" />
+              <AlertCircleIcon size={13} color="#dc2626" />
               <Text style={styles.errorText} numberOfLines={3}>
                 {event.function_result}
               </Text>

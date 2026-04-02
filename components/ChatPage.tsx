@@ -4,7 +4,13 @@ import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
 import { AgentPlanView } from "./AgentPlanView";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  MenuIcon, TerminalIcon, ShareIcon, LogOutIcon, EllipsisIcon,
+  FlashIcon, ChatbubbleIcon, HardwareChipIcon, SettingsIcon, ServerIcon,
+  AlertCircleIcon, CheckIcon, HelpCircleIcon, SparklesIcon,
+  CheckCircleIcon, CloseCircleIcon, DocumentTextIcon,
+  ChevronUpIcon, ChevronDownIcon,
+} from "@/components/icons/SvgIcon";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
 import { processAgentEvent } from "../lib/agent-event-processor";
 import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
@@ -151,24 +157,24 @@ const thinkingStyles = StyleSheet.create({
   },
 });
 
-const TOOL_ICON_MAP: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  browser_navigate: { icon: "globe-outline", label: "Navigasi halaman" },
-  browser_view: { icon: "eye-outline", label: "Melihat halaman" },
-  browser_click: { icon: "finger-print-outline", label: "Mengklik elemen" },
-  browser_type: { icon: "create-outline", label: "Mengetik teks" },
-  browser_scroll: { icon: "arrow-down-outline", label: "Scroll halaman" },
-  shell_exec: { icon: "terminal-outline", label: "Menjalankan perintah" },
-  shell_view: { icon: "terminal-outline", label: "Melihat output" },
-  web_search: { icon: "search-outline", label: "Mencari informasi" },
-  file_read: { icon: "document-text-outline", label: "Membaca file" },
-  file_write: { icon: "save-outline", label: "Menulis file" },
-  message_notify_user: { icon: "chatbubble-outline", label: "Notifikasi" },
-  message_ask_user: { icon: "help-circle-outline", label: "Pertanyaan" },
+const TOOL_LABEL_MAP: Record<string, string> = {
+  browser_navigate: "Navigasi halaman",
+  browser_view: "Melihat halaman",
+  browser_click: "Mengklik elemen",
+  browser_type: "Mengetik teks",
+  browser_scroll: "Scroll halaman",
+  shell_exec: "Menjalankan perintah",
+  shell_view: "Melihat output",
+  web_search: "Mencari informasi",
+  file_read: "Membaca file",
+  file_write: "Menulis file",
+  message_notify_user: "Notifikasi",
+  message_ask_user: "Pertanyaan",
 };
 
 function InlineToolStep({ tool }: { tool: any }) {
   const fnName = tool.function_name || tool.name || "tool";
-  const cfg = TOOL_ICON_MAP[fnName] || { icon: "construct-outline" as keyof typeof Ionicons.glyphMap, label: fnName };
+  const label = TOOL_LABEL_MAP[fnName] || fnName;
   const isRunning = tool.status === "calling";
   const isDone = tool.status === "called";
   const isError = tool.status === "error";
@@ -176,14 +182,14 @@ function InlineToolStep({ tool }: { tool: any }) {
   return (
     <View style={inlineToolStyles.row}>
       <View style={[inlineToolStyles.iconWrap, isError && inlineToolStyles.iconWrapError, isDone && inlineToolStyles.iconWrapDone]}>
-        <Ionicons name={cfg.icon} size={10} color={isError ? "#f87171" : "#888888"} />
+        <TerminalIcon size={10} color={isError ? "#f87171" : "#888888"} />
       </View>
       <Text style={[inlineToolStyles.label, isError && inlineToolStyles.labelError]} numberOfLines={1}>
-        {cfg.label}
+        {label}
       </Text>
       {isRunning && <View style={inlineToolStyles.runningDot} />}
-      {isDone && <Ionicons name="checkmark" size={10} color="#4ade80" />}
-      {isError && <Ionicons name="close" size={10} color="#f87171" />}
+      {isDone && <CheckIcon size={10} color="#4ade80" />}
+      {isError && <CloseCircleIcon size={10} color="#f87171" />}
     </View>
   );
 }
@@ -1226,7 +1232,7 @@ export function ChatPage({
           style={styles.settingsBtn}
           hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
         >
-          <Ionicons name="menu-outline" size={22} color="#b0b0b0" />
+          <MenuIcon size={22} color="#b0b0b0" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Image
@@ -1240,11 +1246,10 @@ export function ChatPage({
             hitSlop={{ top: 6, left: 6, right: 6, bottom: 6 }}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name={isAgentMode ? "flash" : "chatbubble-ellipses-outline"}
-              size={10}
-              color={isAgentMode ? "#d97706" : "#4a7cf0"}
-            />
+            {isAgentMode
+              ? <FlashIcon size={10} color="#d97706" />
+              : <ChatbubbleIcon size={10} color="#4a7cf0" />
+            }
             <Text style={[styles.modeBadgeText, isAgentMode ? styles.modeBadgeTextAgent : styles.modeBadgeTextChat]}>
               {isAgentMode ? "Agent" : "Chat"}
             </Text>
@@ -1269,7 +1274,7 @@ export function ChatPage({
               hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
             >
               <View>
-                <Ionicons name="terminal-outline" size={20} color={activeToolsCount > 0 ? "#4a7cf0" : "#a0a0a0"} />
+                <TerminalIcon size={20} color={activeToolsCount > 0 ? "#4a7cf0" : "#a0a0a0"} />
                 {toolsCount > 0 && (
                   <View style={styles.toolsBadge}>
                     <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
@@ -1284,8 +1289,7 @@ export function ChatPage({
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
             disabled={isSharing || messages.length === 0}
           >
-            <Ionicons
-              name={isShared ? "share-social" : "share-social-outline"}
+            <ShareIcon
               size={20}
               color={messages.length === 0 ? "#555555" : isShared ? "#4a7cf0" : "#a0a0a0"}
             />
@@ -1295,14 +1299,14 @@ export function ChatPage({
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Ionicons name="log-out-outline" size={20} color="#a0a0a0" />
+            <LogOutIcon size={20} color="#a0a0a0" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSettings(true)}
             style={styles.settingsBtn}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color="#a0a0a0" />
+            <EllipsisIcon size={20} color="#a0a0a0" />
           </TouchableOpacity>
         </View>
       </View>
@@ -1350,7 +1354,7 @@ export function ChatPage({
                 setShowModelSettings(true);
               }}
             >
-              <Ionicons name="options-outline" size={16} color="#4a7cf0" />
+              <SettingsIcon size={16} color="#4a7cf0" />
               <Text style={[styles.logoutBtnText, { color: "#4a7cf0" }]}>Model & Config</Text>
             </TouchableOpacity>
 
@@ -1361,7 +1365,7 @@ export function ChatPage({
                 setShowMCPPanel(true);
               }}
             >
-              <Ionicons name="server-outline" size={16} color="#4a7cf0" />
+              <ServerIcon size={16} color="#4a7cf0" />
               <Text style={[styles.logoutBtnText, { color: "#4a7cf0" }]}>MCP Servers</Text>
             </TouchableOpacity>
 
@@ -1372,7 +1376,7 @@ export function ChatPage({
                 await logout();
               }}
             >
-              <Ionicons name="log-out-outline" size={16} color="#dc2626" />
+              <LogOutIcon size={16} color="#dc2626" />
               <Text style={styles.logoutBtnText}>{translate("Logout")}</Text>
             </TouchableOpacity>
           </View>
@@ -1430,7 +1434,7 @@ export function ChatPage({
               <View style={styles.agentTurnBlock}>
                 <View style={styles.agentTurnHeader}>
                   <View style={styles.agentTurnIcon}>
-                    <Ionicons name="hardware-chip-outline" size={13} color="#ffffff" />
+                    <HardwareChipIcon size={13} color="#ffffff" />
                   </View>
                   <Text style={styles.agentTurnName}>Dzeck</Text>
                   {isPlanRunning && !isPlanDone && (
@@ -1485,7 +1489,7 @@ export function ChatPage({
               <View style={styles.fileCardsBlock}>
                 <View style={styles.agentTurnHeader}>
                   <View style={styles.agentTurnIcon}>
-                    <Ionicons name="hardware-chip-outline" size={13} color="#ffffff" />
+                    <HardwareChipIcon size={13} color="#ffffff" />
                   </View>
                   <Text style={styles.agentTurnName}>Dzeck</Text>
                 </View>
@@ -1497,14 +1501,14 @@ export function ChatPage({
                     onPress={() => openFile(f)}
                   >
                     <View style={styles.fileDocIconWrap}>
-                      <Ionicons name="document-text-outline" size={20} color="#4a7cf0" />
+                      <DocumentTextIcon size={20} color="#4a7cf0" />
                     </View>
                     <View style={styles.fileDocInfo}>
                       <Text style={styles.fileDocName} numberOfLines={1}>{f.filename}</Text>
                       <Text style={styles.fileDocType}>{getFileExt(f.filename)}</Text>
                     </View>
                     <View style={styles.fileDocDownloadBtn}>
-                      <Ionicons name="download-outline" size={16} color="#4a7cf0" />
+                      <ShareIcon size={16} color="#4a7cf0" />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -1550,20 +1554,19 @@ export function ChatPage({
                 activeOpacity={0.8}
               >
                 <View style={styles.taskCompletedIcon}>
-                  <Ionicons name="checkmark" size={13} color="#ffffff" />
+                  <CheckIcon size={13} color="#ffffff" />
                 </View>
                 <Text style={styles.taskCompletedText}>Task Completed</Text>
-                <Ionicons
-                  name={taskCompletedExpanded ? "chevron-up" : "chevron-down"}
-                  size={14}
-                  color="#16a34a"
-                />
+                {taskCompletedExpanded
+                  ? <ChevronUpIcon size={14} color="#16a34a" />
+                  : <ChevronDownIcon size={14} color="#16a34a" />
+                }
               </TouchableOpacity>
               {taskCompletedExpanded && completedSteps.length > 0 && (
                 <View style={styles.taskCompletedSteps}>
                   {completedSteps.map((step, i) => (
                     <View key={step.id || i} style={styles.taskCompletedStepRow}>
-                      <Ionicons name="checkmark-circle" size={13} color="#16a34a" />
+                      <CheckCircleIcon size={13} color="#16a34a" />
                       <Text style={styles.taskCompletedStepText} numberOfLines={2}>
                         {step.description}
                       </Text>
