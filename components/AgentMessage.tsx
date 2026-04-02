@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, Text, StyleSheet, Animated, Image } from "react-native";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import type { AgentEvent } from "@/lib/chat";
 
 interface AgentMessageProps {
@@ -32,9 +32,11 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.agentHeader}>
-            <View style={styles.agentIcon}>
-              <Ionicons name="flash" size={12} color="#FFFFFF" />
-            </View>
+            <Image
+              source={require("../assets/images/dzeck-logo.jpg")}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
             <Text style={styles.agentName}>Dzeck</Text>
             <View style={[styles.agentBadge, styles.agentBadgeAgent]}>
               <Text style={[styles.agentBadgeText, styles.agentBadgeTextAgent]}>Agent</Text>
@@ -53,7 +55,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.titleRow}>
-            <Ionicons name="rocket" size={15} color="#4a7cf0" />
+            <NativeIcon name="flash" size={15} color="#4a7cf0" />
             <Text style={styles.titleText} numberOfLines={2}>
               {event.title || ""}
             </Text>
@@ -66,10 +68,12 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.agentHeader}>
-            <View style={styles.agentIcon}>
-              <Ionicons name="help-circle" size={12} color="#FFFFFF" />
-            </View>
-            <Text style={styles.agentName}>dzeck</Text>
+            <Image
+              source={require("../assets/images/dzeck-logo.jpg")}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
+            <Text style={styles.agentName}>Dzeck</Text>
             <View style={[styles.agentBadge, styles.agentBadgeWait]}>
               <Text style={[styles.agentBadgeText, styles.agentBadgeTextWait]}>Menunggu</Text>
             </View>
@@ -86,7 +90,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.errorRow}>
-            <Ionicons name="alert-circle" size={14} color="#dc2626" />
+            <NativeIcon name="alert-circle" size={14} color="#dc2626" />
             <Text style={styles.errorText}>{event.error || "Terjadi kesalahan"}</Text>
           </View>
         </View>
@@ -108,13 +112,11 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 6,
   },
-  agentIcon: {
+  avatarImage: {
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "#1a1916",
-    alignItems: "center",
-    justifyContent: "center",
+    overflow: "hidden",
   },
   agentName: {
     fontFamily: "Inter_700Bold",

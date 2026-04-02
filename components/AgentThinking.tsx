@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Animated } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 
 interface AgentThinkingProps {
   thinking: string;
@@ -80,7 +80,7 @@ export function AgentThinking({ thinking }: AgentThinkingProps) {
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <View style={styles.iconContainer}>
-        <Ionicons name="bulb-outline" size={12} color="#2563eb" />
+        <NativeIcon name="bulb-outline" size={12} color="#2563eb" />
       </View>
       <Text style={styles.text} numberOfLines={3}>
         {thinking}

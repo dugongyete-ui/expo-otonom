@@ -8,12 +8,12 @@ import {
   Image,
   ScrollView,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
-import { ImageOutlineIcon, FlashIcon, ArrowUpIcon, StopIcon, CloseCircleIcon } from "@/components/icons/SvgIcon";
+import { PaperclipIcon, FlashIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
 
 interface ChatBoxProps {
   value: string;
@@ -50,21 +50,23 @@ export function ChatBox({
       ? "Berikan tugas untuk Dzeck AI..."
       : "Kirim pesan ke Dzeck AI...";
 
-  const handleAttachImage = useCallback(async () => {
+  const handleAttachFile = useCallback(async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        allowsMultipleSelection: false,
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+        multiple: false,
       });
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        const isImage = asset.mimeType?.startsWith("image/") ?? false;
         const newAttachments = [
           ...attachments,
           {
             uri: asset.uri,
-            type: "image" as const,
-            name: asset.fileName || "image.jpg",
+            type: isImage ? ("image" as const) : ("file" as const),
+            name: asset.name || "file",
+            mimeType: asset.mimeType,
           },
         ];
         onAttachmentsChange?.(newAttachments);
@@ -73,7 +75,7 @@ export function ChatBox({
         }
       }
     } catch (error) {
-      console.error("Image picker error:", error);
+      console.error("File picker error:", error);
     }
   }, [attachments, onAttachmentsChange]);
 
@@ -99,7 +101,13 @@ export function ChatBox({
         >
           {attachments.map((att, i) => (
             <View key={i} style={styles.attachmentPreview}>
-              <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+              {att.type === "image" ? (
+                <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+              ) : (
+                <View style={styles.fileThumb}>
+                  <DocumentIcon size={22} color={COLORS.accent} />
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
@@ -130,11 +138,11 @@ export function ChatBox({
       <View style={styles.toolbar}>
         <View style={styles.toolbarLeft}>
           <TouchableOpacity
-            onPress={handleAttachImage}
+            onPress={handleAttachFile}
             style={styles.toolbarBtn}
             activeOpacity={0.6}
           >
-            <ImageOutlineIcon size={20} color={COLORS.iconMuted} />
+            <PaperclipIcon size={20} color={COLORS.iconMuted} />
           </TouchableOpacity>
           {isAgentMode && (
             <View style={styles.modeIcon}>
@@ -200,6 +208,16 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 10,
+  },
+  fileThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    backgroundColor: "#2a2a2a",
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
+    alignItems: "center",
+    justifyContent: "center",
   },
   removeAttachment: {
     position: "absolute",

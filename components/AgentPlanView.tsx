@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Animated,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import type { AgentPlan, AgentPlanStep, AgentEvent } from "@/lib/chat";
 
 interface AgentPlanViewProps {
@@ -14,7 +14,7 @@ interface AgentPlanViewProps {
   notifyMessages?: string[];
 }
 
-const toolIconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
+const toolIconMap: Record<string, string> = {
   web_search: "search-outline",
   web_browse: "globe-outline",
   browser_navigate: "globe-outline",
@@ -54,11 +54,11 @@ const toolLabelMap: Record<string, string> = {
   mcp_call_tool: "Menggunakan tool MCP",
 };
 
-function getToolInfo(event: AgentEvent): { label: string; icon: keyof typeof Ionicons.glyphMap } {
+function getToolInfo(event: AgentEvent): { label: string; icon: string } {
   const fnName = event.function_name || "";
   const args = event.function_args || {};
   const label = toolLabelMap[fnName] || fnName;
-  const icon = toolIconMap[fnName] || "construct-outline";
+  const icon = toolIconMap[fnName] || "settings-outline";
 
   const argKeyMap: Record<string, string> = {
     web_search: "query",
@@ -112,7 +112,7 @@ function ToolRow({ event }: { event: AgentEvent }) {
         isError && styles.toolIconBoxError,
         isCalled && styles.toolIconBoxDone,
       ]}>
-        <Ionicons
+        <NativeIcon
           name={icon}
           size={10}
           color={isError ? "#f87171" : isCalled ? "#888888" : "#888888"}
@@ -129,8 +129,8 @@ function ToolRow({ event }: { event: AgentEvent }) {
         {label}
       </Text>
       {isCalling && <PulsingDot />}
-      {isCalled && <Ionicons name="checkmark" size={10} color="#4ade80" />}
-      {isError && <Ionicons name="close" size={10} color="#f87171" />}
+      {isCalled && <NativeIcon name="checkmark" size={10} color="#4ade80" />}
+      {isError && <NativeIcon name="close" size={10} color="#f87171" />}
     </View>
   );
 }
@@ -166,9 +166,9 @@ function StepRow({ step }: { step: AgentPlanStep }) {
           isPending && styles.stepCheckBoxPending,
         ]}>
           {isDone ? (
-            <Ionicons name="checkmark" size={10} color="#fff" />
+            <NativeIcon name="checkmark" size={10} color="#fff" />
           ) : isFailed ? (
-            <Ionicons name="close" size={10} color="#fff" />
+            <NativeIcon name="close" size={10} color="#fff" />
           ) : isRunning ? (
             <PulsingDot />
           ) : null}
@@ -192,7 +192,7 @@ function StepRow({ step }: { step: AgentPlanStep }) {
             {tools.length > 0 && (
               <Text style={styles.stepCounter}>{doneToolCount}/{tools.length}</Text>
             )}
-            <Ionicons
+            <NativeIcon
               name={expanded ? "chevron-up" : "chevron-down"}
               size={12}
               color="#606060"
@@ -230,7 +230,7 @@ export function AgentPlanView({ plan, notifyMessages }: AgentPlanViewProps) {
         <View style={styles.notifyBlock}>
           {notifyMessages.map((msg, i) => (
             <View key={i} style={styles.notifyRow}>
-              <Ionicons name="chatbubble-ellipses-outline" size={12} color="#888888" style={styles.notifyIcon} />
+              <NativeIcon name="chatbubble-ellipses" size={12} color="#888888" />
               <Text style={styles.notifyText}>{msg}</Text>
             </View>
           ))}

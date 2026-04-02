@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { NativeIcon } from "@/components/icons/SvgIcon";
 import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, TOOL_COLOR_MAP as CONST_TOOL_COLOR_MAP, getToolCategory, TOOL_FUNCTION_MAP } from "@/lib/tool-constants";
 import { ToolPanelContent } from "./ToolPanelContent";
 
@@ -30,7 +30,7 @@ interface ToolPanelProps {
   onSwitchToBrowser?: () => void;
 }
 
-function getToolIcon(name: string): keyof typeof Ionicons.glyphMap {
+function getToolIcon(name: string): string {
   const category = getToolCategory(name);
   return CONST_TOOL_ICON_MAP[category] || "settings-outline";
 }
@@ -82,7 +82,7 @@ export function ToolPanel({
         onPress={onToggleVisible}
         activeOpacity={0.7}
       >
-        <Ionicons name="chevron-back" size={16} color="#636366" />
+        <NativeIcon name="chevron-back" size={16} color="#636366" />
       </TouchableOpacity>
     );
   }
@@ -92,7 +92,7 @@ export function ToolPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="terminal-outline" size={14} color="#4a7cf0" />
+          <NativeIcon name="terminal-outline" size={14} color="#4a7cf0" />
           <Text style={styles.headerTitle}>Tools</Text>
           {tools.length > 0 && (
             <View style={styles.badge}>
@@ -105,7 +105,7 @@ export function ToolPanel({
           onPress={onToggleVisible}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-forward" size={16} color="#636366" />
+          <NativeIcon name="chevron-forward" size={16} color="#636366" />
         </TouchableOpacity>
       </View>
 
@@ -117,7 +117,7 @@ export function ToolPanel({
       >
         {tools.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={28} color="#2A2A32" />
+            <NativeIcon name="terminal-outline" size={28} color="#2A2A32" />
             <Text style={styles.emptyStateTitle}>Belum ada tools</Text>
             <Text style={styles.emptyStateText}>
               Tools digunakan saat agen menjalankan tugas
@@ -141,7 +141,7 @@ export function ToolPanel({
                 activeOpacity={0.7}
               >
                 <View style={[styles.toolIcon, { backgroundColor: `${getToolColor(fnName)}18` }]}>
-                  <Ionicons
+                  <NativeIcon
                     name={getToolIcon(fnName)}
                     size={14}
                     color={getToolColor(fnName)}
@@ -177,7 +177,7 @@ export function ToolPanel({
               onPress={() => setSelectedToolId(null)}
               activeOpacity={0.7}
             >
-              <Ionicons name="close" size={14} color="#636366" />
+              <NativeIcon name="close" size={14} color="#636366" />
             </TouchableOpacity>
           </View>
           <ToolPanelContent

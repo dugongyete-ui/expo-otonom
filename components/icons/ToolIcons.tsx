@@ -7,6 +7,7 @@
 import React, { useEffect, useRef } from "react";
 import { View, Platform, StyleSheet, Animated, Easing } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Path } from "react-native-svg";
 
 interface IconProps {
   size?: number;
@@ -120,9 +121,22 @@ export function SpinningIcon({ size = 16, color }: IconProps) {
     outputRange: ["0deg", "360deg"],
   });
 
+  if (Platform.OS === "web") {
+    const svg = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="${color || '#636366'}" stroke-width="2" stroke-linecap="round"/>
+    </svg>`;
+    return (
+      <Animated.View style={{ transform: [{ rotate: spin }] }}>
+        <WebSvgIcon size={size} svgContent={svg} />
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View style={{ transform: [{ rotate: spin }] }}>
-      <Ionicons name="sync-outline" size={size} color={color || "#636366"} />
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke={color || "#636366"} strokeWidth={2} strokeLinecap="round" />
+      </Svg>
     </Animated.View>
   );
 }
