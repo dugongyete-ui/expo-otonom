@@ -326,13 +326,13 @@ function SessionItem({ session, onSelect, onDelete, onShare }: SessionItemProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#f9fafb",
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   collapsedContainer: {
     flex: 1,
-    backgroundColor: "#111827",
+    backgroundColor: "#f9fafb",
     justifyContent: "flex-start",
     alignItems: "center",
     paddingVertical: 12,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
   },
   runningBadge: {
     flexDirection: "row",
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#4b5563",
+    borderColor: "#d1d5db",
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 16,
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   },
   newTaskButtonText: {
     flex: 1,
-    color: "#9ca3af",
+    color: "#6b7280",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -421,9 +421,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shortcutKey: {
-    color: "#9ca3af",
+    color: "#6b7280",
     fontSize: 11,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#e5e7eb",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -453,13 +453,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sessionItemTitle: {
-    color: "#d1d5db",
+    color: "#374151",
     fontSize: 13,
     fontWeight: "400",
     flex: 1,
   },
   sessionItemPreview: {
-    color: "#9ca3af",
+    color: "#6b7280",
     fontSize: 12,
     marginTop: 2,
   },
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
   clearButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f3f4f6",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   clearButtonText: {
-    color: "#9ca3af",
+    color: "#6b7280",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   confirmDialogContent: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 20,
     width: "80%",
@@ -541,13 +541,13 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   confirmDialogTitle: {
-    color: "#f3f4f6",
+    color: "#111827",
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
   },
   confirmDialogMessage: {
-    color: "#9ca3af",
+    color: "#6b7280",
     fontSize: 13,
     textAlign: "center",
   },
@@ -561,12 +561,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
   },
   confirmDialogCancelText: {
-    color: "#f3f4f6",
+    color: "#374151",
     fontSize: 14,
     fontWeight: "500",
   },

@@ -117,7 +117,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#edebe3" }} />
+      <View style={{ flex: 1, backgroundColor: "#ffffff" }} />
     );
   }
 
@@ -236,6 +236,6 @@ const splashStyles = StyleSheet.create({
 const layoutStyles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#edebe3",
+    backgroundColor: "#ffffff",
   },
 });

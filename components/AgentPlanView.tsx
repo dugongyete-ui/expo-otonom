@@ -192,10 +192,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   stepCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#f9fafb",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e5e7eb",
     overflow: "hidden",
   },
   stepCardHeader: {
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#f3f4f6",
+    color: "#111827",
     lineHeight: 18,
     letterSpacing: -0.1,
   },
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   toolTimelineLine: {
     width: 1.5,
     flex: 1,
-    backgroundColor: "#374151",
+    backgroundColor: "#e5e7eb",
     marginTop: 2,
     minHeight: 14,
   },
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   stepResultText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#6b7280",
     lineHeight: 17,
     letterSpacing: -0.1,
     paddingHorizontal: 4,

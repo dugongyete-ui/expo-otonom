@@ -151,8 +151,8 @@ function renderInline(text: string, color: string): React.ReactNode[] {
           key={`icode-${key++}`}
           style={{
             fontFamily: "monospace",
-            backgroundColor: "#1f2937",
-            color: "#93c5fd",
+            backgroundColor: "#f1f5f9",
+            color: "#1e40af",
             fontSize: 12,
             paddingHorizontal: 5,
             borderRadius: 4,
@@ -302,8 +302,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   aiBubble: {
-    backgroundColor: "transparent",
-    paddingHorizontal: 0,
+    backgroundColor: COLORS.bgAiBubble,
+    borderBottomLeftRadius: 4,
   },
   askBubble: {
     backgroundColor: "rgba(234,179,8,0.07)",
