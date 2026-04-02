@@ -14,7 +14,7 @@ Dzeck AI is a full-stack Expo/React Native AI agent application that runs autono
 
 ### Backend (Node.js / Express)
 - **Server**: Express 5 with TypeScript (transpiled via tsx)
-- **AI**: Cerebras AI (LLM) + custom multi-agent flow (Python)
+- **AI**: Cohere AI (`command-a-reasoning-08-2025`) + custom multi-agent flow (Python)
 - **Sandbox**: E2B Desktop SDK (`@e2b/desktop`) — sole execution environment (no local fallback)
 - **Auth**: Custom JWT system (no Passport dependency)
 

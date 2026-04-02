@@ -1,8 +1,8 @@
 """
-G4F Space LLM API helpers for Dzeck AI Agent.
+Cohere AI LLM API helpers for Dzeck AI Agent.
 
-All network calls to g4f.space live here:
-- _build_request_body / _make_cerebras_request
+All network calls to api.cohere.ai live here:
+- _build_request_body / _make_cohere_request
 - call_cerebras_api / call_cerebras_streaming / call_cerebras_streaming_realtime
 - call_text_with_retry / call_api_with_retry
 - _extract_cerebras_response / _normalize_response_text
@@ -18,16 +18,16 @@ import concurrent.futures
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 
-CEREBRAS_API_URL = os.environ.get("G4F_API_URL", "https://g4f.space/api/auto/chat/completions")
+CEREBRAS_API_URL = os.environ.get("COHERE_API_URL", "https://api.cohere.ai/v2/chat")
 
 _NO_TOOL_CALL_MODELS: set = set()
 
 
 def _get_model_name() -> str:
-    candidate = os.environ.get("G4F_MODEL") or ""
+    candidate = os.environ.get("COHERE_AGENT_MODEL") or os.environ.get("G4F_MODEL") or ""
     if candidate:
         return candidate
-    return "auto"
+    return "command-a-reasoning-08-2025"
 
 
 _TOOLS_SUPPORTED: Optional[bool] = None
@@ -44,7 +44,6 @@ def _build_request_body(
         "stream": stream,
         "max_tokens": 8192,
         "temperature": 0.7,
-        "top_p": 1,
     }
     if tools:
         converted = []
@@ -64,6 +63,7 @@ def _make_cerebras_request(url: str, body: Dict[str, Any]) -> urllib.request.Req
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
+            "Accept": "application/json",
             "Authorization": "Bearer {}".format(api_key),
             "User-Agent": "Mozilla/5.0 (compatible; DzeckAI/2.0)",
         },
@@ -82,22 +82,51 @@ def _normalize_response_text(value: Any) -> str:
 
 
 def _extract_cerebras_response(api_result: Dict[str, Any]) -> tuple:
+    """Parse Cohere v2 response format, with fallback to OpenAI format."""
     text = ""
     tool_calls = None
-    choices = api_result.get("choices", [])
-    if choices:
-        msg = choices[0].get("message", {})
-        text = _normalize_response_text(msg.get("content", ""))
-        oa_calls = msg.get("tool_calls")
-        if oa_calls:
+
+    # Cohere v2 format: {"id":..., "finish_reason":..., "message":{"role":"assistant","content":[...],"tool_calls":[...]}}
+    if "message" in api_result and "choices" not in api_result:
+        msg = api_result.get("message", {})
+
+        content = msg.get("content", [])
+        if isinstance(content, list):
+            for c in content:
+                if isinstance(c, dict) and c.get("type") == "text":
+                    text += c.get("text", "")
+        elif isinstance(content, str):
+            text = content
+
+        cohere_tool_calls = msg.get("tool_calls") or []
+        if cohere_tool_calls:
             tool_calls = []
-            for tc in oa_calls:
+            for tc in cohere_tool_calls:
                 fn = tc.get("function", {})
-                try:
-                    args = json.loads(fn.get("arguments", "{}"))
-                except Exception:
-                    args = {}
+                args = fn.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except Exception:
+                        args = {}
                 tool_calls.append({"name": fn.get("name", ""), "arguments": args})
+    else:
+        # Fallback: OpenAI-compatible format
+        choices = api_result.get("choices", [])
+        if choices:
+            msg = choices[0].get("message", {})
+            text = _normalize_response_text(msg.get("content", ""))
+            oa_calls = msg.get("tool_calls")
+            if oa_calls:
+                tool_calls = []
+                for tc in oa_calls:
+                    fn = tc.get("function", {})
+                    try:
+                        args = json.loads(fn.get("arguments", "{}"))
+                    except Exception:
+                        args = {}
+                    tool_calls.append({"name": fn.get("name", ""), "arguments": args})
+
     return text, tool_calls
 
 
@@ -112,6 +141,48 @@ def call_cerebras_api(
     return json.loads(raw)
 
 
+def _parse_cohere_sse_line(line: str, current_event_type: Optional[str]) -> tuple:
+    """Parse a single SSE line from Cohere streaming.
+    Returns (text_chunk, new_event_type, is_done, full_response).
+    """
+    if line.startswith("event: "):
+        return "", line[7:].strip(), False, None
+    if line.startswith("data: "):
+        payload = line[6:].strip()
+        if payload == "[DONE]":
+            return "", current_event_type, True, None
+        try:
+            parsed = json.loads(payload)
+        except Exception:
+            return "", current_event_type, False, None
+
+        # Cohere v2 streaming — content-delta event
+        if current_event_type == "content-delta":
+            text = (
+                parsed.get("delta", {})
+                .get("message", {})
+                .get("content", {})
+                .get("text", "")
+            )
+            if isinstance(text, str) and text:
+                return text, current_event_type, False, None
+
+        # Cohere v2 — message-end carries full response with tool_calls
+        elif current_event_type == "message-end":
+            full = parsed.get("response") or parsed.get("delta", {}).get("message")
+            return "", current_event_type, True, full
+
+        else:
+            # Fallback: OpenAI-style SSE (delta.content)
+            content = (
+                parsed.get("choices", [{}])[0].get("delta", {}).get("content") or ""
+            )
+            if isinstance(content, str) and content:
+                return content, current_event_type, False, None
+
+    return "", current_event_type, False, None
+
+
 def call_cerebras_streaming(messages: list) -> str:
     last_error: Optional[Exception] = None
     full_text = ""
@@ -121,30 +192,22 @@ def call_cerebras_streaming(messages: list) -> str:
         req = _make_cerebras_request(CEREBRAS_API_URL, body)
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
-                buf = ""
+                current_event_type: Optional[str] = None
                 for raw_line in resp:
-                    buf += raw_line.decode("utf-8", errors="replace")
-                    while "\n" in buf:
-                        chunk_line, buf = buf.split("\n", 1)
-                        chunk_line = chunk_line.strip()
-                        if not chunk_line or not chunk_line.startswith("data: "):
-                            continue
-                        payload = chunk_line[6:]
-                        if payload == "[DONE]":
-                            break
-                        try:
-                            parsed = json.loads(payload)
-                            content = parsed.get("choices", [{}])[0].get("delta", {}).get("content") or ""
-                            if isinstance(content, str):
-                                full_text += content
-                        except (json.JSONDecodeError, IndexError, KeyError):
-                            pass
+                    line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                    chunk, current_event_type, is_done, _ = _parse_cohere_sse_line(
+                        line, current_event_type
+                    )
+                    if chunk:
+                        full_text += chunk
+                    if is_done:
+                        break
             return full_text
         except urllib.error.HTTPError as e:
             last_error = e
             if e.code == 413:
                 sys.stderr.write(
-                    "[agent] Cerebras streaming Payload Too Large (413, attempt {}): truncating messages and retrying\n".format(attempt + 1)
+                    "[agent] Cohere streaming Payload Too Large (413, attempt {}): truncating messages and retrying\n".format(attempt + 1)
                 )
                 sys.stderr.flush()
                 current_messages = _truncate_messages_for_413(current_messages)
@@ -158,24 +221,24 @@ def call_cerebras_streaming(messages: list) -> str:
                 else:
                     wait = min(10 * (2 ** attempt), 90)
                 sys.stderr.write(
-                    "[agent] Cerebras streaming rate limited (attempt {}): retrying in {}s\n".format(attempt + 1, wait)
+                    "[agent] Cohere streaming rate limited (attempt {}): retrying in {}s\n".format(attempt + 1, wait)
                 )
                 sys.stderr.flush()
                 time.sleep(wait)
             elif e.code >= 500:
                 wait = 2 ** attempt
                 sys.stderr.write(
-                    "[agent] Cerebras streaming error (attempt {}): {} — retrying in {}s\n".format(attempt + 1, e, wait)
+                    "[agent] Cohere streaming error (attempt {}): {} — retrying in {}s\n".format(attempt + 1, e, wait)
                 )
                 sys.stderr.flush()
                 time.sleep(wait)
             else:
-                sys.stderr.write("[agent] Cerebras streaming error: {}\n".format(e))
+                sys.stderr.write("[agent] Cohere streaming error: {}\n".format(e))
                 sys.stderr.flush()
                 break
         except Exception as e:
             last_error = e
-            sys.stderr.write("[agent] Cerebras streaming error: {}\n".format(e))
+            sys.stderr.write("[agent] Cohere streaming error: {}\n".format(e))
             sys.stderr.flush()
             break
     return full_text
@@ -193,42 +256,35 @@ async def call_cerebras_streaming_realtime(
             req = _make_cerebras_request(CEREBRAS_API_URL, body)
             try:
                 with urllib.request.urlopen(req, timeout=120) as resp:
-                    buf = ""
+                    current_event_type: Optional[str] = None
                     for raw_line in resp:
-                        buf += raw_line.decode("utf-8", errors="replace")
-                        while "\n" in buf:
-                            chunk_line, buf = buf.split("\n", 1)
-                            chunk_line = chunk_line.strip()
-                            if not chunk_line or not chunk_line.startswith("data: "):
-                                continue
-                            payload = chunk_line[6:]
-                            if payload == "[DONE]":
-                                loop.call_soon_threadsafe(queue.put_nowait, None)
-                                return
-                            try:
-                                parsed = json.loads(payload)
-                                content = parsed.get("choices", [{}])[0].get("delta", {}).get("content") or ""
-                                if content and isinstance(content, str):
-                                    loop.call_soon_threadsafe(queue.put_nowait, content)
-                            except (json.JSONDecodeError, IndexError, KeyError):
-                                pass
+                        line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                        chunk, current_event_type, is_done, _ = _parse_cohere_sse_line(
+                            line, current_event_type
+                        )
+                        if chunk:
+                            loop.call_soon_threadsafe(queue.put_nowait, chunk)
+                        if is_done:
+                            loop.call_soon_threadsafe(queue.put_nowait, None)
+                            return
+                loop.call_soon_threadsafe(queue.put_nowait, None)
                 return
             except urllib.error.HTTPError as e:
                 if e.code == 429 or e.code >= 500:
                     wait = 2 ** attempt
                     sys.stderr.write(
-                        "[agent] Cerebras realtime streaming error (attempt {}): {} — retrying in {}s\n".format(
+                        "[agent] Cohere realtime streaming error (attempt {}): {} — retrying in {}s\n".format(
                             attempt + 1, e, wait
                         )
                     )
                     sys.stderr.flush()
                     time.sleep(wait)
                 else:
-                    sys.stderr.write("[agent] Cerebras realtime streaming error: {}\n".format(e))
+                    sys.stderr.write("[agent] Cohere realtime streaming error: {}\n".format(e))
                     sys.stderr.flush()
                     break
             except Exception as e:
-                sys.stderr.write("[agent] Cerebras realtime streaming error: {}\n".format(e))
+                sys.stderr.write("[agent] Cohere realtime streaming error: {}\n".format(e))
                 sys.stderr.flush()
                 break
         loop.call_soon_threadsafe(queue.put_nowait, None)
@@ -251,11 +307,8 @@ async def call_cerebras_streaming_realtime(
 
 def call_cerebras_text(messages: list) -> str:
     result = call_cerebras_api(messages)
-    choices = result.get("choices", [])
-    if choices:
-        content = choices[0].get("message", {}).get("content", "")
-        return _normalize_response_text(content)
-    return ""
+    text, _ = _extract_cerebras_response(result)
+    return text or ""
 
 
 def _truncate_messages_for_413(messages: list) -> list:
@@ -266,7 +319,6 @@ def _truncate_messages_for_413(messages: list) -> list:
     truncates all middle messages: browser content → 300 chars, other → 500 chars.
     """
     if len(messages) <= 3:
-        # Too few messages to selectively truncate; truncate everything except system
         result = []
         for i, msg in enumerate(messages):
             if i == 0:
@@ -282,7 +334,6 @@ def _truncate_messages_for_413(messages: list) -> list:
     recent = messages[-2:]
     middle = messages[1:-2]
 
-    # Aggressively truncate middle messages
     truncated_middle = []
     for msg in middle:
         content = str(msg.get("content", ""))
@@ -297,7 +348,6 @@ def _truncate_messages_for_413(messages: list) -> list:
             new_msg["content"] = content[:500] + "...[truncated]" if len(content) > 500 else content
         truncated_middle.append(new_msg)
 
-    # Cap browser content in recent messages (less aggressive — keep 1500 chars)
     capped_recent = []
     for msg in recent:
         content = str(msg.get("content", ""))
@@ -363,10 +413,6 @@ def call_api_with_retry(
 ) -> Dict[str, Any]:
     last_error: Optional[Exception] = None
 
-    # Determine per-request whether the current model supports tools.
-    # We check at call time (not module load time) so that model changes
-    # between requests are respected, and a 400 from one model does not
-    # permanently disable tools for all subsequent requests.
     current_model = _get_model_name()
     model_supports_tools = current_model not in _NO_TOOL_CALL_MODELS
     effective_tools = tools if (model_supports_tools and tools) else None

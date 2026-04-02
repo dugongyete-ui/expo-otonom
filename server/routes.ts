@@ -38,11 +38,11 @@ function isE2BEnabled(): boolean {
 
 function getCerebrasConfig() {
   const apiKey = process.env.G4F_API_KEY || "";
-  const model = process.env.G4F_MODEL || "auto";
-  const agentModel = process.env.G4F_MODEL || "auto";
-  const apiUrl = process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions";
-  let hostname = "g4f.space";
-  let path = "/api/auto/chat/completions";
+  const model = process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025";
+  const agentModel = process.env.COHERE_AGENT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025";
+  const apiUrl = process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat";
+  let hostname = "api.cohere.ai";
+  let path = "/v2/chat";
   try {
     const urlObj = new URL(apiUrl);
     hostname = urlObj.hostname;
@@ -143,14 +143,17 @@ export async function registerRoutes(app: any): Promise<Server> {
           // .env always wins for model config — only apply MongoDB values if .env is not set
           if (doc.G4F_MODEL && !process.env.G4F_MODEL) process.env.G4F_MODEL = doc.G4F_MODEL;
           if (doc.G4F_API_URL && !process.env.G4F_API_URL) process.env.G4F_API_URL = doc.G4F_API_URL;
+          if (doc.COHERE_CHAT_MODEL && !process.env.COHERE_CHAT_MODEL) process.env.COHERE_CHAT_MODEL = doc.COHERE_CHAT_MODEL;
+          if (doc.COHERE_AGENT_MODEL && !process.env.COHERE_AGENT_MODEL) process.env.COHERE_AGENT_MODEL = doc.COHERE_AGENT_MODEL;
+          if (doc.COHERE_API_URL && !process.env.COHERE_API_URL) process.env.COHERE_API_URL = doc.COHERE_API_URL;
           if (doc.SEARCH_PROVIDER && !process.env.SEARCH_PROVIDER) process.env.SEARCH_PROVIDER = doc.SEARCH_PROVIDER;
           if (doc.GOOGLE_SEARCH_API_KEY && !process.env.GOOGLE_SEARCH_API_KEY) process.env.GOOGLE_SEARCH_API_KEY = doc.GOOGLE_SEARCH_API_KEY;
           if (doc.GOOGLE_SEARCH_ENGINE_ID && !process.env.GOOGLE_SEARCH_ENGINE_ID) process.env.GOOGLE_SEARCH_ENGINE_ID = doc.GOOGLE_SEARCH_ENGINE_ID;
           if (doc.GOOGLE_CSE_ID && !process.env.GOOGLE_CSE_ID) process.env.GOOGLE_CSE_ID = doc.GOOGLE_CSE_ID;
           if (doc.MODEL_PROVIDER && !process.env.MODEL_PROVIDER) process.env.MODEL_PROVIDER = doc.MODEL_PROVIDER;
           console.log("[Config] Loaded persisted config from MongoDB (skipped keys already set in .env):", {
-            G4F_MODEL: process.env.G4F_MODEL,
-            G4F_API_URL: process.env.G4F_API_URL,
+            COHERE_CHAT_MODEL: process.env.COHERE_CHAT_MODEL,
+            COHERE_AGENT_MODEL: process.env.COHERE_AGENT_MODEL,
             SEARCH_PROVIDER: process.env.SEARCH_PROVIDER,
             GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
           });
@@ -165,11 +168,12 @@ export async function registerRoutes(app: any): Promise<Server> {
   // These can be overridden by setting AVAILABLE_MODELS and AVAILABLE_PROVIDERS env vars
   // (JSON arrays of {label, value} pairs).
   const DEFAULT_MODELS = [
-    { label: "Qwen 3 235B (Default)", value: "qwen-3-235b-a22b-instruct-2507" },
-    { label: "Llama 3.1 8B (Fast)", value: "llama3.1-8b" },
+    { label: "Command A Reasoning (Default)", value: "command-a-reasoning-08-2025" },
+    { label: "Command R+", value: "command-r-plus" },
+    { label: "Command R", value: "command-r" },
   ];
   const DEFAULT_PROVIDERS = [
-    { label: "Cerebras", value: "cerebras" },
+    { label: "Cohere", value: "cohere" },
     { label: "OpenAI", value: "openai" },
     { label: "Anthropic", value: "anthropic" },
   ];
@@ -187,15 +191,17 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.get("/api/config", (_req: any, res: any) => {
     res.json({
-      G4F_MODEL: process.env.G4F_MODEL || "auto",
-      G4F_API_URL: process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions",
+      G4F_MODEL: process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025",
+      G4F_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
+      COHERE_CHAT_MODEL: process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025",
+      COHERE_AGENT_MODEL: process.env.COHERE_AGENT_MODEL || "command-a-reasoning-08-2025",
       SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
       GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
       AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
       E2B_ENABLED: isE2BEnabled(),
       authProvider: process.env.AUTH_PROVIDER || "none",
-      modelName: process.env.G4F_MODEL || "auto",
-      modelProvider: process.env.MODEL_PROVIDER || "g4f",
+      modelName: process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025",
+      modelProvider: process.env.MODEL_PROVIDER || "cohere",
       searchProvider: process.env.SEARCH_PROVIDER || "bing_web",
       showGithubButton: process.env.SHOW_GITHUB_BUTTON === "true",
       MCP_SERVER_URL: process.env.MCP_SERVER_URL || "",
@@ -209,7 +215,7 @@ export async function registerRoutes(app: any): Promise<Server> {
   });
 
   app.put("/api/config", requireAdmin, async (req: any, res: any) => {
-    const allowed = ["G4F_MODEL", "G4F_API_URL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
+    const allowed = ["G4F_MODEL", "G4F_API_URL", "COHERE_CHAT_MODEL", "COHERE_AGENT_MODEL", "COHERE_API_URL", "SEARCH_PROVIDER", "MODEL_PROVIDER", "SHOW_GITHUB_BUTTON", "GOOGLE_SEARCH_API_KEY", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CSE_ID"];
     const updates: Record<string, string> = {};
 
     for (const key of allowed) {
@@ -241,10 +247,12 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({
       updated: updates,
       current: {
-        G4F_MODEL: process.env.G4F_MODEL || "auto",
-        G4F_API_URL: process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions",
+        G4F_MODEL: process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025",
+        G4F_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
+        COHERE_CHAT_MODEL: process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025",
+        COHERE_AGENT_MODEL: process.env.COHERE_AGENT_MODEL || "command-a-reasoning-08-2025",
         SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
-        MODEL_PROVIDER: process.env.MODEL_PROVIDER || "g4f",
+        MODEL_PROVIDER: process.env.MODEL_PROVIDER || "cohere",
         SHOW_GITHUB_BUTTON: process.env.SHOW_GITHUB_BUTTON || "false",
       },
     });
@@ -439,7 +447,6 @@ export async function registerRoutes(app: any): Promise<Server> {
       stream: true, 
       max_tokens: 8192,
       temperature: 0.7,
-      top_p: 1,
     });
     const options: https.RequestOptions = {
       hostname: hostname,
@@ -448,6 +455,7 @@ export async function registerRoutes(app: any): Promise<Server> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
     };
@@ -463,20 +471,38 @@ export async function registerRoutes(app: any): Promise<Server> {
 
       let buffer = "";
       let messageStarted = false;
+      let currentEventType = "";
+
       apiRes.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
-        // Split on double-newline to get complete SSE events; keep the trailing incomplete event in buffer
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? "";
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-        for (const event of events) {
-          // An SSE event may have multiple lines; extract all "data:" lines and concatenate
-          const dataLines = event.split("\n").filter((l) => l.trimStart().startsWith("data:"));
-          const dataStr = dataLines.map((l) => l.replace(/^data:\s?/, "")).join("");
-          if (!dataStr || dataStr === "[DONE]") continue;
+        for (const line of lines) {
+          const trimmed = line.trimEnd();
+          if (trimmed.startsWith("event: ")) {
+            currentEventType = trimmed.slice(7).trim();
+            continue;
+          }
+          if (!trimmed.startsWith("data: ")) continue;
+          const payload = trimmed.slice(6).trim();
+          if (!payload || payload === "[DONE]") continue;
+
           try {
-            const parsed = JSON.parse(dataStr);
-            const content = parsed.response ?? parsed.choices?.[0]?.delta?.content ?? "";
+            const parsed = JSON.parse(payload);
+            let content = "";
+
+            // Cohere v2 streaming: content-delta event
+            if (currentEventType === "content-delta") {
+              content = parsed?.delta?.message?.content?.text ?? "";
+            } else if (currentEventType === "message-end") {
+              // stream complete
+              break;
+            } else {
+              // Fallback: OpenAI-style delta
+              content = parsed?.response ?? parsed?.choices?.[0]?.delta?.content ?? "";
+            }
+
             if (content) {
               if (!messageStarted) {
                 res.write(`data: ${JSON.stringify({ type: "message_start", role: "assistant" })}\n\n`);
@@ -1190,7 +1216,9 @@ export async function registerRoutes(app: any): Promise<Server> {
         ...process.env,
         G4F_API_KEY: apiKey,
         G4F_MODEL: agentModel,
-        G4F_API_URL: process.env.G4F_API_URL || "https://g4f.space/api/auto/chat/completions",
+        COHERE_AGENT_MODEL: agentModel,
+        COHERE_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
+        G4F_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
         PYTHONPATH: process.cwd(),
         PYTHONUNBUFFERED: "1",
         DZECK_SESSION_ID: sid,
