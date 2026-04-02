@@ -292,18 +292,27 @@ export function applyEventToFlatMessages(
       const sid = streamingIdRef.current;
       streamingIdRef.current = null;
       const idx = sid ? prev.findIndex(m => m.id === sid) : -1;
+      let next = [...prev];
       if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = { ...updated[idx], isLoading: false };
-        return updated;
+        next[idx] = { ...next[idx], isLoading: false };
+      } else {
+        const lastIdx = next.length - 1;
+        if (lastIdx >= 0 && next[lastIdx].type === "assistant") {
+          next[lastIdx] = { ...next[lastIdx], isLoading: false };
+        }
       }
-      const lastIdx = prev.length - 1;
-      if (lastIdx >= 0 && prev[lastIdx].type === "assistant") {
-        const updated = [...prev];
-        updated[lastIdx] = { ...updated[lastIdx], isLoading: false };
-        return updated;
+      const finalIdx = idx >= 0 ? idx : next.length - 1;
+      const finalMsg = finalIdx >= 0 ? next[finalIdx] : null;
+      if (finalMsg && finalMsg.type === "assistant" && finalMsg.content && finalMsg.content.trim().length > 30) {
+        const trimmed = finalMsg.content.trim();
+        next = next.filter(m =>
+          m.id === finalMsg.id ||
+          m.type !== "assistant" ||
+          !m.content ||
+          m.content.trim() !== trimmed
+        );
       }
-      return prev;
+      return next;
     }
 
     case "message_correct": {
@@ -364,6 +373,14 @@ export function applyEventToFlatMessages(
     }
 
     case "notify": {
+      if (!ev.text) return prev;
+      const notifyTrimmed = ev.text.trim();
+      if (notifyTrimmed.length > 30) {
+        const recentAssistant = [...prev].reverse().find(m => m.type === "assistant" && m.content && m.content.trim().length > 0);
+        if (recentAssistant && recentAssistant.content.trim() === notifyTrimmed) {
+          return prev;
+        }
+      }
       return [...prev, { id: `msg-notify-${Date.now()}`, type: "assistant", content: ev.text, timestamp: new Date() }];
     }
 

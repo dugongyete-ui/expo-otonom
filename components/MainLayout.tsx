@@ -51,6 +51,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
   const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
   const [showToolsModal, setShowToolsModal] = useState(false);
+  const [sseFiles, setSseFiles] = useState<Array<{ filename: string; download_url: string; sandbox_path?: string; mime?: string }>>([]);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -178,6 +179,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
             onToolsChange={handleToolsChange}
             onVncSessionChange={handleVncSessionChange}
             onBrowserEventChange={handleBrowserEventChange}
+            onSessionFilesChange={setSseFiles}
             onOpenTools={isNarrowScreen ? handleOpenTools : undefined}
             toolsCount={totalToolsCount}
             activeToolsCount={activeToolsCount}
@@ -209,6 +211,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
               <FilePanel
                 sessionId={sessionId}
                 isVisible={isToolPanelVisible}
+                sseFiles={sseFiles}
               />
             )}
             {isToolPanelVisible && (
@@ -332,6 +335,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 <FilePanel
                   sessionId={sessionId}
                   isVisible={true}
+                  sseFiles={sseFiles}
                 />
               )}
             </View>

@@ -36,6 +36,7 @@ interface FilePanelProps {
   isVisible?: boolean;
   onClose?: () => void;
   onFileSelect?: (file: SessionFile) => void;
+  sseFiles?: Array<{ filename: string; download_url: string; sandbox_path?: string; mime?: string }>;
 }
 
 const CODE_EXTENSIONS = new Set([
@@ -67,6 +68,7 @@ export function FilePanel({
   isVisible = false,
   onClose,
   onFileSelect,
+  sseFiles = [],
 }: FilePanelProps) {
   const insets = useSafeAreaInsets();
   const [files, setFiles] = useState<SessionFile[]>([]);
@@ -216,6 +218,16 @@ export function FilePanel({
     return iconMap[ext] || "document";
   };
 
+  const convertedSseFiles: SessionFile[] = sseFiles.map(f => ({
+    name: f.filename,
+    path: f.sandbox_path || f.filename,
+    mime_type: f.mime,
+    download_url: f.download_url,
+  }));
+  const dbNames = new Set(files.map(f => f.name));
+  const extraSseFiles = convertedSseFiles.filter(f => !dbNames.has(f.name));
+  const displayFiles = [...files, ...extraSseFiles];
+
   if (!isVisible) return null;
 
   if (previewFile) {
@@ -301,13 +313,13 @@ export function FilePanel({
             <NativeIcon name="alert-circle" size={20} color="#FF453A" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
-        ) : files.length === 0 ? (
+        ) : displayFiles.length === 0 ? (
           <View style={styles.emptyState}>
             <NativeIcon name="folder-open" size={24} color="#8a8780" />
             <Text style={styles.emptyText}>No files created yet</Text>
           </View>
         ) : (
-          files.map((file, index) => (
+          displayFiles.map((file, index) => (
             <TouchableOpacity
               key={index}
               style={styles.fileItem}

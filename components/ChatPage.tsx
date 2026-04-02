@@ -243,6 +243,7 @@ interface ChatPageProps {
   onToolsChange?: (tools: any[]) => void;
   onVncSessionChange?: (info: VncSessionInfo | null) => void;
   onBrowserEventChange?: (event: BrowserEventState | null) => void;
+  onSessionFilesChange?: (files: Array<{ filename: string; download_url: string; sandbox_path?: string; mime?: string }>) => void;
   onOpenTools?: () => void;
   toolsCount?: number;
   activeToolsCount?: number;
@@ -257,6 +258,7 @@ export function ChatPage({
   onToolsChange,
   onVncSessionChange,
   onBrowserEventChange,
+  onSessionFilesChange,
   onOpenTools,
   toolsCount = 0,
   activeToolsCount = 0,
@@ -298,6 +300,7 @@ export function ChatPage({
   const sseReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventIdRef = useRef<string>("0");
   const filesShownViaNotifyRef = useRef(false);
+  const sseFilesRef = useRef<Array<{ filename: string; download_url: string; sandbox_path?: string; mime?: string }>>([]);
   const MAX_SSE_RECONNECT_ATTEMPTS = 3;
   const [streamingContent, setStreamingContent] = useState("");
   const [lastBrowserEvent, setLastBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
@@ -846,16 +849,24 @@ export function ChatPage({
         setThinking({ active: false, label: "" });
         if (ev.attachments && ev.attachments.length > 0) {
           filesShownViaNotifyRef.current = true;
+          const newFiles = ev.attachments.map((a: any) => ({
+            filename: a.filename,
+            download_url: a.download_url,
+            sandbox_path: a.sandbox_path,
+            mime: a.mime,
+          }));
+          const existingNames = new Set(sseFilesRef.current.map(f => f.filename));
+          const uniqueNew = newFiles.filter((f: any) => !existingNames.has(f.filename));
+          if (uniqueNew.length > 0) {
+            sseFilesRef.current = [...sseFilesRef.current, ...uniqueNew];
+            onSessionFilesChange?.(sseFilesRef.current);
+          }
           const filesMsg: ChatMessage = {
             id: `msg_${Date.now()}_${msgCounterRef.current++}_notify_files`,
             role: "assistant",
             content: ev.text || "",
             timestamp: Date.now(),
-            files: ev.attachments.map((a: any) => ({
-              filename: a.filename,
-              download_url: a.download_url,
-              sandbox_path: a.sandbox_path,
-            })),
+            files: newFiles,
           };
           setMessages(prev => [...prev, filesMsg]);
         } else if (ev.text) {
@@ -879,6 +890,14 @@ export function ChatPage({
       }
 
       case "files": {
+        if (ev.files.length > 0) {
+          const existingNames = new Set(sseFilesRef.current.map(f => f.filename));
+          const uniqueNew = ev.files.filter((f: any) => !existingNames.has(f.filename));
+          if (uniqueNew.length > 0) {
+            sseFilesRef.current = [...sseFilesRef.current, ...uniqueNew];
+            onSessionFilesChange?.(sseFilesRef.current);
+          }
+        }
         if (filesShownViaNotifyRef.current) {
           filesShownViaNotifyRef.current = false;
           return;
