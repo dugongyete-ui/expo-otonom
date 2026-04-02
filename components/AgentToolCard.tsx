@@ -27,6 +27,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 interface AgentToolCardProps {
   event: AgentEvent;
+  onHeaderPress?: () => void;
 }
 
 // Uses centralized tool constants from lib/tool-constants.ts
@@ -331,7 +332,7 @@ function renderCardIcon(functionName: string) {
   }
 }
 
-export function AgentToolCard({ event }: AgentToolCardProps) {
+export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const functionName = event.function_name || "";
@@ -351,9 +352,11 @@ export function AgentToolCard({ event }: AgentToolCardProps) {
   );
 
   const toggleExpand = () => {
-    if (!hasContent && !isCalling) return;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpanded(prev => !prev);
+    if (hasContent || isCalling) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpanded(prev => !prev);
+    }
+    onHeaderPress?.();
   };
 
   return (

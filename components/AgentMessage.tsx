@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, Image } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import { MarkdownText } from "@/components/MarkdownText";
 import type { AgentEvent } from "@/lib/chat";
+import { cleanAgentText } from "@/lib/text-utils";
 
 interface AgentMessageProps {
   event: AgentEvent;
@@ -44,7 +45,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
             </View>
           </View>
           <View style={styles.messageBubble}>
-            <MarkdownText text={event.message || ""} color="#f3f4f6" fontSize={15} />
+            <MarkdownText text={cleanAgentText(event.message || "")} color="#f3f4f6" fontSize={15} />
             {event.isStreaming ? <StreamingCursor /> : null}
           </View>
         </View>

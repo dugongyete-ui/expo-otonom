@@ -12,6 +12,7 @@ import { HelpIcon, AlertCircleIcon, CheckIcon, CopyOutlineIcon } from "@/compone
 import { CodeBlock } from "@/components/CodeBlock";
 import type { ChatMessage as ChatMessageType } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
+import { cleanAgentText } from "@/lib/text-utils";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -22,9 +23,7 @@ type Segment =
   | { type: "code"; content: string; language: string };
 
 function cleanText(raw: string): string {
-  return raw
-    .replace(/<co>([\s\S]*?)<\/co:[^>]*>/g, "$1")
-    .replace(/<\/?co[^>]*>/g, "")
+  return cleanAgentText(raw)
     .replace(/<\/?[a-zA-Z][^>]*>/g, "");
 }
 

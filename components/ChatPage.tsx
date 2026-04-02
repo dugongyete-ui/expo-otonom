@@ -4,6 +4,7 @@ import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
 import { AgentPlanView } from "./AgentPlanView";
+import { ToolDetailModal } from "./ToolDetailModal";
 import {
   MenuIcon, TerminalIcon, ShareIcon, LogOutIcon, EllipsisIcon,
   FlashIcon, ChatbubbleIcon, SettingsIcon, ServerIcon,
@@ -20,6 +21,9 @@ import { useAuth } from "@/lib/auth-context";
 import { MCPPanel } from "./MCPPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { cleanAgentText } from "@/lib/text-utils";
+import { getToolDisplayInfo } from "@/lib/tool-constants";
+import type { ToolContent } from "@/lib/chat";
 
 interface AgentPlanStep {
   id: string;
@@ -286,6 +290,16 @@ export function ChatPage({
   const [taskCompleted, setTaskCompleted] = useState(false);
   const [taskCompletedExpanded, setTaskCompletedExpanded] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Array<{ id: string; description: string }>>([]);
+  const [selectedTool, setSelectedTool] = useState<{
+    functionName: string;
+    functionArgs: Record<string, unknown>;
+    status: string;
+    toolContent?: ToolContent;
+    functionResult?: string;
+    label: string;
+    icon: string;
+    iconColor: string;
+  } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const msgCounterRef = useRef(0);
@@ -729,11 +743,26 @@ export function ChatPage({
             const idx = stepTools.findIndex(t => t.tool_call_id === callId);
             if (idx >= 0) {
               const updated = [...stepTools];
+              const existing = updated[idx];
+              const prevTc = existing.tool_content || {};
+              const newTc = toolContent || {};
+              const newShot = (newTc.screenshot_b64 && !newTc.screenshot_b64.startsWith("data:"))
+                ? `data:image/png;base64,${newTc.screenshot_b64}`
+                : (newTc.screenshot_b64 || "");
+              const mergedTc = {
+                ...prevTc,
+                ...newTc,
+                screenshot_b64: newShot || prevTc.screenshot_b64 || "",
+                url: newTc.url || prevTc.url || "",
+                title: newTc.title || prevTc.title || "",
+              };
               updated[idx] = {
-                ...updated[idx],
+                ...existing,
                 status: "called",
                 function_name: functionName,
                 output: result,
+                function_result: result,
+                tool_content: mergedTc,
               };
               return updated;
             }
@@ -758,6 +787,7 @@ export function ChatPage({
                 status: "error",
                 function_name: functionName,
                 error: result,
+                function_result: result,
               };
               return updated;
             }
@@ -921,23 +951,25 @@ export function ChatPage({
           const filesMsg: ChatMessage = {
             id: `msg_${Date.now()}_${msgCounterRef.current++}_notify_files`,
             role: "assistant",
-            content: ev.text || "",
+            content: ev.text ? cleanAgentText(ev.text) : "",
             timestamp: Date.now(),
             files: newFiles,
           };
           setMessages(prev => [...prev, filesMsg]);
         } else if (ev.text) {
+          const cleanedText = cleanAgentText(ev.text);
+          if (!cleanedText) return;
           if (planMsgIdRef.current) {
             setMessages(prev => prev.map(m =>
               m.id === planMsgIdRef.current
-                ? { ...m, notifyMessages: [...(m.notifyMessages || []), ev.text as string] }
+                ? { ...m, notifyMessages: [...(m.notifyMessages || []), cleanedText] }
                 : m
             ));
           } else {
             const notifyMsg: ChatMessage = {
               id: `msg_${Date.now()}_${msgCounterRef.current++}_notify`,
               role: "assistant",
-              content: ev.text,
+              content: cleanedText,
               timestamp: Date.now(),
             };
             setMessages(prev => [...prev, notifyMsg]);
@@ -1478,7 +1510,7 @@ export function ChatPage({
         data={messages}
         keyExtractor={(item) => item.id}
         style={styles.flatList}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           // Screenshot message — display inline image
           if (item.screenshotB64) {
             return (
@@ -1492,10 +1524,24 @@ export function ChatPage({
             );
           }
 
+          // Assistant message immediately before a plan — suppress standalone render
+          // It will be shown inline above the plan view instead
+          if (item.role === "assistant" && !item.plan && !item.files && !item.error && item.content) {
+            const nextMsg = messages[index + 1];
+            if (nextMsg && nextMsg.plan) {
+              return null;
+            }
+          }
+
           // Plan message — show agent header + AgentPlanView card(s)
           if (item.plan) {
             const isPlanRunning = item.plan.status === "running" || item.plan.steps.some(s => s.status === "running");
             const isPlanDone = item.plan.status === "completed" || item.plan.steps.every(s => s.status === "completed" || s.status === "failed");
+            // Check if there's a preceding assistant message to show above plan
+            const prevMsg = messages[index - 1];
+            const precedingText = prevMsg && prevMsg.role === "assistant" && !prevMsg.plan && !prevMsg.files && !prevMsg.error && prevMsg.content
+              ? cleanAgentText(prevMsg.content)
+              : null;
             return (
               <View style={styles.agentTurnBlock}>
                 <View style={styles.agentTurnHeader}>
@@ -1516,7 +1562,16 @@ export function ChatPage({
                     </View>
                   )}
                 </View>
-                <AgentPlanView plan={item.plan} notifyMessages={item.notifyMessages} onToolPress={onOpenTools} />
+                {precedingText ? (
+                  <Text style={styles.agentPrecedingText}>{precedingText}</Text>
+                ) : null}
+                <AgentPlanView
+                  plan={item.plan}
+                  notifyMessages={item.notifyMessages}
+                  onToolPress={(tool) => {
+                    setSelectedTool(tool);
+                  }}
+                />
               </View>
             );
           }
@@ -1660,6 +1715,21 @@ export function ChatPage({
         attachments={attachments}
         onAttachmentsChange={setAttachments}
       />
+
+      {selectedTool && (
+        <ToolDetailModal
+          visible={!!selectedTool}
+          onClose={() => setSelectedTool(null)}
+          functionName={selectedTool.functionName}
+          functionArgs={selectedTool.functionArgs}
+          label={selectedTool.label}
+          icon={selectedTool.icon}
+          iconColor={selectedTool.iconColor}
+          status={selectedTool.status}
+          toolContent={selectedTool.toolContent}
+          functionResult={selectedTool.functionResult}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -1941,6 +2011,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#888888",
     letterSpacing: -0.1,
+  },
+  agentPrecedingText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 15,
+    color: "#e8e8e8",
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    marginBottom: 8,
   },
   fileCardsBlock: {
     paddingHorizontal: 12,

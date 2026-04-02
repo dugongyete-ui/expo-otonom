@@ -3,72 +3,49 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Animated,
+  TouchableOpacity,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
-import type { AgentPlan, AgentPlanStep, AgentEvent } from "@/lib/chat";
+import { AgentToolCard } from "@/components/AgentToolCard";
+import type { AgentPlan, AgentPlanStep, AgentEvent, ToolContent } from "@/lib/chat";
+import { getToolDisplayInfo } from "@/lib/tool-constants";
+
+export interface SelectedToolInfo {
+  functionName: string;
+  functionArgs: Record<string, unknown>;
+  status: string;
+  toolContent?: ToolContent;
+  functionResult?: string;
+  label: string;
+  icon: string;
+  iconColor: string;
+}
 
 interface AgentPlanViewProps {
   plan: AgentPlan;
   notifyMessages?: string[];
-  onToolPress?: () => void;
+  onToolPress?: (tool: SelectedToolInfo) => void;
+}
+
+interface StepToolEntry {
+  tool_call_id?: string;
+  type?: string;
+  name?: string;
+  function_name?: string;
+  status?: string;
+  input?: Record<string, unknown>;
+  function_args?: Record<string, unknown>;
+  output?: string;
+  function_result?: string;
+  error?: string;
+  tool_content?: ToolContent;
 }
 
 function cleanCitations(raw: string): string {
   return raw
     .replace(/<co>([\s\S]*?)<\/co:[^>]*>/g, "$1")
     .replace(/<\/?co[^>]*>/g, "");
-}
-
-const TOOL_META: Record<string, { label: string; icon: string }> = {
-  web_search:           { label: "Mencari web",          icon: "search" },
-  web_browse:           { label: "Membuka halaman",       icon: "globe" },
-  browser_navigate:     { label: "Navigasi ke halaman",   icon: "globe" },
-  browser_view:         { label: "Membaca halaman",       icon: "eye" },
-  browser_click:        { label: "Mengklik elemen",       icon: "hand-left" },
-  browser_type:         { label: "Mengetik teks",         icon: "create" },
-  browser_scroll:       { label: "Scroll halaman",        icon: "arrow-down" },
-  browser_console_exec: { label: "Menjalankan script",    icon: "code" },
-  shell_exec:           { label: "Menjalankan perintah",  icon: "terminal" },
-  shell_view:           { label: "Melihat output",        icon: "terminal" },
-  shell_wait:           { label: "Menunggu proses",       icon: "time" },
-  file_read:            { label: "Membaca file",          icon: "document-text" },
-  file_write:           { label: "Menulis file",          icon: "save" },
-  file_str_replace:     { label: "Mengedit file",         icon: "create" },
-  file_find_by_name:    { label: "Mencari file",          icon: "search" },
-  message_notify_user:  { label: "Mengirim notifikasi",   icon: "chatbubble" },
-  message_ask_user:     { label: "Mengajukan pertanyaan", icon: "help-circle" },
-  mcp_call_tool:        { label: "Menggunakan MCP",       icon: "extension-puzzle" },
-};
-
-function getArgPreview(fnName: string, args: any): string {
-  if (!args || typeof args !== "object") return "";
-  const keyMap: Record<string, string[]> = {
-    web_search:           ["query"],
-    web_browse:           ["url"],
-    browser_navigate:     ["url"],
-    browser_view:         ["url"],
-    browser_click:        ["selector", "text"],
-    browser_type:         ["text", "selector"],
-    shell_exec:           ["command"],
-    file_read:            ["file", "path"],
-    file_write:           ["file", "path"],
-    file_str_replace:     ["file", "path"],
-    file_find_by_name:    ["name", "pattern"],
-    message_notify_user:  ["text"],
-    message_ask_user:     ["text"],
-    mcp_call_tool:        ["tool_name"],
-    browser_console_exec: ["js"],
-  };
-  const keys = keyMap[fnName] || Object.keys(args);
-  for (const k of keys) {
-    if (args[k]) {
-      const val = String(args[k]);
-      return val.length > 70 ? val.slice(0, 70) + "…" : val;
-    }
-  }
-  return "";
 }
 
 function PulsingDot({ size = 6, color = "#888888" }: { size?: number; color?: string }) {
@@ -90,60 +67,19 @@ function PulsingDot({ size = 6, color = "#888888" }: { size?: number; color?: st
   );
 }
 
-function ToolPill({
-  event,
-  onPress,
-}: {
-  event: AgentEvent & { function_name?: string; function_args?: any; output?: string; error?: string };
-  onPress?: () => void;
-}) {
-  const fnName = event.function_name || (event as any).name || "";
-  const args   = (event as any).function_args || (event as any).input || {};
-  const meta   = TOOL_META[fnName] || { label: fnName, icon: "settings" };
-  const preview = getArgPreview(fnName, args);
-
-  const isCalling = event.status === "calling";
-  const isCalled  = event.status === "called";
-  const isError   = event.status === "error";
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.toolPill,
-        isError && styles.toolPillError,
-        isCalling && styles.toolPillActive,
-      ]}
-      activeOpacity={0.7}
-      onPress={onPress}
-    >
-      <View style={[
-        styles.toolIconCircle,
-        isCalling && styles.toolIconCircleActive,
-        isError   && styles.toolIconCircleError,
-      ]}>
-        <NativeIcon
-          name={meta.icon}
-          size={11}
-          color={isError ? "#f87171" : isCalling ? "#b0b0b0" : "#686868"}
-        />
-      </View>
-
-      <View style={styles.toolPillContent}>
-        <Text style={[styles.toolPillLabel, isError && styles.toolPillLabelError]} numberOfLines={1}>
-          {meta.label}
-        </Text>
-        {preview ? (
-          <Text style={styles.toolPillPreview} numberOfLines={1}>{preview}</Text>
-        ) : null}
-      </View>
-
-      <View style={styles.toolPillStatus}>
-        {isCalling && <PulsingDot size={5} color="#888888" />}
-        {isCalled  && <NativeIcon name="checkmark" size={11} color="#555555" />}
-        {isError   && <NativeIcon name="close"     size={11} color="#f87171" />}
-      </View>
-    </TouchableOpacity>
-  );
+function normalizeStepTool(raw: StepToolEntry): AgentEvent {
+  const fnName = raw.function_name || raw.name || "";
+  const fnArgs: Record<string, unknown> = raw.function_args || raw.input || {};
+  const result = raw.function_result || raw.output || (raw.status === "error" ? raw.error : undefined);
+  return {
+    type: "tool",
+    function_name: fnName,
+    function_args: fnArgs,
+    tool_call_id: raw.tool_call_id,
+    status: raw.status || "calling",
+    function_result: result,
+    tool_content: raw.tool_content,
+  };
 }
 
 function StepRow({
@@ -151,28 +87,22 @@ function StepRow({
   onToolPress,
 }: {
   step: AgentPlanStep;
-  onToolPress?: () => void;
+  onToolPress?: (tool: SelectedToolInfo) => void;
 }) {
   const isRunning = step.status === "running";
   const isDone    = step.status === "completed";
   const isFailed  = step.status === "failed";
-  const tools: AgentEvent[] = (step as any).tools || [];
+  const rawTools: StepToolEntry[] = (step as AgentPlanStep & { tools?: StepToolEntry[] }).tools || [];
+  const hasTools = rawTools.length > 0;
 
-  const [expanded, setExpanded] = useState(isRunning || isDone);
-
-  useEffect(() => {
-    if (isRunning || isDone) setExpanded(true);
-  }, [isRunning, isDone]);
-
-  const canExpand = tools.length > 0;
-  const doneCount = tools.filter(t => t.status === "called").length;
+  const [toolsExpanded, setToolsExpanded] = useState(hasTools);
 
   return (
     <View style={styles.stepRow}>
       <TouchableOpacity
         style={styles.stepHeader}
-        onPress={() => canExpand && setExpanded(v => !v)}
-        activeOpacity={canExpand ? 0.65 : 1}
+        onPress={() => hasTools && setToolsExpanded(prev => !prev)}
+        activeOpacity={hasTools ? 0.7 : 1}
       >
         <View style={[
           styles.stepBullet,
@@ -197,29 +127,41 @@ function StepRow({
           {step.description}
         </Text>
 
-        {canExpand && (
-          <View style={styles.stepRight}>
-            {tools.length > 0 && (
-              <Text style={styles.stepCounter}>{doneCount}/{tools.length}</Text>
-            )}
-            <NativeIcon
-              name={expanded ? "chevron-up" : "chevron-down"}
-              size={12}
-              color="#444444"
-            />
-          </View>
+        {hasTools && (
+          <NativeIcon
+            name={toolsExpanded ? "chevron-up" : "chevron-down"}
+            size={12}
+            color="#555555"
+          />
         )}
       </TouchableOpacity>
 
-      {expanded && tools.length > 0 && (
+      {hasTools && toolsExpanded && (
         <View style={styles.toolsContainer}>
-          {tools.map((tool, i) => (
-            <ToolPill
-              key={(tool as any).tool_call_id || i}
-              event={tool as any}
-              onPress={onToolPress}
-            />
-          ))}
+          {rawTools.map((tool, i) => {
+            const normalized = normalizeStepTool(tool);
+            const fnName = normalized.function_name || "";
+            const displayInfo = getToolDisplayInfo(fnName);
+            const handlePress = onToolPress ? () => {
+              onToolPress({
+                functionName: fnName,
+                functionArgs: normalized.function_args || {},
+                status: normalized.status || "called",
+                toolContent: normalized.tool_content,
+                functionResult: normalized.function_result,
+                label: displayInfo.label,
+                icon: displayInfo.icon,
+                iconColor: displayInfo.color,
+              });
+            } : undefined;
+            return (
+              <AgentToolCard
+                key={tool.tool_call_id || i}
+                event={normalized}
+                onHeaderPress={handlePress}
+              />
+            );
+          })}
         </View>
       )}
     </View>
@@ -310,82 +252,11 @@ const styles = StyleSheet.create({
     color: "#e8e8e8",
     fontFamily: "Inter_600SemiBold",
   },
-  stepRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 3,
-    flexShrink: 0,
-  },
-  stepCounter: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#444444",
-  },
 
   toolsContainer: {
-    marginLeft: 25,
+    marginLeft: 8,
     gap: 4,
     paddingBottom: 2,
-  },
-  toolPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#1c1c1e",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#252525",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  toolPillActive: {
-    borderColor: "#303030",
-    backgroundColor: "#1e1e20",
-  },
-  toolPillError: {
-    borderColor: "#3a1a1a",
-    backgroundColor: "#1e1212",
-  },
-  toolIconCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#252525",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  toolIconCircleActive: {
-    backgroundColor: "#2a2a2a",
-  },
-  toolIconCircleError: {
-    backgroundColor: "#2a1515",
-  },
-  toolPillContent: {
-    flex: 1,
-    gap: 1,
-  },
-  toolPillLabel: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#686868",
-    lineHeight: 16,
-  },
-  toolPillLabelError: {
-    color: "#f87171",
-  },
-  toolPillPreview: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#484848",
-    lineHeight: 15,
-  },
-  toolPillStatus: {
-    flexShrink: 0,
-    width: 16,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   notifyBlock: {
