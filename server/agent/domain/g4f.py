@@ -24,7 +24,7 @@ _NO_TOOL_CALL_MODELS: set = set()
 
 
 def _get_model_name() -> str:
-    candidate = os.environ.get("COHERE_AGENT_MODEL") or os.environ.get("G4F_MODEL") or ""
+    candidate = os.environ.get("COHERE_AGENT_MODEL") or ""
     if candidate:
         return candidate
     return "command-a-reasoning-08-2025"
@@ -57,7 +57,7 @@ def _build_request_body(
 
 
 def _make_cerebras_request(url: str, body: Dict[str, Any]) -> urllib.request.Request:
-    api_key = os.environ.get("G4F_API_KEY", "")
+    api_key = os.environ.get("COHERE_API_KEY") or os.environ.get("G4F_API_KEY", "")
     return urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),

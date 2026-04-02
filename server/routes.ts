@@ -37,9 +37,9 @@ function isE2BEnabled(): boolean {
 }
 
 function getCerebrasConfig() {
-  const apiKey = process.env.G4F_API_KEY || "";
-  const model = process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025";
-  const agentModel = process.env.COHERE_AGENT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025";
+  const apiKey = process.env.COHERE_API_KEY || process.env.G4F_API_KEY || "";
+  const model = process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025";
+  const agentModel = process.env.COHERE_AGENT_MODEL || "command-a-reasoning-08-2025";
   const apiUrl = process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat";
   let hostname = "api.cohere.ai";
   let path = "/v2/chat";
@@ -62,7 +62,7 @@ function setupSSEHeaders(res: any) {
 export async function registerRoutes(app: any): Promise<Server> {
   const startupCfg = getCerebrasConfig();
   if (!startupCfg.apiKey) {
-    console.warn("[WARNING] G4F_API_KEY is not set. AI features will not work.");
+    console.warn("[WARNING] COHERE_API_KEY is not set. AI features will not work.");
   }
 
   // ─── Startup: clean up stale running sessions from previous server instance ─
@@ -141,8 +141,6 @@ export async function registerRoutes(app: any): Promise<Server> {
         const doc = await (col as any).findOne({ _type: "app_config" }, { projection: { _id: 0 } });
         if (doc) {
           // .env always wins for model config — only apply MongoDB values if .env is not set
-          if (doc.G4F_MODEL && !process.env.G4F_MODEL) process.env.G4F_MODEL = doc.G4F_MODEL;
-          if (doc.G4F_API_URL && !process.env.G4F_API_URL) process.env.G4F_API_URL = doc.G4F_API_URL;
           if (doc.COHERE_CHAT_MODEL && !process.env.COHERE_CHAT_MODEL) process.env.COHERE_CHAT_MODEL = doc.COHERE_CHAT_MODEL;
           if (doc.COHERE_AGENT_MODEL && !process.env.COHERE_AGENT_MODEL) process.env.COHERE_AGENT_MODEL = doc.COHERE_AGENT_MODEL;
           if (doc.COHERE_API_URL && !process.env.COHERE_API_URL) process.env.COHERE_API_URL = doc.COHERE_API_URL;
@@ -191,16 +189,15 @@ export async function registerRoutes(app: any): Promise<Server> {
 
   app.get("/api/config", (_req: any, res: any) => {
     res.json({
-      G4F_MODEL: process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025",
-      G4F_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
       COHERE_CHAT_MODEL: process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025",
       COHERE_AGENT_MODEL: process.env.COHERE_AGENT_MODEL || "command-a-reasoning-08-2025",
+      COHERE_API_URL: process.env.COHERE_API_URL || "https://api.cohere.ai/v2/chat",
       SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || "bing_web",
       GOOGLE_SEARCH_CONFIGURED: !!(process.env.GOOGLE_SEARCH_API_KEY && (process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID)),
       AUTH_PROVIDER: process.env.AUTH_PROVIDER || "none",
       E2B_ENABLED: isE2BEnabled(),
       authProvider: process.env.AUTH_PROVIDER || "none",
-      modelName: process.env.COHERE_CHAT_MODEL || process.env.G4F_MODEL || "command-a-reasoning-08-2025",
+      modelName: process.env.COHERE_CHAT_MODEL || "command-a-reasoning-08-2025",
       modelProvider: process.env.MODEL_PROVIDER || "cohere",
       searchProvider: process.env.SEARCH_PROVIDER || "bing_web",
       showGithubButton: process.env.SHOW_GITHUB_BUTTON === "true",
