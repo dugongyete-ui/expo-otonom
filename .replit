@@ -104,7 +104,7 @@ EMAIL_PASSWORD = "admin123"
 EMAIL_FROM = "admin@example.com"
 G4F_API_URL = "https://g4f.space/api/auto/chat/completions"
 G4F_MODEL = "auto"
-G4F_API_KEY = "g4f-free"
+G4F_API_KEY = "g4f_u_mnhmbu_1c0c53a85dd4735ba8fee104576d3e7f051b8775b95646fe_fc571d51"
 
 [agent]
 expertMode = true
