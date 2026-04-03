@@ -192,6 +192,12 @@ function ManusInlineToolStep({ tool }: { tool: any }) {
     case "info":
       iconEl = <SearchIcon size={12} color={iconColor} />;
       break;
+    case "message":
+    case "todo":
+    case "task":
+    case "email":
+      iconEl = <MessageIcon size={12} color={iconColor} />;
+      break;
     default:
       iconEl = <ShellIcon size={12} color={iconColor} />;
       break;
