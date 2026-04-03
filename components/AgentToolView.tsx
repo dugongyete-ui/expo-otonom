@@ -258,7 +258,7 @@ function BrowserContent({
     <View style={styles.browserContainer}>
       {url ? (
         <View style={styles.browserUrlBar}>
-          <NativeIcon name="lock-closed" size={10} color="#34C759" />
+          <NativeIcon name="lock-closed" size={10} color="#888888" />
           <Text style={styles.browserUrlText} numberOfLines={1}>{url}</Text>
         </View>
       ) : null}
@@ -363,13 +363,13 @@ export function AgentToolView({
         </View>
         <View style={styles.headerRight}>
           {isCalling && (
-            <NativeIcon name="sync" size={12} color="#2563eb" />
+            <NativeIcon name="sync" size={12} color="#888888" />
           )}
           {isCalled && (
-            <NativeIcon name="checkmark-circle" size={14} color="#30D158" />
+            <NativeIcon name="checkmark-circle" size={14} color="#888888" />
           )}
           {isError && (
-            <NativeIcon name="close-circle" size={14} color="#FF453A" />
+            <NativeIcon name="close-circle" size={14} color="#666666" />
           )}
           <NativeIcon
             name={expanded ? "chevron-up" : "chevron-down"}
@@ -427,7 +427,7 @@ export function AgentToolView({
                 <View style={styles.mcpContainer}>
                   {toolContent.tool ? (
                     <View style={styles.mcpToolHeader}>
-                      <NativeIcon name="extension-puzzle" size={11} color="#64D2FF" />
+                      <NativeIcon name="extension-puzzle" size={11} color="#888888" />
                       <Text style={styles.mcpToolName}>{toolContent.tool}</Text>
                     </View>
                   ) : null}
@@ -475,12 +475,12 @@ const styles = StyleSheet.create({
     borderColor: "#2C2C30",
   },
   containerCalling: {
-    borderColor: "rgba(108, 92, 231, 0.3)",
-    backgroundColor: "rgba(108, 92, 231, 0.04)",
+    borderColor: "#2a2a2a",
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   containerError: {
-    borderColor: "rgba(255, 69, 58, 0.3)",
-    backgroundColor: "rgba(255, 69, 58, 0.04)",
+    borderColor: "#2a2a2a",
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   header: {
     flexDirection: "row",
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   callingFileLabel: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#FFD60A",
+    color: "#a0a0a0",
     marginBottom: 4,
   },
   expandedContent: {
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   argKey: {
-    color: "#5AC8FA",
+    color: "#888888",
     fontFamily: "Inter_600SemiBold",
   },
   resultContainer: {
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
   shellText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#30D158",
+    color: "#a0a0a0",
     lineHeight: 16,
   },
   searchContainer: {
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   searchTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#5AC8FA",
+    color: "#c0c0c0",
   },
   searchUrl: {
     fontFamily: "Inter_400Regular",
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   browserTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#FF9F0A",
+    color: "#a0a0a0",
     marginBottom: 4,
   },
   browserContent: {
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   fileText: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#FFD60A",
+    color: "#a0a0a0",
     lineHeight: 16,
   },
   codeBlockContainer: {
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
   langBadgeText: {
     fontFamily: "monospace",
     fontSize: 9,
-    color: "#2563eb",
+    color: "#888888",
     textTransform: "uppercase",
   },
   codeLine: {
@@ -727,6 +727,6 @@ const styles = StyleSheet.create({
   mcpToolName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#64D2FF",
+    color: "#888888",
   },
 });

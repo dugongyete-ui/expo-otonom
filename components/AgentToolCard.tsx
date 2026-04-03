@@ -438,9 +438,6 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
   return (
     <View style={styles.wrapper}>
       <View style={[styles.card, isError && styles.cardError]}>
-        {/* Colored left accent bar */}
-        <View style={[styles.accentBar, !isError && { backgroundColor: categoryColor.accent }]} />
-
         <View style={styles.cardContent}>
           {/* Header row */}
           <TouchableOpacity
@@ -449,7 +446,7 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
             activeOpacity={hasContent || isCalling ? 0.6 : 1}
           >
             {/* Icon */}
-            <View style={[styles.iconWrap, !isError && { backgroundColor: categoryColor.background }]}>
+            <View style={styles.iconWrap}>
               {renderCardIcon(functionName)}
             </View>
 
@@ -467,14 +464,14 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
 
             {/* Right: status + expand */}
             <View style={styles.rightArea}>
-              {isCalling && <SpinningIcon size={14} color="#7dd3fc" />}
-              {isCalled && <SuccessIcon size={14} color="#4ade80" />}
-              {isError && <ErrorIcon size={14} color="#dc2626" />}
+              {isCalling && <SpinningIcon size={14} color="#888888" />}
+              {isCalled && <SuccessIcon size={14} color="#888888" />}
+              {isError && <ErrorIcon size={14} color="#888888" />}
               {(hasContent || isCalling) && (
                 <View style={{ marginLeft: 4 }}>
                   {expanded
-                    ? <ChevronUpIcon size={12} color="#a0a0a0" />
-                    : <ChevronDownIcon size={12} color="#a0a0a0" />
+                    ? <ChevronUpIcon size={12} color="#555555" />
+                    : <ChevronDownIcon size={12} color="#555555" />
                   }
                 </View>
               )}
@@ -483,7 +480,7 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
 
           {isError && event.function_result ? (
             <View style={styles.errorBody}>
-              <AlertCircleIcon size={13} color="#dc2626" />
+              <AlertCircleIcon size={13} color="#888888" />
               <Text style={styles.errorText} numberOfLines={3}>
                 {event.function_result}
               </Text>
@@ -513,41 +510,35 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     borderRadius: 10,
-    backgroundColor: "#242424",
+    backgroundColor: "#1a1a1a",
     borderWidth: 1,
-    borderColor: "#333333",
+    borderColor: "#2a2a2a",
     overflow: "hidden",
   },
   cardError: {
-    borderColor: "rgba(220,38,38,0.3)",
-    backgroundColor: "rgba(220,38,38,0.04)",
+    borderColor: "#2a2a2a",
+    backgroundColor: "#161616",
   },
   errorBody: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 6,
-    marginLeft: 3,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: "rgba(220,38,38,0.15)",
-    backgroundColor: "rgba(220,38,38,0.04)",
+    borderTopColor: "#2a2a2a",
+    backgroundColor: "#161616",
   },
   errorText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#dc2626",
+    color: "#888888",
     lineHeight: 16,
   },
   cardContent: {
     flex: 1,
     flexDirection: "column",
-  },
-  accentBar: {
-    width: 3,
-    borderRadius: 0,
-    backgroundColor: "#3a3a3a",
   },
   header: {
     flexDirection: "row",
@@ -562,7 +553,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2e2e2e",
+    backgroundColor: "#222222",
   },
   labelArea: {
     flex: 1,

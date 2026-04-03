@@ -118,7 +118,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#1a1a1a" }} />
+      <View style={{ flex: 1, backgroundColor: "#0D0D0D" }} />
     );
   }
 
@@ -195,7 +195,7 @@ export default function RootLayout() {
 const splashStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0D0D0D",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -232,13 +232,13 @@ const splashStyles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#888888",
   },
 });
 
 const layoutStyles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0D0D0D",
   },
 });

@@ -51,7 +51,7 @@ function cleanCitations(raw: string): string {
     .replace(/<\/?co[^>]*>/g, "");
 }
 
-function SpinnerIcon({ size = 16, color = "#a0a0a0" }: { size?: number; color?: string }) {
+function SpinnerIcon({ size = 16, color = "#666666" }: { size?: number; color?: string }) {
   const rotation = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const anim = Animated.loop(
@@ -72,7 +72,7 @@ function SpinnerIcon({ size = 16, color = "#a0a0a0" }: { size?: number; color?: 
         width: size,
         height: size,
         borderRadius: size / 2,
-        borderWidth: 2,
+        borderWidth: 1.5,
         borderColor: "transparent",
         borderTopColor: color,
         borderRightColor: color + "60",
@@ -135,9 +135,9 @@ function StepRow({
           isFailed  && styles.stepBulletFailed,
           isRunning && styles.stepBulletRunning,
         ]}>
-          {isDone   && <NativeIcon name="checkmark" size={10} color="#ffffff" />}
-          {isFailed && <NativeIcon name="close"     size={10} color="#ffffff" />}
-          {isRunning && <SpinnerIcon size={14} color="#38bdf8" />}
+          {isDone   && <NativeIcon name="checkmark" size={10} color="#888888" />}
+          {isFailed && <NativeIcon name="close"     size={10} color="#888888" />}
+          {isRunning && <SpinnerIcon size={14} color="#888888" />}
         </View>
 
         <Text
@@ -156,7 +156,7 @@ function StepRow({
           <NativeIcon
             name={toolsExpanded ? "chevron-up" : "chevron-down"}
             size={12}
-            color={isRunning ? "#7dd3fc" : "#555555"}
+            color="#444444"
           />
         )}
       </TouchableOpacity>
@@ -251,9 +251,9 @@ export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onTool
 
 const goalStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#1e2a2e",
-    borderLeftWidth: 3,
-    borderLeftColor: "#38bdf8",
+    backgroundColor: "#161616",
+    borderLeftWidth: 2,
+    borderLeftColor: "#3a3a3a",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -274,7 +274,7 @@ const goalStyles = StyleSheet.create({
   labelText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
-    color: "#38bdf8",
+    color: "#888888",
     letterSpacing: 0.2,
   },
   messageText: {
@@ -298,24 +298,19 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   stepRowRunning: {
-    backgroundColor: "#0f1a2e",
+    backgroundColor: "#111111",
     borderWidth: 0,
     borderLeftWidth: 2,
-    borderLeftColor: "#38bdf8",
-    shadowColor: "#38bdf8",
-    shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 3,
+    borderLeftColor: "#3a3a3a",
   },
   stepRowDone: {
     backgroundColor: "transparent",
     borderWidth: 0,
   },
   stepRowFailed: {
-    backgroundColor: "#1e1a1a",
+    backgroundColor: "#141414",
     borderWidth: 1,
-    borderColor: "#5a2020",
+    borderColor: "#2a2a2a",
   },
   stepHeader: {
     flexDirection: "row",
@@ -337,35 +332,35 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stepBulletDone: {
-    backgroundColor: "#22c55e",
-    borderColor: "#22c55e",
+    backgroundColor: "#2a2a2a",
+    borderColor: "#3a3a3a",
   },
   stepBulletFailed: {
-    backgroundColor: "#ef4444",
-    borderColor: "#ef4444",
+    backgroundColor: "#1e1e1e",
+    borderColor: "#3a3a3a",
   },
   stepBulletRunning: {
     backgroundColor: "transparent",
-    borderColor: "#38bdf8",
-    borderWidth: 2,
+    borderColor: "#555555",
+    borderWidth: 1.5,
   },
   stepTitle: {
     flex: 1,
     fontFamily: "Inter_500Medium",
     fontSize: 14,
     lineHeight: 20,
-    color: "#686868",
+    color: "#555555",
     letterSpacing: -0.1,
   },
   stepTitleDone: {
-    color: "#707070",
+    color: "#606060",
     fontFamily: "Inter_400Regular",
   },
   stepTitleFailed: {
-    color: "#f87171",
+    color: "#888888",
   },
   stepTitleRunning: {
-    color: "#f0f0f0",
+    color: "#e8e8e8",
     fontFamily: "Inter_600SemiBold",
   },
 

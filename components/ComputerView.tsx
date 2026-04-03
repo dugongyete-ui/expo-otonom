@@ -47,10 +47,10 @@ function LiveIndicator({ connected }: { connected: boolean }) {
         style={[
           styles.liveDot,
           { opacity: connected ? opacity : 1 },
-          { backgroundColor: connected ? "#16a34a" : "#8a8780" },
+          { backgroundColor: connected ? "#888888" : "#555555" },
         ]}
       />
-      <Text style={[styles.liveText, { color: connected ? "#1a1916" : "#8a8780" }]}>
+      <Text style={[styles.liveText, { color: connected ? "#e0e0e0" : "#888888" }]}>
         {connected ? "Live" : "Menghubungkan"}
       </Text>
     </View>
@@ -100,7 +100,7 @@ function PlanBottomBar({ plan }: { plan: AgentPlan }) {
           <Ionicons
             name={completedCount === totalCount ? "checkmark-circle" : "layers-outline"}
             size={15}
-            color={completedCount === totalCount ? "#16a34a" : "#8a8780"}
+            color={completedCount === totalCount ? "#888888" : "#555555"}
           />
           <Text style={styles.planBarTitle} numberOfLines={1}>
             {currentStep?.description || plan.title || "Menjalankan tugas"}
@@ -127,9 +127,9 @@ function PlanBottomBar({ plan }: { plan: AgentPlan }) {
                 }
                 size={13}
                 color={
-                  step.status === "completed" ? "#16a34a" :
-                  step.status === "running" ? "#4a7cf0" :
-                  step.status === "failed" ? "#dc2626" : "#ccc8be"
+                  step.status === "completed" ? "#888888" :
+                  step.status === "running" ? "#888888" :
+                  step.status === "failed" ? "#666666" : "#555555"
                 }
               />
               <Text
@@ -241,7 +241,7 @@ function FullScreenVNC({
           </TouchableOpacity>
 
           <View style={styles.fullHeaderCenter}>
-            <Ionicons name="desktop-outline" size={16} color="#4a7cf0" />
+            <Ionicons name="desktop-outline" size={16} color="#888888" />
             <Text style={styles.fullHeaderTitle}>Komputer Dzeck</Text>
           </View>
 
@@ -272,7 +272,7 @@ function FullScreenVNC({
           <Ionicons
             name={isTakeover ? "pause-circle-outline" : "hand-left-outline"}
             size={15}
-            color={isTakeover ? "#4a7cf0" : "#1a1916"}
+            color={isTakeover ? "#888888" : "#555555"}
           />
           <Text style={[styles.takeoverText, isTakeover && styles.takeoverTextActive]}>
             {isTakeover ? "Lepas Kendali" : "Ambil Kendali"}
@@ -303,7 +303,7 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
       >
         <View style={styles.compactHeader}>
           <View style={styles.compactHeaderLeft}>
-            <Ionicons name="desktop-outline" size={14} color="#4a7cf0" />
+            <Ionicons name="desktop-outline" size={14} color="#888888" />
             <Text style={styles.compactTitle}>Komputer Dzeck</Text>
             <View style={styles.liveBadge}>
               <View style={[styles.liveBadgeDot, connected && styles.liveBadgeDotOn]} />
@@ -384,12 +384,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(37,99,235,0.08)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "rgba(37,99,235,0.2)",
+    borderColor: "#2a2a2a",
   },
   liveBadgeDot: {
     width: 5,
@@ -398,12 +398,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ccc8be",
   },
   liveBadgeDotOn: {
-    backgroundColor: "#16a34a",
+    backgroundColor: "#888888",
   },
   liveBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 9,
-    color: "#4a7cf0",
+    color: "#888888",
   },
   compactPreview: {
     height: 100,
@@ -517,8 +517,8 @@ const styles = StyleSheet.create({
     borderColor: "#3a3a3a",
   },
   takeoverBtnActive: {
-    backgroundColor: "rgba(37,99,235,0.1)",
-    borderColor: "rgba(37,99,235,0.3)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "#2a2a2a",
   },
   takeoverText: {
     fontFamily: "Inter_600SemiBold",
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
   },
   takeoverTextActive: {
-    color: "#4a7cf0",
+    color: "#888888",
   },
 
   // ─── Plan bottom bar ──────────────────────────────────────────────────────
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: 2,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#888888",
   },
   planBarHeader: {
     flexDirection: "row",

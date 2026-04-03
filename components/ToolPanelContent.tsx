@@ -210,13 +210,13 @@ function ShellToolView({
           <View
             style={[
               styles.returnCodeBadge,
-              { backgroundColor: returnCode === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,69,58,0.15)" },
+              { backgroundColor: returnCode === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.04)" },
             ]}
           >
             <Text
               style={[
                 styles.returnCodeText,
-                { color: returnCode === 0 ? "#888888" : "#FF453A" },
+                { color: returnCode === 0 ? "#888888" : "#666666" },
               ]}
             >
               exit {returnCode}
@@ -608,7 +608,7 @@ function McpToolView({
       <View style={styles.mcpHeader}>
         <Ionicons name="extension-puzzle-outline" size={14} color="#888888" />
         <Text style={styles.mcpToolName}>{toolName || "MCP Tool"}</Text>
-        <View style={[styles.statusDot, { backgroundColor: isRunning ? "#666666" : status === "error" ? "#FF453A" : "#666666" }]} />
+        <View style={[styles.statusDot, { backgroundColor: isRunning ? "#666666" : status === "error" ? "#666666" : "#666666" }]} />
       </View>
 
       {/* Server */}
@@ -1061,15 +1061,15 @@ export function ToolPanelContent({
         </Text>
         <View style={[styles.statusBadge, {
           backgroundColor:
-            status === "calling" ? "rgba(108,92,231,0.15)" :
-            status === "error" ? "rgba(255,69,58,0.15)" :
-            "rgba(52,199,89,0.15)"
+            status === "calling" ? "rgba(255,255,255,0.05)" :
+            status === "error" ? "rgba(255,255,255,0.04)" :
+            "rgba(255,255,255,0.05)"
         }]}>
           <Text style={[styles.statusText, {
             color:
-              status === "calling" ? "#2563eb" :
-              status === "error" ? "#FF453A" :
-              "#34C759"
+              status === "calling" ? "#888888" :
+              status === "error" ? "#666666" :
+              "#888888"
           }]}>
             {status === "calling" ? "Running" : status === "error" ? "Error" : "Done"}
           </Text>
@@ -1109,7 +1109,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(52,199,89,0.1)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1573,7 +1573,7 @@ const styles = StyleSheet.create({
   },
   todoProgressFill: {
     height: 3,
-    backgroundColor: "#30D158",
+    backgroundColor: "#888888",
   },
   todoListScroll: {
     flex: 1,

@@ -176,11 +176,11 @@ export function ChatInput({
               disabled={isUploadingToSandbox}
             >
               {isUploadingToSandbox ? (
-                <ActivityIndicator size="small" color={COLORS.accent} />
+                <ActivityIndicator size="small" color={COLORS.iconMuted} />
               ) : (
-                <NativeIcon name="cloud-upload" size={18} color={COLORS.accent} />
+                <NativeIcon name="cloud-upload" size={18} color={COLORS.iconMuted} />
               )}
-              <Text style={[styles.attachMenuText, { color: COLORS.accent }]}>
+              <Text style={styles.attachMenuText}>
                 {isUploadingToSandbox ? "Uploading..." : "Upload to Sandbox"}
               </Text>
             </TouchableOpacity>
@@ -202,7 +202,7 @@ export function ChatInput({
                 <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
               ) : (
                 <View style={styles.fileThumb}>
-                  <NativeIcon name="document" size={22} color={COLORS.accent} />
+                  <NativeIcon name="document" size={22} color={COLORS.iconMuted} />
                   <Text style={styles.fileThumbName} numberOfLines={1}>{att.name}</Text>
                 </View>
               )}
@@ -210,7 +210,7 @@ export function ChatInput({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <NativeIcon name="close-circle" size={18} color="#f87171" />
+                <NativeIcon name="close-circle" size={18} color="#888888" />
               </TouchableOpacity>
             </View>
           ))}
@@ -260,7 +260,7 @@ export function ChatInput({
               <NativeIcon
                 name={isAgentMode ? "flash" : "code"}
                 size={20}
-                color={isAgentMode ? "#d97706" : COLORS.iconMuted}
+                color={isAgentMode ? "#aaaaaa" : COLORS.iconMuted}
               />
             </TouchableOpacity>
           )}
@@ -414,8 +414,8 @@ const styles = StyleSheet.create({
   sendIconContainer: {
     width: 32,
     height: 32,
-    borderRadius: 9,
-    backgroundColor: COLORS.accent,
+    borderRadius: 16,
+    backgroundColor: "#3a3a3a",
     alignItems: "center",
     justifyContent: "center",
   },

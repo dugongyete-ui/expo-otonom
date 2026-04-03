@@ -100,7 +100,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   if (authMode === null) {
     return (
       <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
-        <ActivityIndicator size="large" color="#4a7cf0" />
+        <ActivityIndicator size="large" color="#888888" />
       </View>
     );
   }
@@ -129,14 +129,14 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
           {error ? (
             <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle" size={16} color="#FF453A" />
+              <Ionicons name="alert-circle" size={16} color="#888888" />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
           {success ? (
             <View style={styles.successBanner}>
-              <Ionicons name="checkmark-circle" size={16} color="#30D158" />
+              <Ionicons name="checkmark-circle" size={16} color="#888888" />
               <Text style={styles.successText}>{success}</Text>
             </View>
           ) : null}
@@ -321,32 +321,32 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FF453A20",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "#FF453A40",
+    borderColor: "#2a2a2a",
     gap: 8,
   },
   errorText: {
-    color: "#FF453A",
+    color: "#a0a0a0",
     fontSize: 13,
     flex: 1,
   },
   successBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#30D15820",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "#30D15840",
+    borderColor: "#2a2a2a",
     gap: 8,
   },
   successText: {
-    color: "#30D158",
+    color: "#a0a0a0",
     fontSize: 13,
     flex: 1,
   },
@@ -392,11 +392,11 @@ const styles = StyleSheet.create({
     marginTop: -8,
   },
   forgotLinkText: {
-    color: "#4a7cf0",
+    color: "#888888",
     fontSize: 13,
   },
   button: {
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#3a3a3a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   switchLinkBold: {
-    color: "#4a7cf0",
+    color: "#c0c0c0",
     fontWeight: "600",
   },
 });

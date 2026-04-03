@@ -180,7 +180,7 @@ export const TOOL_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   idle: "time-outline",
 };
 
-// ─── Tool Category → Color ─────────────────────────────────────────────────
+// ─── Tool Category → Color (monochrome) ────────────────────────────────────
 export const TOOL_COLOR_MAP: Record<string, string> = {
   shell: "#888888",
   file: "#888888",
@@ -292,43 +292,34 @@ export const TOOL_DISPLAY_MAP: Record<string, ToolDisplayInfo> = {
  * Get the tool category from a function name (e.g. "shell_exec" → "shell")
  */
 export function getToolCategory(functionName: string): string {
-  // Handle MCP tools that start with mcp_
   if (functionName.startsWith("mcp_")) return "mcp";
-  // Handle image_view specifically
   if (functionName === "image_view") return "image";
-  // Handle idle specifically
   if (functionName === "idle") return "idle";
-  // Handle email
   if (functionName === "send_email") return "email";
-  // Handle multimedia tools
   const multimediaTools = ["export_pdf", "render_diagram", "speech_to_text", "export_slides", "upload_file"];
   if (multimediaTools.includes(functionName)) return "multimedia";
-  // Handle standard tool names
   const parts = functionName.split("_");
   if (parts.length >= 2) {
     const category = parts[0];
     if (TOOL_NAME_MAP[category]) return category;
   }
-  // Fallback: check if the function name contains any known category
   for (const cat of Object.keys(TOOL_NAME_MAP)) {
     if (functionName.toLowerCase().includes(cat)) return cat;
   }
-  return "shell"; // default fallback
+  return "shell";
 }
 
 /**
  * Get display info for a tool function.
- * Falls back to sensible defaults if not found.
  */
 export function getToolDisplayInfo(functionName: string): ToolDisplayInfo {
   if (TOOL_DISPLAY_MAP[functionName]) {
     return TOOL_DISPLAY_MAP[functionName];
   }
-  // MCP dynamic tools
   if (functionName.startsWith("mcp_")) {
     return {
       icon: "extension-puzzle-outline",
-      color: "#64D2FF",
+      color: "#888888",
       label: "MCP",
       argKey: "tool_name",
     };
@@ -336,13 +327,13 @@ export function getToolDisplayInfo(functionName: string): ToolDisplayInfo {
   const category = getToolCategory(functionName);
   return {
     icon: TOOL_ICON_MAP[category] || "construct-outline",
-    color: TOOL_COLOR_MAP[category] || "#8E8E93",
+    color: "#888888",
     label: TOOL_NAME_MAP[category] || functionName,
     argKey: TOOL_FUNCTION_ARG_MAP[functionName] || "",
   };
 }
 
-// ─── Tool Category Color Palette ───────────────────────────────────────────
+// ─── Tool Category Color Palette (monochrome) ───────────────────────────────
 export interface ToolCategoryColor {
   icon: string;
   background: string;
@@ -350,33 +341,10 @@ export interface ToolCategoryColor {
 }
 
 /**
- * Get vivid-but-tasteful colors for a tool category (dark-theme optimised).
+ * Get monochrome colors for a tool category.
  */
 export function getToolCategoryColor(functionName: string): ToolCategoryColor {
-  const category = getToolCategory(functionName);
-  switch (category) {
-    case "search":
-    case "info":
-      return { icon: "#f59e0b", background: "rgba(245,158,11,0.15)", accent: "#f59e0b" };
-    case "browser":
-    case "desktop":
-      return { icon: "#38bdf8", background: "rgba(56,189,248,0.15)", accent: "#38bdf8" };
-    case "shell":
-      return { icon: "#34d399", background: "rgba(52,211,153,0.15)", accent: "#34d399" };
-    case "file":
-    case "image":
-    case "multimedia":
-      return { icon: "#a78bfa", background: "rgba(167,139,250,0.15)", accent: "#a78bfa" };
-    case "mcp":
-      return { icon: "#818cf8", background: "rgba(129,140,248,0.15)", accent: "#818cf8" };
-    case "message":
-    case "todo":
-    case "task":
-    case "email":
-      return { icon: "#2dd4bf", background: "rgba(45,212,191,0.15)", accent: "#2dd4bf" };
-    default:
-      return { icon: "#94a3b8", background: "rgba(148,163,184,0.12)", accent: "#64748b" };
-  }
+  return { icon: "#888888", background: "rgba(255,255,255,0.05)", accent: "#555555" };
 }
 
 /**
@@ -401,7 +369,6 @@ export function getToolPrimaryArg(
     );
     val = firstKey ? String(args[firstKey] ?? "") : "";
   }
-  // Clean up paths
   val = val.replace(/^\/home\/ubuntu\//, "~/");
   if (val.length > 60) val = val.slice(0, 60) + "\u2026";
   return val;

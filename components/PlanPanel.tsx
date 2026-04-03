@@ -53,9 +53,9 @@ export function PlanPanel({ plan }: PlanPanelProps) {
       case "running":
         return "#888888";
       case "completed":
-        return "#34C759";
+        return "#888888";
       case "failed":
-        return "#dc2626";
+        return "#666666";
       default:
         return "#8a8780";
     }

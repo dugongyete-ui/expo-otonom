@@ -120,7 +120,7 @@ export function CopyIcon({ size = 24, color = "#a0a0a0" }: IconProps) {
   );
 }
 
-export function CheckIcon({ size = 24, color = "#4ade80" }: IconProps) {
+export function CheckIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Polyline points="20,6 9,17 4,12" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
@@ -128,7 +128,7 @@ export function CheckIcon({ size = 24, color = "#4ade80" }: IconProps) {
   );
 }
 
-export function CheckCircleIcon({ size = 24, color = "#30D158" }: IconProps) {
+export function CheckCircleIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={defaultStroke} />
@@ -137,7 +137,7 @@ export function CheckCircleIcon({ size = 24, color = "#30D158" }: IconProps) {
   );
 }
 
-export function AlertCircleIcon({ size = 24, color = "#FF453A" }: IconProps) {
+export function AlertCircleIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={defaultStroke} />
@@ -147,7 +147,7 @@ export function AlertCircleIcon({ size = 24, color = "#FF453A" }: IconProps) {
   );
 }
 
-export function CloseCircleIcon({ size = 24, color = "#FF453A" }: IconProps) {
+export function CloseCircleIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={defaultStroke} />
@@ -179,7 +179,7 @@ export function ImageOutlineIcon({ size = 24, color = "#a0a0a0" }: IconProps) {
   );
 }
 
-export function FlashIcon({ size = 24, color = "#d97706" }: IconProps) {
+export function FlashIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <Polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2" fill={color} />
@@ -187,7 +187,7 @@ export function FlashIcon({ size = 24, color = "#d97706" }: IconProps) {
   );
 }
 
-export function ChatbubbleIcon({ size = 24, color = "#4a7cf0" }: IconProps) {
+export function ChatbubbleIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
@@ -236,7 +236,7 @@ export function PuzzleIcon({ size = 24, color = "#a0a0a0" }: IconProps) {
   );
 }
 
-export function LockIcon({ size = 24, color = "#34C759" }: IconProps) {
+export function LockIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Rect x="5" y="11" width="14" height="11" rx="2" stroke={color} strokeWidth={defaultStroke} />
@@ -399,7 +399,7 @@ export function CopyOutlineIcon({ size = 24, color = "#a0a0a0" }: IconProps) {
   );
 }
 
-export function LockClosedIcon({ size = 24, color = "#34C759" }: IconProps) {
+export function LockClosedIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Rect x="5" y="11" width="14" height="11" rx="2" stroke={color} strokeWidth={defaultStroke} />
@@ -408,7 +408,7 @@ export function LockClosedIcon({ size = 24, color = "#34C759" }: IconProps) {
   );
 }
 
-export function DocumentTextIcon({ size = 24, color = "#FFD60A" }: IconProps) {
+export function DocumentTextIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
@@ -427,7 +427,7 @@ export function CircleOutlineIcon({ size = 24, color = "#555555" }: IconProps) {
   );
 }
 
-export function ExtensionPuzzleIcon({ size = 24, color = "#64D2FF" }: IconProps) {
+export function ExtensionPuzzleIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M20.5 14.5c.3-.3.5-.7.5-1.1 0-.9-.7-1.6-1.6-1.6-.2 0-.4 0-.6.1L17 10V7h-3l-1.8-1.8c.1-.2.1-.4.1-.6C12.3 3.7 11.6 3 10.7 3c-.4 0-.8.2-1.1.5L8 5H5v3l-1.5 1.6c-.3.3-.5.7-.5 1.1 0 .9.7 1.6 1.6 1.6.2 0 .4 0 .6-.1L7 14v3h3l1.8 1.8c-.1.2-.1.4-.1.6 0 .9.7 1.6 1.6 1.6.4 0 .8-.2 1.1-.5L16 19h3v-3l1.5-1.5z" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />

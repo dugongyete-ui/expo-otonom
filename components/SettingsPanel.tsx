@@ -302,9 +302,9 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
 
         {error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="warning-outline" size={14} color="#FF453A" />
+            <Ionicons name="warning-outline" size={14} color="#888888" />
             <Text style={styles.errorText}>{error}</Text>
-            <Pressable onPress={() => setError(null)}><Ionicons name="close" size={14} color="#FF453A" /></Pressable>
+            <Pressable onPress={() => setError(null)}><Ionicons name="close" size={14} color="#888888" /></Pressable>
           </View>
         )}
 
@@ -363,15 +363,15 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4, marginRight: 12 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: "#FFFFFF" },
-  saveBtn: { backgroundColor: "#2563eb", paddingVertical: 7, paddingHorizontal: 16, borderRadius: 8 },
+  saveBtn: { backgroundColor: "#3a3a3a", paddingVertical: 7, paddingHorizontal: 16, borderRadius: 8 },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
   errorBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "rgba(255,69,58,0.1)", paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: "rgba(255,69,58,0.2)",
+    backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#2a2a2a",
   },
-  errorText: { color: "#FF453A", fontSize: 13, flex: 1 },
+  errorText: { color: "#a0a0a0", fontSize: 13, flex: 1 },
   successBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 16, paddingVertical: 10,

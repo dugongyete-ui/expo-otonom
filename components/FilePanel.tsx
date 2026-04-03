@@ -258,7 +258,7 @@ export function FilePanel({
             </View>
           ) : previewLoading ? (
             <View style={styles.loadingState}>
-              <ActivityIndicator size="small" color="#FFD60A" />
+              <ActivityIndicator size="small" color="#888888" />
               <Text style={styles.loadingText}>Loading preview...</Text>
             </View>
           ) : isCode ? (
@@ -305,12 +305,12 @@ export function FilePanel({
       >
         {loading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="small" color="#FFD60A" />
+            <ActivityIndicator size="small" color="#888888" />
             <Text style={styles.loadingText}>Loading files...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorState}>
-            <NativeIcon name="alert-circle" size={20} color="#FF453A" />
+            <NativeIcon name="alert-circle" size={20} color="#888888" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : displayFiles.length === 0 ? (
@@ -333,7 +333,7 @@ export function FilePanel({
               activeOpacity={0.7}
             >
               <View style={styles.fileIcon}>
-                <NativeIcon name={getFileIcon(file.name)} size={14} color="#5AC8FA" />
+                <NativeIcon name={getFileIcon(file.name)} size={14} color="#888888" />
               </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#FF453A",
+    color: "#a0a0a0",
     textAlign: "center",
     paddingHorizontal: 16,
   },

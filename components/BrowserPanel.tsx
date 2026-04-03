@@ -247,7 +247,7 @@ export function BrowserPanel({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <NativeIcon name="desktop" size={14} color="#4a7cf0" />
+          <NativeIcon name="desktop" size={14} color="#888888" />
           <Text style={styles.headerTitle}>Browser</Text>
           {sessionState === "ready" && (
             <View style={styles.liveBadge}>
@@ -298,14 +298,14 @@ export function BrowserPanel({
 
         {(sessionState === "creating" || sessionState === "waiting" || sessionState === "connecting") && (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color="#4a7cf0" />
+            <ActivityIndicator size="large" color="#888888" />
             <Text style={styles.loadingText}>{statusMsg}</Text>
           </View>
         )}
 
         {sessionState === "error" && (
           <View style={styles.errorState}>
-            <NativeIcon name="alert-circle" size={32} color="#FF453A" />
+            <NativeIcon name="alert-circle" size={32} color="#888888" />
             <Text style={styles.errorTitle}>Error</Text>
             <Text style={styles.errorText}>{errorMsg}</Text>
             <TouchableOpacity
@@ -350,7 +350,7 @@ export function BrowserPanel({
               </TouchableOpacity>
             ) : (
               <View style={styles.noScreenshot}>
-                <ActivityIndicator size="small" color="#4a7cf0" />
+                <ActivityIndicator size="small" color="#888888" />
                 <Text style={styles.noScreenshotText}>Memuat preview...</Text>
               </View>
             )}
@@ -371,7 +371,7 @@ export function BrowserPanel({
             {lastBrowserEvent?.url ? (
               <View style={styles.currentUrl}>
                 <View style={styles.urlRow}>
-                  <NativeIcon name="lock-closed" size={10} color="#34C759" />
+                  <NativeIcon name="lock-closed" size={10} color="#888888" />
                   <Text style={styles.urlText} numberOfLines={1}>{lastBrowserEvent.url}</Text>
                 </View>
                 {lastBrowserEvent.title ? (
@@ -404,7 +404,7 @@ export function BrowserPanel({
                   <NativeIcon
                     name={useVNC ? "videocam" : "videocam"}
                     size={14}
-                    color={useVNC ? "#FFFFFF" : "#4a7cf0"}
+                    color={useVNC ? "#FFFFFF" : "#888888"}
                   />
                   <Text style={[
                     styles.actionText,
@@ -420,7 +420,7 @@ export function BrowserPanel({
                   onPress={() => { setIsTakeOverActive(false); }}
                   activeOpacity={0.7}
                 >
-                  <NativeIcon name="exit" size={14} color="#FF9F0A" />
+                  <NativeIcon name="exit" size={14} color="#888888" />
                   <Text style={[styles.actionText, styles.takeOverText]}>Keluar</Text>
                 </TouchableOpacity>
               ) : (
@@ -429,7 +429,7 @@ export function BrowserPanel({
                   onPress={handleTakeOver}
                   activeOpacity={0.7}
                 >
-                  <TakeOverIcon size={14} color="#FF9F0A" />
+                  <TakeOverIcon size={14} color="#888888" />
                   <Text style={[styles.actionText, styles.takeOverText]}>Take Over</Text>
                 </TouchableOpacity>
               )}
@@ -450,7 +450,7 @@ export function BrowserPanel({
                   onPress={destroyCurrentSession}
                   activeOpacity={0.7}
                 >
-                  <NativeIcon name="close-circle" size={14} color="#FF453A" />
+                  <NativeIcon name="close-circle" size={14} color="#888888" />
                   <Text style={[styles.actionText, styles.dangerText]}>Tutup</Text>
                 </TouchableOpacity>
               )}
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(48,209,88,0.15)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -506,12 +506,12 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#30D158",
+    backgroundColor: "#888888",
   },
   liveBadgeText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 9,
-    color: "#30D158",
+    color: "#888888",
   },
   collapseButton: {
     width: 28,
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#3a3a3a",
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#FF453A",
+    color: "#a0a0a0",
   },
   errorText: {
     fontFamily: "Inter_400Regular",
@@ -704,16 +704,16 @@ const styles = StyleSheet.create({
     color: "#a0a0a0",
   },
   dangerButton: {
-    borderColor: "rgba(255,69,58,0.25)",
+    borderColor: "#2a2a2a",
   },
   dangerText: {
-    color: "#FF453A",
+    color: "#a0a0a0",
   },
   takeOverBtn: {
-    borderColor: "rgba(255,159,10,0.3)",
+    borderColor: "#2a2a2a",
   },
   takeOverText: {
-    color: "#FF9F0A",
+    color: "#a0a0a0",
   },
   vncContainer: {
     borderRadius: 8,
@@ -724,8 +724,8 @@ const styles = StyleSheet.create({
     height: 200,
   },
   vncActiveBtn: {
-    backgroundColor: "#4a7cf0",
-    borderColor: "#4a7cf0",
+    backgroundColor: "#3a3a3a",
+    borderColor: "#3a3a3a",
   },
   vncActiveText: {
     color: "#FFFFFF",

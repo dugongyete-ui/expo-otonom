@@ -40,9 +40,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
               resizeMode="cover"
             />
             <Text style={styles.agentName}>Dzeck</Text>
-            <View style={[styles.agentBadge, styles.agentBadgeAgent]}>
-              <Text style={[styles.agentBadgeText]}>Agent</Text>
-            </View>
+            <Text style={styles.agentVersion}>Lite</Text>
           </View>
           <View style={styles.messageBubble}>
             <MarkdownText text={cleanAgentText(event.message || "")} color="#f3f4f6" fontSize={15} />
@@ -55,7 +53,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.titleRow}>
-            <NativeIcon name="flash" size={15} color="#888888" />
+            <NativeIcon name="flash" size={15} color="#555555" />
             <Text style={styles.titleText} numberOfLines={2}>
               {event.title || ""}
             </Text>
@@ -74,9 +72,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
               resizeMode="cover"
             />
             <Text style={styles.agentName}>Dzeck</Text>
-            <View style={[styles.agentBadge, styles.agentBadgeWait]}>
-              <Text style={[styles.agentBadgeText]}>Menunggu</Text>
-            </View>
+            <Text style={styles.agentVersion}>menunggu</Text>
           </View>
           <View style={styles.messageBubble}>
             <Text style={styles.messageText} selectable>
@@ -90,7 +86,7 @@ export function AgentMessage({ event }: AgentMessageProps) {
       return (
         <View style={styles.container}>
           <View style={styles.errorRow}>
-            <NativeIcon name="alert-circle" size={14} color="#dc2626" />
+            <NativeIcon name="alert-circle" size={14} color="#888888" />
             <Text style={styles.errorText}>{event.error || "Terjadi kesalahan"}</Text>
           </View>
         </View>
@@ -123,20 +119,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#f3f4f6",
   },
-  agentBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    backgroundColor: "#2a2a2a",
-    borderWidth: 1,
-    borderColor: "#3a3a3a",
-  },
-  agentBadgeAgent: {},
-  agentBadgeWait: {},
-  agentBadgeText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 10,
-    color: "#888888",
+  agentVersion: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#555555",
+    letterSpacing: 0.1,
   },
   messageBubble: {
     paddingLeft: 28,
@@ -149,7 +136,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   cursor: {
-    color: "#888888",
+    color: "#666666",
     fontSize: 14,
   },
   titleRow: {
@@ -170,17 +157,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(220,38,38,0.06)",
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: "rgba(220,38,38,0.15)",
+    borderColor: "#2a2a2a",
   },
   errorText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#f07070",
+    color: "#888888",
     lineHeight: 18,
   },
 });

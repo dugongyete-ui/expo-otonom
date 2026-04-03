@@ -265,7 +265,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
             activeOpacity={0.6}
           >
             {copied
-              ? <CheckIcon size={14} color="#4ade80" />
+              ? <CheckIcon size={14} color="#888888" />
               : <CopyOutlineIcon size={14} color={COLORS.iconMuted} />
             }
           </TouchableOpacity>
@@ -328,22 +328,22 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   askBubble: {
-    backgroundColor: "rgba(234,179,8,0.07)",
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
-    borderColor: "rgba(234,179,8,0.2)",
+    borderColor: "#2a2a2a",
     paddingHorizontal: 14,
   },
   askBadge: {
     marginTop: 8,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: "rgba(234,179,8,0.1)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderRadius: 8,
     alignSelf: "flex-start",
   },
   askBadgeText: {
     fontSize: 12,
-    color: "#c8a060",
+    color: "#888888",
   },
   messageText: {
     fontFamily: "Inter_400Regular",

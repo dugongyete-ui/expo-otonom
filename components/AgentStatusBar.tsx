@@ -29,11 +29,11 @@ const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   mcp_call_tool: { label: "Calling MCP tool", icon: "extension-puzzle" },
 };
 
-const NEUTRAL = "#888888";
+const NEUTRAL = "#666666";
 
 function PulsingDot() {
   const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.5)).current;
+  const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
     Animated.loop(
@@ -43,8 +43,8 @@ function PulsingDot() {
           Animated.timing(scale, { toValue: 1, duration: 500, useNativeDriver: true }),
         ]),
         Animated.sequence([
-          Animated.timing(opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.9, duration: 500, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.3, duration: 500, useNativeDriver: true }),
         ]),
       ]),
     ).start();
@@ -53,8 +53,8 @@ function PulsingDot() {
   return (
     <Animated.View
       style={{
-        width: 6,
-        height: 6,
+        width: 5,
+        height: 5,
         borderRadius: 3,
         backgroundColor: NEUTRAL,
         transform: [{ scale }],
@@ -110,9 +110,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: "#1e1e1e",
+    backgroundColor: "#161616",
     borderWidth: 1,
-    borderColor: "#333333",
+    borderColor: "#2a2a2a",
     alignSelf: "flex-start",
   },
   label: {

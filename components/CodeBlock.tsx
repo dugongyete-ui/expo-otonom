@@ -35,7 +35,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
           <Ionicons
             name={copied ? "checkmark" : "copy-outline"}
             size={14}
-            color={copied ? "#30D158" : "#8E8E93"}
+            color={copied ? "#888888" : "#8E8E93"}
           />
           <Text style={[styles.copyText, copied && styles.copiedText]}>
             {copied ? "Copied" : "Copy"}
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
   },
   copiedText: {
-    color: "#30D158",
+    color: "#a0a0a0",
   },
   codeScroll: {
     padding: 14,

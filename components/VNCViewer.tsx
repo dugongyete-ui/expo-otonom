@@ -308,7 +308,7 @@ export function VNCViewer({
       <View style={styles.container}>
         {status === "connecting" && !screenshotUri && (
           <View style={styles.overlay}>
-            <ActivityIndicator size="large" color="#2563eb" />
+            <ActivityIndicator size="large" color="#888888" />
             <Text style={styles.statusText}>Loading desktop snapshot...</Text>
             {reconnectAttemptsRef.current > 0 && (
               <Text style={styles.reconnectText}>
@@ -343,7 +343,7 @@ export function VNCViewer({
 
         {status === "error" && (
           <View style={styles.overlay}>
-            <Ionicons name="alert-circle" size={32} color="#FF453A" />
+            <Ionicons name="alert-circle" size={32} color="#888888" />
             <Text style={styles.errorText}>{errorMsg || "Connection failed"}</Text>
           </View>
         )}
@@ -408,7 +408,7 @@ export function VNCViewer({
     <View style={styles.container}>
       {status === "connecting" && (
         <View style={styles.overlay}>
-          <ActivityIndicator size="large" color="#2563eb" />
+          <ActivityIndicator size="large" color="#888888" />
           <Text style={styles.statusText}>
             {reconnectAttemptsRef.current > 0
               ? `Reconnecting... (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
@@ -418,7 +418,7 @@ export function VNCViewer({
       )}
       {status === "error" && (
         <View style={styles.overlay}>
-          <Ionicons name="alert-circle" size={32} color="#FF453A" />
+          <Ionicons name="alert-circle" size={32} color="#888888" />
           <Text style={styles.errorText}>{errorMsg || "Connection failed"}</Text>
           <TouchableOpacity
             style={styles.retryBtn}
@@ -479,14 +479,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   errorText: {
-    color: "#FF453A",
+    color: "#a0a0a0",
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
     paddingHorizontal: 20,
   },
   retryBtn: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#3a3a3a",
     borderRadius: 8,
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     flex: 2,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#3a3a3a",
     alignItems: "center",
   },
   keyboardModalSendDisabled: {

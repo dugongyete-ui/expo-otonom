@@ -38,8 +38,8 @@ function getToolIcon(name: string): string {
 function getStatusColor(status: ToolItem["status"]): string {
   switch (status) {
     case "calling": return "#888888";
-    case "called": return "#30D158";
-    case "error": return "#FF453A";
+    case "called": return "#888888";
+    case "error": return "#666666";
   }
 }
 

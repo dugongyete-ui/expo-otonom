@@ -217,9 +217,9 @@ const STEP_ICONS: Record<string, IoniconsName> = {
 
 function StepBadge({ status }: { status?: PlanStepStatus }) {
   const color =
-    status === "completed" ? "#30D158" :
-    status === "running" ? "#FFD60A" :
-    status === "failed" ? "#FF453A" : "#636366";
+    status === "completed" ? "#888888" :
+    status === "running" ? "#888888" :
+    status === "failed" ? "#666666" : "#555555";
   const icon: IoniconsName = (status && STEP_ICONS[status]) || "ellipse-outline";
   return <Ionicons name={icon} size={14} color={color} />;
 }
@@ -276,7 +276,7 @@ export default function SharePage() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#888888" />
         <Text style={styles.loadingText}>Loading shared session...</Text>
       </View>
     );
@@ -298,7 +298,7 @@ export default function SharePage() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="sparkles" size={20} color="#2563eb" />
+          <Ionicons name="sparkles" size={20} color="#888888" />
           <Text style={styles.headerTitle}>Shared Session</Text>
         </View>
         <View style={styles.headerRight}>
@@ -317,7 +317,7 @@ export default function SharePage() {
 
       {session.userMessage ? (
         <View style={styles.userMessageBox}>
-          <Ionicons name="person-circle" size={16} color="#2563eb" />
+          <Ionicons name="person-circle" size={16} color="#888888" />
           <Text style={styles.userMessageText} numberOfLines={3}>{session.userMessage}</Text>
         </View>
       ) : null}
@@ -352,9 +352,9 @@ export default function SharePage() {
                     <Text style={styles.stepNumber}>Step {idx + 1}</Text>
                     <Text style={[
                       styles.stepStatus,
-                      step.status === "completed" && { color: "#30D158" },
-                      step.status === "running" && { color: "#FFD60A" },
-                      step.status === "failed" && { color: "#FF453A" },
+                      step.status === "completed" && { color: "#888888" },
+                      step.status === "running" && { color: "#888888" },
+                      step.status === "failed" && { color: "#666666" },
                     ]}>{step.status || "pending"}</Text>
                   </View>
                   <Text style={styles.stepTitle}>{step.title || "Untitled step"}</Text>
@@ -377,7 +377,7 @@ export default function SharePage() {
               session.assistantMessages.map((msg, idx) => (
                 <View key={idx} style={styles.messageCard}>
                   <View style={styles.messageHeader}>
-                    <Ionicons name="sparkles" size={12} color="#30D158" />
+                    <Ionicons name="sparkles" size={12} color="#888888" />
                     <Text style={styles.messageSender}>Dzeck</Text>
                   </View>
                   <Text style={styles.messageText}>{msg}</Text>
@@ -402,9 +402,9 @@ export default function SharePage() {
                     <Text style={styles.toolName}>{tc.name}</Text>
                     <Text style={[
                       styles.toolStatus,
-                      tc.status === "called" && { color: "#30D158" },
-                      tc.status === "calling" && { color: "#FFD60A" },
-                      tc.status === "error" && { color: "#FF453A" },
+                      tc.status === "called" && { color: "#888888" },
+                      tc.status === "calling" && { color: "#888888" },
+                      tc.status === "error" && { color: "#666666" },
                     ]}>{tc.status}</Text>
                   </View>
                 </View>
@@ -427,7 +427,7 @@ export default function SharePage() {
 
         {session.error && (
           <View style={styles.errorCard}>
-            <Ionicons name="warning-outline" size={14} color="#FF453A" />
+            <Ionicons name="warning-outline" size={14} color="#888888" />
             <Text style={styles.errorCardText}>{session.error}</Text>
           </View>
         )}
@@ -459,20 +459,20 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: "row", alignItems: "center" },
   liveBadge: {
     flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "rgba(48,209,88,0.15)", borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 4,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#30D158" },
-  liveBadgeText: { color: "#30D158", fontSize: 11, fontWeight: "600" },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#888888" },
+  liveBadgeText: { color: "#888888", fontSize: 11, fontWeight: "600" },
   doneBadge: {
-    backgroundColor: "rgba(108,92,231,0.15)", borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 4,
   },
-  doneBadgeText: { color: "#2563eb", fontSize: 11, fontWeight: "600" },
+  doneBadgeText: { color: "#888888", fontSize: 11, fontWeight: "600" },
   userMessageBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: "rgba(108,92,231,0.07)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderBottomWidth: 1, borderBottomColor: "#2C2C30",
   },
   userMessageText: { color: "#AEAEB2", fontSize: 13, flex: 1, lineHeight: 18 },
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   tab: { paddingVertical: 10, paddingHorizontal: 12, marginBottom: -1 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: "#2563eb" },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: "#888888" },
   tabText: { color: "#636366", fontSize: 13, fontWeight: "500" },
   tabTextActive: { color: "#FFFFFF" },
   content: { flex: 1 },
@@ -498,13 +498,13 @@ const styles = StyleSheet.create({
   stepStatus: { color: "#636366", fontSize: 10, fontWeight: "600", textTransform: "uppercase" },
   stepTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "500", marginBottom: 4 },
   stepDesc: { color: "#8E8E93", fontSize: 12, lineHeight: 16 },
-  stepAgent: { color: "#2563eb", fontSize: 10, marginTop: 4 },
+  stepAgent: { color: "#888888", fontSize: 10, marginTop: 4 },
   messageCard: {
     backgroundColor: "#1A1A20", borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: "rgba(48,209,88,0.2)", marginBottom: 8,
+    borderWidth: 1, borderColor: "#2a2a2a", marginBottom: 8,
   },
   messageHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  messageSender: { color: "#30D158", fontSize: 11, fontWeight: "600" },
+  messageSender: { color: "#888888", fontSize: 11, fontWeight: "600" },
   messageText: { color: "#AEAEB2", fontSize: 13, lineHeight: 20 },
   toolCard: {
     backgroundColor: "#1A1A20", borderRadius: 8, padding: 10,
@@ -523,10 +523,10 @@ const styles = StyleSheet.create({
   fileName: { color: "#AEAEB2", fontSize: 13, flex: 1 },
   errorCard: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
-    backgroundColor: "rgba(255,69,58,0.08)", borderRadius: 8, padding: 10,
-    borderWidth: 1, borderColor: "rgba(255,69,58,0.2)", marginTop: 8,
+    backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 8, padding: 10,
+    borderWidth: 1, borderColor: "#2a2a2a", marginTop: 8,
   },
-  errorCardText: { color: "#FF453A", fontSize: 12, flex: 1, lineHeight: 16 },
+  errorCardText: { color: "#a0a0a0", fontSize: 12, flex: 1, lineHeight: 16 },
   footer: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     paddingHorizontal: 16, paddingVertical: 10,

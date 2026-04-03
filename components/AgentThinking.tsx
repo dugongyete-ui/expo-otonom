@@ -62,7 +62,7 @@ const dotStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#666666",
+    backgroundColor: "#888888",
   },
 });
 
@@ -80,7 +80,7 @@ export function AgentThinking({ thinking }: AgentThinkingProps) {
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <View style={styles.iconContainer}>
-        <NativeIcon name="bulb-outline" size={12} color="#888888" />
+        <NativeIcon name="bulb-outline" size={12} color="#555555" />
       </View>
       <Text style={styles.text} numberOfLines={3}>
         {thinking}
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#161616",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#242424",
+    backgroundColor: "#1e1e1e",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#6b7280",
+    color: "#606060",
     lineHeight: 18,
   },
   workingRow: {
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   workingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#6b7280",
+    color: "#606060",
     fontStyle: "italic",
   },
 });

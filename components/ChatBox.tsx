@@ -105,14 +105,14 @@ export function ChatBox({
                 <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
               ) : (
                 <View style={styles.fileThumb}>
-                  <DocumentIcon size={22} color={COLORS.accent} />
+                  <DocumentIcon size={22} color={COLORS.iconMuted} />
                 </View>
               )}
               <TouchableOpacity
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <CloseCircleIcon size={18} color="#f87171" />
+                <CloseCircleIcon size={18} color="#888888" />
               </TouchableOpacity>
             </View>
           ))}
@@ -124,7 +124,7 @@ export function ChatBox({
           ref={inputRef}
           style={styles.input}
           placeholder={placeholder}
-          placeholderTextColor={isWaitingForUser ? "#92400e" : COLORS.textPlaceholder}
+          placeholderTextColor={COLORS.textPlaceholder}
           value={value}
           onChangeText={onChangeText}
           multiline
@@ -238,8 +238,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   inputWrapperWaiting: {
-    borderColor: "rgba(234,179,8,0.4)",
-    backgroundColor: "rgba(234,179,8,0.05)",
+    borderColor: "#3a3a3a",
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   input: {
     fontSize: 14,
@@ -279,8 +279,8 @@ const styles = StyleSheet.create({
   sendIconContainer: {
     width: 32,
     height: 32,
-    borderRadius: 9,
-    backgroundColor: COLORS.accent,
+    borderRadius: 16,
+    backgroundColor: "#3a3a3a",
     alignItems: "center",
     justifyContent: "center",
   },

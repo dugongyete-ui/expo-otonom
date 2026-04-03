@@ -164,7 +164,7 @@ export function TakeOverView({
       {/* Browser session unavailable error */}
       {browserUnavailable ? (
         <View style={styles.unavailableContainer}>
-          <Ionicons name="alert-circle-outline" size={40} color="#FF453A" />
+          <Ionicons name="alert-circle-outline" size={40} color="#888888" />
           <Text style={styles.unavailableTitle}>Browser Session Unavailable</Text>
           <Text style={styles.unavailableText}>
             No active desktop session is connected to this agent. The browser takeover requires an E2B sandbox session.
@@ -197,7 +197,7 @@ export function TakeOverView({
 
       {/* Pause indicator */}
       <View style={styles.pauseBadge}>
-        <Ionicons name="pause-circle" size={14} color="#FF9F0A" />
+        <Ionicons name="pause-circle" size={14} color="#888888" />
         <Text style={styles.pauseText}>Agent Dijeda</Text>
       </View>
 
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#30D158",
+    backgroundColor: "#888888",
   },
   connectedText: {
     color: "#ffffff",
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   pauseText: {
-    color: "#FF9F0A",
+    color: "#888888",
     fontSize: 11,
     fontFamily: "Inter_500Medium",
   },

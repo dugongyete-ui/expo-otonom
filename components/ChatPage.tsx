@@ -114,7 +114,7 @@ function ThinkingIndicator({ label }: { label: string }) {
               key={i}
               style={[
                 thinkingStyles.dot,
-                { opacity: d, transform: [{ scaleY: d }], backgroundColor: ["#38bdf8", "#818cf8", "#a78bfa"][i] },
+                { opacity: d, transform: [{ scaleY: d }], backgroundColor: "#888888" },
               ]}
             />
           ))}
@@ -249,14 +249,14 @@ function InlineToolStep({ tool }: { tool: any }) {
     ? (tool.output || tool.function_result || "").trim().replace(/\n/g, " ").slice(0, 100)
     : null;
 
-  const iconColor = isError ? "#f87171" : catColor.icon;
+  const iconColor = "#888888";
   const bgColor = isError
-    ? "#2a1a1a"
+    ? "#1e1e1e"
     : isDone
-    ? catColor.background
+    ? "rgba(255,255,255,0.04)"
     : isRunning
-    ? catColor.background
-    : "#2a2a2a";
+    ? "rgba(255,255,255,0.04)"
+    : "#1e1e1e";
 
   return (
     <View style={inlineToolStyles.row}>
@@ -280,8 +280,8 @@ function InlineToolStep({ tool }: { tool: any }) {
         ) : null}
       </View>
       {isRunning && <View style={inlineToolStyles.runningDot} />}
-      {isDone && <CheckIcon size={11} color="#4ade80" />}
-      {isError && <CloseCircleIcon size={11} color="#f87171" />}
+      {isDone && <CheckIcon size={11} color="#888888" />}
+      {isError && <CloseCircleIcon size={11} color="#888888" />}
     </View>
   );
 }
@@ -304,13 +304,13 @@ const inlineToolStyles = StyleSheet.create({
     marginTop: 2,
   },
   iconWrapDone: {
-    backgroundColor: "#162416",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
   iconWrapRunning: {
-    backgroundColor: "#0f1e2e",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
   iconWrapError: {
-    backgroundColor: "#2a1a1a",
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   labelArea: {
     flex: 1,
@@ -329,7 +329,7 @@ const inlineToolStyles = StyleSheet.create({
     color: "#888888",
   },
   labelError: {
-    color: "#f87171",
+    color: "#888888",
   },
   snippetText: {
     fontFamily: "Inter_400Regular",
@@ -341,7 +341,7 @@ const inlineToolStyles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#7dd3fc",
+    backgroundColor: "#888888",
     flexShrink: 0,
     marginTop: 5,
   },
@@ -1596,7 +1596,7 @@ export function ChatPage({
                 await logout();
               }}
             >
-              <LogOutIcon size={16} color="#dc2626" />
+              <LogOutIcon size={16} color="#888888" />
               <Text style={styles.logoutBtnText}>{translate("Logout")}</Text>
             </TouchableOpacity>
           </View>
@@ -1675,12 +1675,12 @@ export function ChatPage({
                   <Text style={styles.agentTurnName}>Dzeck</Text>
                   {isPlanRunning && !isPlanDone && (
                     <View style={styles.agentTurnBadgeRunning}>
-                      <Text style={[styles.agentTurnBadgeText, { color: "#7dd3fc" }]}>Working…</Text>
+                      <Text style={[styles.agentTurnBadgeText, { color: "#888888" }]}>Working…</Text>
                     </View>
                   )}
                   {isPlanDone && (
                     <View style={styles.agentTurnBadgeDone}>
-                      <Text style={[styles.agentTurnBadgeText, { color: "#4ade80" }]}>Done</Text>
+                      <Text style={[styles.agentTurnBadgeText, { color: "#888888" }]}>Done</Text>
                     </View>
                   )}
                 </View>
@@ -1799,7 +1799,7 @@ export function ChatPage({
               <View style={styles.taskCompletedCard}>
                 <View style={styles.taskCompletedCardHeader}>
                   <View style={styles.taskCompletedIconNew}>
-                    <CheckIcon size={14} color="#4ade80" />
+                    <CheckIcon size={14} color="#888888" />
                   </View>
                   <View style={styles.taskCompletedTitleArea}>
                     <Text style={styles.taskCompletedTitle}>Tugas Selesai</Text>
@@ -1810,7 +1810,7 @@ export function ChatPage({
                   <View style={styles.taskCompletedSteps}>
                     {completedSteps.map((step, i) => (
                       <View key={step.id || i} style={styles.taskCompletedStepRow}>
-                        <CheckCircleIcon size={14} color="#4ade80" />
+                        <CheckCircleIcon size={14} color="#888888" />
                         <Text style={styles.taskCompletedStepText} numberOfLines={2}>
                           {step.description}
                         </Text>
@@ -2004,7 +2004,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#2a2a2a",
   },
   logoutBtnText: {
-    color: "#f87171",
+    color: "#888888",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -2018,10 +2018,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   e2bConnected: {
-    backgroundColor: "rgba(22,163,74,0.12)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
   e2bError: {
-    backgroundColor: "rgba(220,38,38,0.1)",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
   e2bChecking: {
     backgroundColor: "#2a2a2a",
@@ -2099,7 +2099,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "#2c4eb0",
+    backgroundColor: "#222222",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2119,17 +2119,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(125,211,252,0.1)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
-    borderColor: "rgba(125,211,252,0.25)",
+    borderColor: "#2a2a2a",
   },
   agentTurnBadgeDone: {
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(74,222,128,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
-    borderColor: "rgba(74,222,128,0.2)",
+    borderColor: "#2a2a2a",
   },
   agentTurnBadgeText: {
     fontFamily: "Inter_500Medium",
@@ -2236,10 +2236,10 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   taskCompletedCard: {
-    backgroundColor: "#1a2420",
+    backgroundColor: "#161616",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2a4a3a",
+    borderColor: "#2a2a2a",
     overflow: "hidden",
     paddingBottom: 4,
   },
@@ -2250,17 +2250,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#1e3a2a",
+    borderBottomColor: "#2a2a2a",
   },
   taskCompletedIconNew: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#162416",
+    backgroundColor: "#222222",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#2a4a2a",
+    borderColor: "#2a2a2a",
     flexShrink: 0,
   },
   taskCompletedTitleArea: {
@@ -2276,7 +2276,7 @@ const styles = StyleSheet.create({
   taskCompletedSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4ade80",
+    color: "#888888",
     letterSpacing: -0.1,
   },
   taskCompletedSteps: {
@@ -2302,9 +2302,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#1e2a2e",
-    borderLeftWidth: 3,
-    borderLeftColor: "#7dd3fc",
+    backgroundColor: "#161616",
+    borderLeftWidth: 2,
+    borderLeftColor: "#3a3a3a",
     borderRadius: 8,
   },
   taskCompletedNarrativeText: {
@@ -2372,7 +2372,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#444444",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2382,7 +2382,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   toolsBtnActive: {
-    backgroundColor: "rgba(37,99,235,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   inlineToolsBlock: {
     marginLeft: 30,

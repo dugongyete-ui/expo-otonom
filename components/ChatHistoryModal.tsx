@@ -224,7 +224,7 @@ export function ChatHistoryModal({
                 style={styles.clearAllBtn}
                 activeOpacity={0.7}
               >
-                <NativeIcon name="trash-outline" size={16} color="#FF453A" />
+                <NativeIcon name="trash-outline" size={16} color="#888888" />
                 <Text style={styles.clearAllText}>Clear All</Text>
               </TouchableOpacity>
             )}
@@ -240,7 +240,7 @@ export function ChatHistoryModal({
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color="#2563eb" />
+            <ActivityIndicator color="#888888" />
           </View>
         ) : sessions.length === 0 ? (
           <View style={styles.emptyState}>
@@ -304,14 +304,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "rgba(255, 69, 58, 0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
-    borderColor: "rgba(255, 69, 58, 0.15)",
+    borderColor: "#2a2a2a",
   },
   clearAllText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#FF453A",
+    color: "#a0a0a0",
   },
   closeBtn: {
     padding: 4,
@@ -400,21 +400,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(90, 200, 250, 0.1)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
-    borderColor: "rgba(90, 200, 250, 0.2)",
+    borderColor: "#2a2a2a",
   },
   modeBadgeAgent: {
-    backgroundColor: "rgba(108, 92, 231, 0.1)",
-    borderColor: "rgba(108, 92, 231, 0.2)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "#2a2a2a",
   },
   modeBadgeText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 10,
-    color: "#5AC8FA",
+    color: "#888888",
   },
   modeBadgeTextAgent: {
-    color: "#2563eb",
+    color: "#888888",
   },
   sessionTime: {
     fontFamily: "Inter_400Regular",

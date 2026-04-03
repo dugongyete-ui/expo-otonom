@@ -55,7 +55,7 @@ function BrowserView({ title, url, content }: { title?: string; url?: string; co
     <ScrollView style={styles.browserContainer} showsVerticalScrollIndicator={false}>
       {url && (
         <View style={styles.browserBar}>
-          <NativeIcon name="lock-closed" size={11} color="#34C759" />
+          <NativeIcon name="lock-closed" size={11} color="#888888" />
           <Text style={styles.browserUrl} numberOfLines={1}>{url}</Text>
         </View>
       )}
@@ -70,7 +70,7 @@ function FileView({ fileName, content }: { fileName?: string; content?: string }
     <View style={styles.fileContainer}>
       {fileName && (
         <View style={styles.fileHeader}>
-          <NativeIcon name="document-text" size={13} color="#FFD60A" />
+          <NativeIcon name="document-text" size={13} color="#888888" />
           <Text style={styles.fileName} numberOfLines={1}>{fileName.replace(/^\/home\/ubuntu\//, "")}</Text>
         </View>
       )}
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   shellText: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#16a34a",
+    color: "#a0a0a0",
     lineHeight: 18,
   },
   // Search
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   searchTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#4a7cf0",
+    color: "#c0c0c0",
     lineHeight: 18,
   },
   searchUrl: {
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   browserTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#d97706",
+    color: "#a0a0a0",
     lineHeight: 18,
     marginBottom: 6,
   },
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   fileName: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#d97706",
+    color: "#a0a0a0",
   },
   fileScroll: {
     maxHeight: 230,
