@@ -608,7 +608,7 @@ function McpToolView({
       <View style={styles.mcpHeader}>
         <Ionicons name="extension-puzzle-outline" size={14} color="#888888" />
         <Text style={styles.mcpToolName}>{toolName || "MCP Tool"}</Text>
-        <View style={[styles.statusDot, { backgroundColor: isRunning ? "#666666" : status === "error" ? "#666666" : "#666666" }]} />
+        <View style={[styles.statusDot, { backgroundColor: "#666666" }]} />
       </View>
 
       {/* Server */}
@@ -1065,12 +1065,7 @@ export function ToolPanelContent({
             status === "error" ? "rgba(255,255,255,0.04)" :
             "rgba(255,255,255,0.05)"
         }]}>
-          <Text style={[styles.statusText, {
-            color:
-              status === "calling" ? "#888888" :
-              status === "error" ? "#666666" :
-              "#888888"
-          }]}>
+          <Text style={[styles.statusText, { color: status === "error" ? "#666666" : "#888888" }]}>
             {status === "calling" ? "Running" : status === "error" ? "Error" : "Done"}
           </Text>
         </View>

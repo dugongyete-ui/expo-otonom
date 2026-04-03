@@ -1862,12 +1862,12 @@ export function ChatPage({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0D0D0D",
   },
   header: {
     paddingBottom: 10,
     paddingHorizontal: 16,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0D0D0D",
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a2a",
     flexDirection: "row",

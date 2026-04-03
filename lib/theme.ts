@@ -27,7 +27,7 @@ export const COLORS = {
   avatarUser: "#2a2a2a",
   avatarAsk: "#2a2a2a",
 
-  errorText: "#f07070",
+  errorText: "#a0a0a0",
   successText: "#a0a0a0",
 
   iconMuted: "#555555",
