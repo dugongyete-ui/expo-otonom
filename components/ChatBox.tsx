@@ -46,9 +46,7 @@ export function ChatBox({
 
   const placeholder = isWaitingForUser
     ? "Ketik balasan Anda..."
-    : isAgentMode
-      ? "Berikan tugas untuk Dzeck AI..."
-      : "Kirim pesan ke Dzeck AI...";
+    : "Kirim pesan ke Dzeck";
 
   const handleAttachFile = useCallback(async () => {
     try {
@@ -188,7 +186,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgToolbar,
     paddingHorizontal: 12,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: "#1e1e1e",
   },
   attachmentBar: {
     maxHeight: 80,
@@ -225,10 +223,10 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   inputWrapper: {
-    backgroundColor: COLORS.bgInput,
-    borderRadius: 16,
+    backgroundColor: "#141414",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.bgInputBorder,
+    borderColor: "#2a2a2a",
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
     maxHeight: 120,
@@ -278,7 +276,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#4A90D9",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -290,9 +288,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.stopBg,
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: COLORS.stopBorder,
+    borderColor: "#3a3a3a",
     alignItems: "center",
     justifyContent: "center",
   },

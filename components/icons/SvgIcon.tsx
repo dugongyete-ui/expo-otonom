@@ -685,6 +685,14 @@ export function LocateIcon({ size = 24, color = "#a0a0a0" }: IconProps) {
   );
 }
 
+export function StarIcon({ size = 24, color = "#a0a0a0", filled = false }: IconProps & { filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : "none"}>
+      <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 // ── NativeIcon: Universal SVG drop-in for Ionicons ───────────────────────────
 // Maps any Ionicons name to an SVG icon. Use instead of <Ionicons> on native.
 

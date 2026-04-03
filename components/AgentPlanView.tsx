@@ -6,12 +6,11 @@ import {
   Animated,
   TouchableOpacity,
   Easing,
-  Image,
 } from "react-native";
-import { NativeIcon } from "@/components/icons/SvgIcon";
-import { AgentToolCard } from "@/components/AgentToolCard";
+import { CheckCircleIcon, ChevronUpIcon, ChevronDownIcon } from "@/components/icons/SvgIcon";
+import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
 import type { AgentPlan, AgentPlanStep, AgentEvent, ToolContent } from "@/lib/chat";
-import { getToolDisplayInfo } from "@/lib/tool-constants";
+import { getToolDisplayInfo, getToolCategory } from "@/lib/tool-constants";
 
 export interface SelectedToolInfo {
   functionName: string;
@@ -51,346 +50,279 @@ function cleanCitations(raw: string): string {
     .replace(/<\/?co[^>]*>/g, "");
 }
 
-function SpinnerIcon({ size = 16, color = "#666666" }: { size?: number; color?: string }) {
-  const rotation = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.timing(rotation, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-  const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
-  return (
-    <Animated.View style={{ transform: [{ rotate }], width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderWidth: 1.5,
-        borderColor: "transparent",
-        borderTopColor: color,
-        borderRightColor: color + "60",
-      }} />
-    </Animated.View>
-  );
-}
-
-function normalizeStepTool(raw: StepToolEntry): AgentEvent {
-  const fnName = raw.function_name || raw.name || "";
-  const fnArgs: Record<string, unknown> = raw.function_args || raw.input || {};
-  const result = raw.function_result || raw.output || (raw.status === "error" ? raw.error : undefined);
-  return {
-    type: "tool",
-    function_name: fnName,
-    function_args: fnArgs,
-    tool_call_id: raw.tool_call_id,
-    status: raw.status || "calling",
-    function_result: result,
-    tool_content: raw.tool_content,
+// Build a concise label like Manus shows for each tool step
+function buildStepToolLabel(fnName: string, args: Record<string, unknown>): string {
+  const primaryArgMap: Record<string, string> = {
+    web_search: "query", info_search_web: "query",
+    browser_navigate: "url", browser_view: "page", browser_tab_new: "url", web_browse: "url",
+    shell_exec: "command",
+    file_read: "file", file_write: "file", file_str_replace: "file",
+    file_find_by_name: "path", file_find_in_content: "file",
   };
+  const actionMap: Record<string, string> = {
+    web_search: "Mencari", info_search_web: "Mencari",
+    browser_navigate: "Membuka", browser_view: "Melihat", browser_tab_new: "Tab baru", web_browse: "Membuka",
+    shell_exec: "Jalankan", shell_view: "Lihat output",
+    file_read: "Membaca", file_write: "Menulis", file_str_replace: "Edit",
+    file_find_by_name: "Cari file", file_find_in_content: "Cari dalam",
+    message_notify_user: "Notifikasi", message_ask_user: "Tanya",
+  };
+  const argKey = primaryArgMap[fnName];
+  let argVal = argKey && args[argKey] ? String(args[argKey]) : "";
+  if (!argVal) {
+    const first = Object.keys(args).find(k => k !== "sudo" && k !== "attachments");
+    argVal = first ? String(args[first] || "") : "";
+  }
+  argVal = argVal.replace(/^\/home\/ubuntu\//, "~/");
+  if (argVal.length > 55) argVal = argVal.slice(0, 55) + "…";
+  const action = actionMap[fnName];
+  if (action && argVal) return `${action} ${argVal}`;
+  if (action) return action;
+  return fnName;
 }
 
-function StepRow({
-  step,
-  stepNotifyTexts,
-  onToolPress,
-}: {
-  step: AgentPlanStep;
-  stepNotifyTexts?: string[];
-  onToolPress?: (tool: SelectedToolInfo) => void;
-}) {
-  const isRunning = step.status === "running";
-  const isDone    = step.status === "completed";
-  const isFailed  = step.status === "failed";
-  const rawTools: StepToolEntry[] = (step as AgentPlanStep & { tools?: StepToolEntry[] }).tools || [];
-  const hasTools = rawTools.length > 0;
+function getToolIcon(fnName: string): React.ReactNode {
+  const category = getToolCategory(fnName);
+  const iconColor = "#888888";
+  const size = 12;
+  switch (category) {
+    case "browser":
+    case "desktop":
+      return <BrowserIcon size={size} color={iconColor} />;
+    case "file":
+    case "image":
+    case "multimedia":
+      return <EditIcon size={size} color={iconColor} />;
+    case "search":
+    case "info":
+      return <SearchIcon size={size} color={iconColor} />;
+    case "message":
+    case "todo":
+    case "task":
+    case "email":
+      return <MessageIcon size={size} color={iconColor} />;
+    case "shell":
+    default:
+      return <ShellIcon size={size} color={iconColor} />;
+  }
+}
 
-  const [toolsExpanded, setToolsExpanded] = useState(isRunning || isDone);
-
-  useEffect(() => {
-    if (isRunning) setToolsExpanded(true);
-  }, [isRunning]);
+// Manus-style inline tool step row (icon + label)
+function ManusToolStepRow({ tool, onPress }: { tool: StepToolEntry; onPress?: () => void }) {
+  const fnName = tool.function_name || tool.name || "";
+  const args = tool.function_args || tool.input || {};
+  const label = buildStepToolLabel(fnName, args);
+  const icon = getToolIcon(fnName);
 
   return (
-    <View style={[
-      styles.stepRow,
-      isRunning && styles.stepRowRunning,
-      isDone && styles.stepRowDone,
-      isFailed && styles.stepRowFailed,
-    ]}>
-      <TouchableOpacity
-        style={styles.stepHeader}
-        onPress={() => hasTools && setToolsExpanded(prev => !prev)}
-        activeOpacity={hasTools ? 0.7 : 1}
-      >
-        <View style={[
-          styles.stepBullet,
-          isDone    && styles.stepBulletDone,
-          isFailed  && styles.stepBulletFailed,
-          isRunning && styles.stepBulletRunning,
-        ]}>
-          {isDone   && <NativeIcon name="checkmark" size={10} color="#888888" />}
-          {isFailed && <NativeIcon name="close"     size={10} color="#888888" />}
-          {isRunning && <SpinnerIcon size={14} color="#888888" />}
-        </View>
-
-        <Text
-          style={[
-            styles.stepTitle,
-            isDone    && styles.stepTitleDone,
-            isFailed  && styles.stepTitleFailed,
-            isRunning && styles.stepTitleRunning,
-          ]}
-          numberOfLines={3}
-        >
-          {step.description}
-        </Text>
-
-        {hasTools && (
-          <NativeIcon
-            name={toolsExpanded ? "chevron-up" : "chevron-down"}
-            size={12}
-            color="#444444"
-          />
-        )}
-      </TouchableOpacity>
-
-      {hasTools && toolsExpanded && (
-        <View style={styles.toolsContainer}>
-          {rawTools.map((tool, i) => {
-            const normalized = normalizeStepTool(tool);
-            const fnName = normalized.function_name || "";
-            const displayInfo = getToolDisplayInfo(fnName);
-            const handlePress = onToolPress ? () => {
-              onToolPress({
-                functionName: fnName,
-                functionArgs: normalized.function_args || {},
-                status: normalized.status || "called",
-                toolContent: normalized.tool_content,
-                functionResult: normalized.function_result,
-                label: displayInfo.label,
-                icon: displayInfo.icon,
-                iconColor: displayInfo.color,
-              });
-            } : undefined;
-            return (
-              <AgentToolCard
-                key={tool.tool_call_id || i}
-                event={normalized}
-                onHeaderPress={handlePress}
-              />
-            );
-          })}
-        </View>
-      )}
-
-      {stepNotifyTexts && stepNotifyTexts.length > 0 && (
-        <View style={styles.stepNotifyBlock}>
-          {stepNotifyTexts.map((msg, i) => (
-            <AgentGoalMessage key={i} message={msg} />
-          ))}
-        </View>
-      )}
-    </View>
+    <TouchableOpacity
+      style={mtsStyles.row}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+      disabled={!onPress}
+    >
+      <View style={mtsStyles.iconWrap}>{icon}</View>
+      <Text style={mtsStyles.label} numberOfLines={1}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
-export function AgentGoalMessage({ message }: { message: string }) {
-  return (
-    <View style={goalStyles.container}>
-      <View style={goalStyles.iconRow}>
-        <Image
-          source={require("../assets/images/dzeck-logo.jpg")}
-          style={goalStyles.avatarImage}
-          resizeMode="cover"
-        />
-        <Text style={goalStyles.labelText}>Agent</Text>
-      </View>
-      <Text style={goalStyles.messageText}>{cleanCitations(message)}</Text>
-    </View>
-  );
-}
-
-export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onToolPress }: AgentPlanViewProps) {
-  const steps = plan.steps || [];
-  const visibleSteps = steps.filter(
-    s => s.status === "running" || s.status === "completed" || s.status === "failed"
-  );
-
-  return (
-    <View style={styles.container}>
-      {visibleSteps.map((step, i) => {
-        const stepTexts = (stepNotifyMessages || [])
-          .filter(n => n.stepId === step.id)
-          .map(n => n.text);
-        return (
-          <StepRow
-            key={step.id || i}
-            step={step}
-            stepNotifyTexts={stepTexts.length > 0 ? stepTexts : undefined}
-            onToolPress={onToolPress}
-          />
-        );
-      })}
-      {notifyMessages && notifyMessages.length > 0 && (
-        <View style={styles.notifyBlock}>
-          {notifyMessages.map((msg, i) => (
-            <AgentGoalMessage key={i} message={msg} />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-const goalStyles = StyleSheet.create({
-  container: {
-    backgroundColor: "#161616",
-    borderLeftWidth: 2,
-    borderLeftColor: "#3a3a3a",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 6,
-    marginTop: 2,
-  },
-  iconRow: {
+const mtsStyles = StyleSheet.create({
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
-  avatarImage: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    overflow: "hidden",
+  iconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    backgroundColor: "#1a1a1a",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  labelText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    color: "#888888",
-    letterSpacing: 0.2,
-  },
-  messageText: {
+  label: {
     fontFamily: "Inter_400Regular",
-    fontSize: 15,
-    color: "#e8e8e8",
-    lineHeight: 22,
-    letterSpacing: -0.1,
+    fontSize: 13,
+    color: "#999999",
+    flex: 1,
   },
 });
 
+// Narrative text shown between tool steps (Manus shows progress updates inline)
+function NarrativeText({ message }: { message: string }) {
+  return (
+    <Text style={narrativeStyles.text}>{cleanCitations(message)}</Text>
+  );
+}
+
+const narrativeStyles = StyleSheet.create({
+  text: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    color: "#c8c8c8",
+    lineHeight: 21,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+});
+
+export function AgentGoalMessage({ message }: { message: string }) {
+  return (
+    <Text style={narrativeStyles.text}>{cleanCitations(message)}</Text>
+  );
+}
+
+/**
+ * Manus-style AgentPlanView: A single collapsible task block.
+ * Shows task title with circle indicator, steps inside with icons,
+ * and inline narrative text between steps.
+ */
+export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onToolPress }: AgentPlanViewProps) {
+  const steps = plan.steps || [];
+  const [expanded, setExpanded] = useState(true);
+
+  const isAllDone = plan.status === "completed" || steps.every(s => s.status === "completed" || s.status === "failed");
+  const isRunning = plan.status === "running" || steps.some(s => s.status === "running");
+
+  // Collect all tool steps and narrative messages in order
+  const allVisibleSteps = steps.filter(
+    s => s.status === "running" || s.status === "completed" || s.status === "failed"
+  );
+
+  // Build interleaved content: tools from steps + notify messages
+  const buildContent = () => {
+    const items: React.ReactNode[] = [];
+    let key = 0;
+
+    for (const step of allVisibleSteps) {
+      const rawTools: StepToolEntry[] = (step as AgentPlanStep & { tools?: StepToolEntry[] }).tools || [];
+      const stepTexts = (stepNotifyMessages || [])
+        .filter(n => n.stepId === step.id)
+        .map(n => n.text);
+
+      for (const tool of rawTools) {
+        const fnName = tool.function_name || tool.name || "";
+        const displayInfo = getToolDisplayInfo(fnName);
+        const handlePress = onToolPress ? () => {
+          onToolPress({
+            functionName: fnName,
+            functionArgs: tool.function_args || tool.input || {},
+            status: tool.status || "called",
+            toolContent: tool.tool_content,
+            functionResult: tool.function_result || tool.output,
+            label: displayInfo.label,
+            icon: displayInfo.icon,
+            iconColor: displayInfo.color,
+          });
+        } : undefined;
+        items.push(
+          <ManusToolStepRow
+            key={`tool-${key++}`}
+            tool={tool}
+            onPress={handlePress}
+          />
+        );
+      }
+
+      // Step-level notify messages (narrative text between tools)
+      for (const text of stepTexts) {
+        items.push(<NarrativeText key={`notify-${key++}`} message={text} />);
+      }
+    }
+
+    // Plan-level notify messages
+    if (notifyMessages && notifyMessages.length > 0) {
+      for (const msg of notifyMessages) {
+        items.push(<NarrativeText key={`plan-notify-${key++}`} message={msg} />);
+      }
+    }
+
+    return items;
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Task header row */}
+      <TouchableOpacity
+        style={styles.taskHeader}
+        onPress={() => setExpanded(v => !v)}
+        activeOpacity={0.7}
+      >
+        <View style={[
+          styles.taskCircle,
+          isAllDone && styles.taskCircleDone,
+        ]}>
+          {isAllDone && <CheckCircleIcon size={18} color="#4CAF50" />}
+        </View>
+        <Text style={[
+          styles.taskTitle,
+          isAllDone && styles.taskTitleDone,
+        ]} numberOfLines={2}>
+          {plan.title || "Tugas"}
+        </Text>
+        {expanded
+          ? <ChevronUpIcon size={16} color="#666666" />
+          : <ChevronDownIcon size={16} color="#666666" />
+        }
+      </TouchableOpacity>
+
+      {/* Expanded content: tool steps + narrative */}
+      {expanded && (
+        <View style={styles.taskContent}>
+          {buildContent()}
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
-    gap: 4,
-    paddingVertical: 2,
-  },
-
-  stepRow: {
-    gap: 0,
-    borderRadius: 10,
-    backgroundColor: "transparent",
-  },
-  stepRowRunning: {
-    backgroundColor: "#111111",
-    borderWidth: 0,
     borderLeftWidth: 2,
-    borderLeftColor: "#3a3a3a",
+    borderLeftColor: "#2a2a2a",
+    marginLeft: 4,
+    marginTop: 4,
   },
-  stepRowDone: {
-    backgroundColor: "transparent",
-    borderWidth: 0,
-  },
-  stepRowFailed: {
-    backgroundColor: "#141414",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
-  stepHeader: {
+  taskHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 10,
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
-  stepBullet: {
+  taskCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: "#2a2a2a",
+    borderColor: "#444444",
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 1,
     flexShrink: 0,
   },
-  stepBulletDone: {
-    backgroundColor: "#2a2a2a",
-    borderColor: "#3a3a3a",
-  },
-  stepBulletFailed: {
-    backgroundColor: "#1e1e1e",
-    borderColor: "#3a3a3a",
-  },
-  stepBulletRunning: {
+  taskCircleDone: {
+    borderColor: "#4CAF50",
     backgroundColor: "transparent",
-    borderColor: "#555555",
-    borderWidth: 1.5,
+    borderWidth: 0,
   },
-  stepTitle: {
+  taskTitle: {
     flex: 1,
     fontFamily: "Inter_500Medium",
     fontSize: 14,
+    color: "#d0d0d0",
     lineHeight: 20,
-    color: "#555555",
-    letterSpacing: -0.1,
   },
-  stepTitleDone: {
-    color: "#606060",
-    fontFamily: "Inter_400Regular",
+  taskTitleDone: {
+    color: "#c8c8c8",
   },
-  stepTitleFailed: {
-    color: "#888888",
-  },
-  stepTitleRunning: {
-    color: "#e8e8e8",
-    fontFamily: "Inter_600SemiBold",
-  },
-
-  toolsContainer: {
-    marginLeft: 0,
-    gap: 2,
-    paddingBottom: 6,
-    paddingTop: 0,
-  },
-
-  stepNotifyBlock: {
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 6,
-  },
-
-  notifyBlock: {
-    marginTop: 4,
-    gap: 6,
-  },
-  notifyRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-  },
-  notifyText: {
-    flex: 1,
-    fontFamily: "Inter_400Regular",
-    fontSize: 15,
-    color: "#e8e8e8",
-    lineHeight: 22,
+  taskContent: {
+    paddingLeft: 4,
+    paddingBottom: 4,
+    gap: 1,
   },
 });
