@@ -432,6 +432,10 @@ export function ChatPage({
   const [isShared, setIsShared] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const [activePlanTitle, setActivePlanTitle] = useState<string | null>(null);
+  const [planBarExpanded, setPlanBarExpanded] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -440,6 +444,31 @@ export function ChatPage({
       }, 100);
     }
   }, [messages, streamingContent, isLoading]);
+
+  // Floating plan bar: start/stop elapsed timer when agent is running
+  useEffect(() => {
+    if (isLoading && isAgentMode) {
+      setElapsedSeconds(0);
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedSeconds(s => s + 1);
+      }, 1000);
+    } else {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+      if (!isLoading) {
+        setActivePlanTitle(null);
+        setPlanBarExpanded(false);
+      }
+    }
+    return () => {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+    };
+  }, [isLoading, isAgentMode]);
 
   // Load active model: user prefs (per-user MongoDB) take priority over global config
   useEffect(() => {
@@ -701,6 +730,7 @@ export function ChatPage({
           };
           setMessages(prev => [...prev, planMsg]);
           setThinking({ active: true, label: planData.title || "Membuat rencana...", stepLabel: planData.title });
+          if (planData.title) setActivePlanTitle(planData.title);
         } else if (planData && planMsgIdRef.current) {
           currentPlanRef.current = planData;
           setMessages(prev => prev.map(m =>
@@ -1829,6 +1859,25 @@ export function ChatPage({
         }
       />
 
+      {isAgentMode && isLoading && activePlanTitle ? (
+        <TouchableOpacity
+          style={styles.floatingPlanBar}
+          onPress={() => setPlanBarExpanded(v => !v)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.floatingPlanDot} />
+          <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
+          <Text style={styles.floatingPlanTimer}>
+            {`${Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`}
+          </Text>
+          {planBarExpanded ? (
+            <ChevronDownIcon size={14} color="#666666" />
+          ) : (
+            <ChevronUpIcon size={14} color="#666666" />
+          )}
+        </TouchableOpacity>
+      ) : null}
+
       <ChatBox
         value={inputMessage}
         onChangeText={setInputMessage}
@@ -2230,6 +2279,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#a0a0a0",
     fontStyle: "italic",
+  },
+  floatingPlanBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "#141414",
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+  },
+  floatingPlanDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#888888",
+  },
+  floatingPlanTitle: {
+    flex: 1,
+    color: "#a0a0a0",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  floatingPlanTimer: {
+    color: "#555555",
+    fontSize: 11,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   taskCompletedWrap: {
     marginHorizontal: 16,

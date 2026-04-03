@@ -13,7 +13,7 @@ import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
-import { PaperclipIcon, FlashIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
+import { AddIcon, MicIcon, FlashIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
 
 interface ChatBoxProps {
   value: string;
@@ -142,7 +142,7 @@ export function ChatBox({
             style={styles.toolbarBtn}
             activeOpacity={0.6}
           >
-            <PaperclipIcon size={20} color={COLORS.iconMuted} />
+            <AddIcon size={22} color={COLORS.iconMuted} />
           </TouchableOpacity>
           {isAgentMode && (
             <View style={styles.modeIcon}>
@@ -170,13 +170,11 @@ export function ChatBox({
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.toolbarBtn, styles.sendButtonDisabled]}
+              style={styles.toolbarBtn}
               activeOpacity={0.6}
               disabled={true}
             >
-              <View style={[styles.sendIconContainer, styles.sendIconDisabled]}>
-                <ArrowUpIcon size={16} color="#FFFFFF" />
-              </View>
+              <MicIcon size={20} color={COLORS.iconMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -291,7 +289,7 @@ const styles = StyleSheet.create({
   stopIcon: {
     width: 32,
     height: 32,
-    borderRadius: 9,
+    borderRadius: 16,
     backgroundColor: COLORS.stopBg,
     borderWidth: 1,
     borderColor: COLORS.stopBorder,

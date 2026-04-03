@@ -370,7 +370,7 @@ export function EllipseOutlineIcon({ size = 24, color = "#555555" }: IconProps) 
   );
 }
 
-export function ListCircleIcon({ size = 24, color = "#0A84FF" }: IconProps) {
+export function ListCircleIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={defaultStroke} />
@@ -444,7 +444,7 @@ export function HandIcon({ size = 24, color = "#535350" }: IconProps) {
   );
 }
 
-export function ChatbubbleOutlineIcon({ size = 24, color = "#7c3aed" }: IconProps) {
+export function ChatbubbleOutlineIcon({ size = 24, color = "#888888" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" stroke={color} strokeWidth={defaultStroke} strokeLinecap="round" strokeLinejoin="round" />
