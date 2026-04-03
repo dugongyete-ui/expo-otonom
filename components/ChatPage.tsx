@@ -63,6 +63,7 @@ interface ChatMessage {
   searchQuery?: string;
   shellOutput?: string;
   notifyMessages?: string[];
+  stepNotifyMessages?: { stepId: string; text: string }[];
 }
 
 export interface VncSessionInfo {
@@ -176,24 +177,74 @@ const TOOL_LABEL_MAP: Record<string, string> = {
   message_ask_user: "Pertanyaan",
 };
 
+function buildInlineLabel(fnName: string, args: Record<string, unknown>): string {
+  const primaryArgMap: Record<string, string> = {
+    web_search: "query", info_search_web: "query",
+    browser_navigate: "url", browser_view: "page", browser_tab_new: "url", web_browse: "url",
+    shell_exec: "command",
+    file_read: "file", file_write: "file", file_str_replace: "file",
+    file_find_by_name: "path", file_find_in_content: "file",
+  };
+  const actionMap: Record<string, string> = {
+    web_search: "Mencari", info_search_web: "Mencari",
+    browser_navigate: "Membuka", browser_view: "Melihat", browser_tab_new: "Tab baru", web_browse: "Membuka",
+    shell_exec: "Jalankan", shell_view: "Lihat output",
+    file_read: "Membaca", file_write: "Menulis", file_str_replace: "Edit",
+    file_find_by_name: "Cari file", file_find_in_content: "Cari dalam",
+    message_notify_user: "Notifikasi", message_ask_user: "Tanya",
+  };
+  const argKey = primaryArgMap[fnName];
+  let argVal = argKey && args[argKey] ? String(args[argKey]) : "";
+  if (!argVal) {
+    const first = Object.keys(args).find(k => k !== "sudo" && k !== "attachments");
+    argVal = first ? String(args[first] || "") : "";
+  }
+  argVal = argVal.replace(/^\/home\/ubuntu\//, "~/");
+  if (argVal.length > 50) argVal = argVal.slice(0, 50) + "…";
+  const action = actionMap[fnName];
+  if (action && argVal) return `${action}: ${argVal}`;
+  if (action) return action;
+  return TOOL_LABEL_MAP[fnName] || fnName;
+}
+
 function InlineToolStep({ tool }: { tool: any }) {
   const fnName = tool.function_name || tool.name || "tool";
-  const label = TOOL_LABEL_MAP[fnName] || fnName;
   const isRunning = tool.status === "calling";
   const isDone = tool.status === "called";
   const isError = tool.status === "error";
+  const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
+  const label = buildInlineLabel(fnName, args);
+
+  const snippet = isDone && (tool.output || tool.function_result)
+    ? (tool.output || tool.function_result || "").trim().replace(/\n/g, " ").slice(0, 100)
+    : null;
 
   return (
     <View style={inlineToolStyles.row}>
-      <View style={[inlineToolStyles.iconWrap, isError && inlineToolStyles.iconWrapError, isDone && inlineToolStyles.iconWrapDone]}>
-        <TerminalIcon size={10} color={isError ? "#f87171" : "#888888"} />
+      <View style={[
+        inlineToolStyles.iconWrap,
+        isError && inlineToolStyles.iconWrapError,
+        isDone && inlineToolStyles.iconWrapDone,
+        isRunning && inlineToolStyles.iconWrapRunning,
+      ]}>
+        <TerminalIcon size={11} color={isError ? "#f87171" : isRunning ? "#7dd3fc" : "#888888"} />
       </View>
-      <Text style={[inlineToolStyles.label, isError && inlineToolStyles.labelError]} numberOfLines={1}>
-        {label}
-      </Text>
+      <View style={inlineToolStyles.labelArea}>
+        <Text style={[
+          inlineToolStyles.label,
+          isError && inlineToolStyles.labelError,
+          isRunning && inlineToolStyles.labelRunning,
+          isDone && inlineToolStyles.labelDone,
+        ]} numberOfLines={1}>
+          {label}
+        </Text>
+        {snippet ? (
+          <Text style={inlineToolStyles.snippetText} numberOfLines={2}>{snippet}</Text>
+        ) : null}
+      </View>
       {isRunning && <View style={inlineToolStyles.runningDot} />}
-      {isDone && <CheckIcon size={10} color="#666666" />}
-      {isError && <CloseCircleIcon size={10} color="#f87171" />}
+      {isDone && <CheckIcon size={11} color="#4ade80" />}
+      {isError && <CloseCircleIcon size={11} color="#f87171" />}
     </View>
   );
 }
@@ -201,40 +252,61 @@ function InlineToolStep({ tool }: { tool: any }) {
 const inlineToolStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingVertical: 3,
+    alignItems: "flex-start",
+    gap: 8,
+    paddingVertical: 4,
   },
   iconWrap: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 5,
     backgroundColor: "#2a2a2a",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    marginTop: 2,
   },
   iconWrapDone: {
-    backgroundColor: "#1a2a1a",
+    backgroundColor: "#162416",
+  },
+  iconWrapRunning: {
+    backgroundColor: "#0f1e2e",
   },
   iconWrapError: {
     backgroundColor: "#2a1a1a",
   },
-  label: {
+  labelArea: {
     flex: 1,
+    gap: 1,
+  },
+  label: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#606060",
+    fontSize: 13,
+    color: "#787878",
+  },
+  labelRunning: {
+    color: "#d0d0d0",
+    fontFamily: "Inter_500Medium",
+  },
+  labelDone: {
+    color: "#888888",
   },
   labelError: {
     color: "#f87171",
   },
+  snippetText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#606060",
+    lineHeight: 15,
+  },
   runningDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: "#666666",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#7dd3fc",
     flexShrink: 0,
+    marginTop: 5,
   },
 });
 
@@ -288,8 +360,8 @@ export function ChatPage({
   const [attachments, setAttachments] = useState<any[]>([]);
   const [e2bStatus, setE2bStatus] = useState<"checking" | "connected" | "error">("checking");
   const [taskCompleted, setTaskCompleted] = useState(false);
-  const [taskCompletedExpanded, setTaskCompletedExpanded] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Array<{ id: string; description: string }>>([]);
+  const [taskFinalNarrative, setTaskFinalNarrative] = useState<string | null>(null);
   const [selectedTool, setSelectedTool] = useState<{
     functionName: string;
     functionArgs: Record<string, unknown>;
@@ -308,6 +380,7 @@ export function ChatPage({
   const planMsgIdRef = useRef<string | null>(null);
   const currentPlanRef = useRef<AgentPlan | null>(null);
   const currentRunningStepIdRef = useRef<string | null>(null);
+  const lastNotifyTextRef = useRef<string | null>(null);
   const isWaitingRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
@@ -883,8 +956,9 @@ export function ChatPage({
               .filter(s => s.status === "completed" || s.status === "failed")
               .map(s => ({ id: s.id, description: s.description }));
             setCompletedSteps(doneSteps.length > 0 ? doneSteps : steps.map(s => ({ id: s.id, description: s.description })));
+            setTaskFinalNarrative(lastNotifyTextRef.current);
+            lastNotifyTextRef.current = null;
             setTaskCompleted(true);
-            setTaskCompletedExpanded(false);
           }
         }
         return;
@@ -959,12 +1033,22 @@ export function ChatPage({
         } else if (ev.text) {
           const cleanedText = cleanAgentText(ev.text);
           if (!cleanedText) return;
+          lastNotifyTextRef.current = cleanedText;
           if (planMsgIdRef.current) {
-            setMessages(prev => prev.map(m =>
-              m.id === planMsgIdRef.current
-                ? { ...m, notifyMessages: [...(m.notifyMessages || []), cleanedText] }
-                : m
-            ));
+            const stepId = currentRunningStepIdRef.current;
+            setMessages(prev => prev.map(m => {
+              if (m.id !== planMsgIdRef.current) return m;
+              if (stepId) {
+                return {
+                  ...m,
+                  stepNotifyMessages: [
+                    ...(m.stepNotifyMessages || []),
+                    { stepId, text: cleanedText },
+                  ],
+                };
+              }
+              return { ...m, notifyMessages: [...(m.notifyMessages || []), cleanedText] };
+            }));
           } else {
             const notifyMsg: ChatMessage = {
               id: `msg_${Date.now()}_${msgCounterRef.current++}_notify`,
@@ -1101,8 +1185,9 @@ export function ChatPage({
     setIsWaitingForUser(false);
     setTools([]);
     setTaskCompleted(false);
-    setTaskCompletedExpanded(false);
     setCompletedSteps([]);
+    setTaskFinalNarrative(null);
+    lastNotifyTextRef.current = null;
     if (!wasContinuation) {
       setStepHistory([]);
       planMsgIdRef.current = null;
@@ -1553,12 +1638,12 @@ export function ChatPage({
                   <Text style={styles.agentTurnName}>Dzeck</Text>
                   {isPlanRunning && !isPlanDone && (
                     <View style={styles.agentTurnBadgeRunning}>
-                      <Text style={styles.agentTurnBadgeText}>Working…</Text>
+                      <Text style={[styles.agentTurnBadgeText, { color: "#7dd3fc" }]}>Working…</Text>
                     </View>
                   )}
                   {isPlanDone && (
                     <View style={styles.agentTurnBadgeDone}>
-                      <Text style={[styles.agentTurnBadgeText]}>Done</Text>
+                      <Text style={[styles.agentTurnBadgeText, { color: "#4ade80" }]}>Done</Text>
                     </View>
                   )}
                 </View>
@@ -1568,6 +1653,7 @@ export function ChatPage({
                 <AgentPlanView
                   plan={item.plan}
                   notifyMessages={item.notifyMessages}
+                  stepNotifyMessages={item.stepNotifyMessages}
                   onToolPress={(tool) => {
                     setSelectedTool(tool);
                   }}
@@ -1673,32 +1759,34 @@ export function ChatPage({
             </View>
           ) : taskCompleted ? (
             <View style={styles.taskCompletedWrap}>
-              <TouchableOpacity
-                style={styles.taskCompletedBanner}
-                onPress={() => setTaskCompletedExpanded(!taskCompletedExpanded)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.taskCompletedIcon}>
-                  <CheckIcon size={13} color="#ffffff" />
+              <View style={styles.taskCompletedCard}>
+                <View style={styles.taskCompletedCardHeader}>
+                  <View style={styles.taskCompletedIconNew}>
+                    <CheckIcon size={14} color="#4ade80" />
+                  </View>
+                  <View style={styles.taskCompletedTitleArea}>
+                    <Text style={styles.taskCompletedTitle}>Tugas Selesai</Text>
+                    <Text style={styles.taskCompletedSubtitle}>{completedSteps.length} langkah diselesaikan</Text>
+                  </View>
                 </View>
-                <Text style={styles.taskCompletedText}>Task Completed</Text>
-                {taskCompletedExpanded
-                  ? <ChevronUpIcon size={14} color="#888888" />
-                  : <ChevronDownIcon size={14} color="#888888" />
-                }
-              </TouchableOpacity>
-              {taskCompletedExpanded && completedSteps.length > 0 && (
-                <View style={styles.taskCompletedSteps}>
-                  {completedSteps.map((step, i) => (
-                    <View key={step.id || i} style={styles.taskCompletedStepRow}>
-                      <CheckCircleIcon size={13} color="#888888" />
-                      <Text style={styles.taskCompletedStepText} numberOfLines={2}>
-                        {step.description}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
+                {completedSteps.length > 0 && (
+                  <View style={styles.taskCompletedSteps}>
+                    {completedSteps.map((step, i) => (
+                      <View key={step.id || i} style={styles.taskCompletedStepRow}>
+                        <CheckCircleIcon size={14} color="#4ade80" />
+                        <Text style={styles.taskCompletedStepText} numberOfLines={2}>
+                          {step.description}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {taskFinalNarrative ? (
+                  <View style={styles.taskCompletedNarrative}>
+                    <Text style={styles.taskCompletedNarrativeText}>{taskFinalNarrative}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           ) : null
         }
@@ -1991,20 +2079,20 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   agentTurnBadgeRunning: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(100,100,100,0.1)",
+    backgroundColor: "rgba(125,211,252,0.1)",
     borderWidth: 1,
-    borderColor: "rgba(100,100,100,0.2)",
+    borderColor: "rgba(125,211,252,0.25)",
   },
   agentTurnBadgeDone: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 5,
-    backgroundColor: "rgba(100,100,100,0.08)",
+    backgroundColor: "rgba(74,222,128,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(100,100,100,0.2)",
+    borderColor: "rgba(74,222,128,0.2)",
   },
   agentTurnBadgeText: {
     fontFamily: "Inter_500Medium",
@@ -2108,48 +2196,85 @@ const styles = StyleSheet.create({
   },
   taskCompletedWrap: {
     marginHorizontal: 16,
-    marginVertical: 6,
+    marginVertical: 8,
+  },
+  taskCompletedCard: {
+    backgroundColor: "#1a2420",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2a4a3a",
+    overflow: "hidden",
+    paddingBottom: 4,
+  },
+  taskCompletedCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1e3a2a",
+  },
+  taskCompletedIconNew: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#162416",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#2a4a2a",
+    flexShrink: 0,
+  },
+  taskCompletedTitleArea: {
+    flex: 1,
+    gap: 2,
+  },
+  taskCompletedTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: "#e8e8e8",
+    letterSpacing: -0.3,
+  },
+  taskCompletedSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#4ade80",
+    letterSpacing: -0.1,
   },
   taskCompletedSteps: {
-    paddingLeft: 30,
-    paddingTop: 4,
-    paddingBottom: 4,
-    gap: 5,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+    gap: 8,
   },
   taskCompletedStepRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 6,
+    gap: 8,
   },
   taskCompletedStepText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#888888",
+    fontSize: 13,
+    color: "#b0b0b0",
     flex: 1,
-    lineHeight: 17,
+    lineHeight: 19,
   },
-  taskCompletedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
+  taskCompletedNarrative: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#1e2a2e",
+    borderLeftWidth: 3,
+    borderLeftColor: "#7dd3fc",
+    borderRadius: 8,
   },
-  taskCompletedIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    backgroundColor: "#404040",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  taskCompletedText: {
-    flex: 1,
-    fontFamily: "Inter_600SemiBold",
+  taskCompletedNarrativeText: {
+    fontFamily: "Inter_400Regular",
     fontSize: 14,
-    color: "#a0a0a0",
-    letterSpacing: -0.2,
+    color: "#d0d0d0",
+    lineHeight: 21,
   },
   flatList: {
     flex: 1,

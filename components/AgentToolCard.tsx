@@ -311,23 +311,64 @@ function ToolBody({ functionName, functionArgs, toolContent, functionResult, sta
   return null;
 }
 
+// Helper: build descriptive label (e.g. "Mencari: indonesia news", "Membuka: https://...")
+function buildDescriptiveLabel(
+  functionName: string,
+  functionArgs: Record<string, unknown>,
+  verb: string,
+  primaryArg: string,
+): string {
+  // Map specific functions to concise action labels
+  const actionMap: Record<string, string> = {
+    web_search: "Mencari",
+    info_search_web: "Mencari",
+    browser_navigate: "Membuka",
+    browser_view: "Melihat",
+    browser_click: "Klik",
+    browser_input: "Mengisi",
+    browser_scroll_down: "Scroll bawah",
+    browser_scroll_up: "Scroll atas",
+    browser_screenshot: "Screenshot",
+    browser_tab_new: "Tab baru",
+    shell_exec: "Jalankan",
+    shell_view: "Lihat output",
+    file_read: "Membaca",
+    file_write: "Menulis",
+    file_str_replace: "Edit",
+    file_find_by_name: "Cari file",
+    file_find_in_content: "Cari dalam",
+    message_notify_user: "Notifikasi",
+    message_ask_user: "Tanya",
+    todo_write: "Tulis todo",
+    todo_read: "Baca todo",
+    task_create: "Buat task",
+    task_complete: "Selesaikan",
+    mcp_call_tool: "MCP",
+  };
+  const action = actionMap[functionName];
+  if (action && primaryArg) return `${action}: ${primaryArg}`;
+  if (action) return action;
+  if (primaryArg) return `${verb}: ${primaryArg}`;
+  return verb;
+}
+
 // Helper: render custom icon for tool card based on function name (always monochrome)
 function renderCardIcon(functionName: string) {
   const category = getToolCategory(functionName);
-  const iconColor = "#888888";
+  const iconColor = "#a0a0a0";
   switch (category) {
     case "shell":
-      return <ShellIcon size={13} color={iconColor} />;
+      return <ShellIcon size={15} color={iconColor} />;
     case "browser":
-      return <BrowserIcon size={13} color={iconColor} />;
+      return <BrowserIcon size={15} color={iconColor} />;
     case "file":
-      return <EditIcon size={13} color={iconColor} />;
+      return <EditIcon size={15} color={iconColor} />;
     case "search":
-      return <SearchIcon size={13} color={iconColor} />;
+      return <SearchIcon size={15} color={iconColor} />;
     case "mcp":
-      return <McpIcon size={13} color={iconColor} />;
+      return <McpIcon size={15} color={iconColor} />;
     default: {
-      return <ShellIcon size={13} color={iconColor} />;
+      return <ShellIcon size={15} color={iconColor} />;
     }
   }
 }
@@ -345,11 +386,38 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
   const color = "#888888";
   const verb = getToolActionVerb(functionName);
   const primaryArg = getToolPrimaryArg(functionName, functionArgs);
+  const descriptiveLabel = buildDescriptiveLabel(functionName, functionArgs, verb, primaryArg);
 
   const hasContent = !!(
     event.tool_content ||
     (event.function_result && (isCalled || isError))
   );
+
+  // Build a short result snippet for display under the label when done
+  const resultSnippet = React.useMemo(() => {
+    if (!isCalled) return null;
+    const tc = event.tool_content;
+    if (tc) {
+      if (tc.type === "search" && tc.results && tc.results.length > 0) {
+        return tc.results[0].snippet || tc.results[0].title || null;
+      }
+      if (tc.type === "browser" && tc.title) return tc.title;
+      if (tc.type === "shell" && tc.console) {
+        const lines = tc.console.split("\n").filter((l: string) => l.trim());
+        return lines.slice(-2).join(" ").slice(0, 120) || null;
+      }
+      if (tc.type === "file" && tc.content) {
+        return tc.content.slice(0, 100).replace(/\n/g, " ") || null;
+      }
+    }
+    if (event.function_result && !isError) {
+      const r = event.function_result.trim();
+      if (r.length > 10) {
+        return r.replace(/\n/g, " ").slice(0, 120);
+      }
+    }
+    return null;
+  }, [isCalled, isError, event.tool_content, event.function_result]);
 
   const toggleExpand = () => {
     if (hasContent || isCalling) {
@@ -379,20 +447,20 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
 
             {/* Label + arg */}
             <View style={styles.labelArea}>
-              <Text style={styles.labelText}>{label}</Text>
-              {primaryArg ? (
-                <Text style={styles.argText} numberOfLines={1}>
-                  {verb} {primaryArg}
-                </Text>
+              <Text style={[styles.labelText, isCalling && styles.labelTextRunning]} numberOfLines={2}>
+                {descriptiveLabel}
+              </Text>
+              {resultSnippet ? (
+                <Text style={styles.snippetText} numberOfLines={2}>{resultSnippet}</Text>
               ) : (
-                <Text style={styles.argText} numberOfLines={1}>{verb}</Text>
+                <Text style={styles.subLabelText} numberOfLines={1}>{label}</Text>
               )}
             </View>
 
             {/* Right: status + expand */}
             <View style={styles.rightArea}>
-              {isCalling && <SpinningIcon size={14} color="#636366" />}
-              {isCalled && <SuccessIcon size={14} color="#34C759" />}
+              {isCalling && <SpinningIcon size={14} color="#7dd3fc" />}
+              {isCalled && <SuccessIcon size={14} color="#4ade80" />}
               {isError && <ErrorIcon size={14} color="#dc2626" />}
               {(hasContent || isCalling) && (
                 <View style={{ marginLeft: 4 }}>
@@ -481,12 +549,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#2e2e2e",
   },
   labelArea: {
     flex: 1,
@@ -494,9 +562,25 @@ const styles = StyleSheet.create({
   },
   labelText: {
     fontFamily: "Inter_500Medium",
-    fontSize: 12,
-    color: "#c8c8c8",
-    lineHeight: 16,
+    fontSize: 13,
+    color: "#c0c0c0",
+    lineHeight: 18,
+  },
+  labelTextRunning: {
+    color: "#e8e8e8",
+    fontFamily: "Inter_600SemiBold",
+  },
+  subLabelText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: "#686868",
+    lineHeight: 14,
+  },
+  snippetText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#909090",
+    lineHeight: 15,
   },
   argText: {
     fontFamily: "Inter_400Regular",

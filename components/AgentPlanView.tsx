@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Animated,
   TouchableOpacity,
+  Easing,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import { AgentToolCard } from "@/components/AgentToolCard";
@@ -25,6 +26,7 @@ export interface SelectedToolInfo {
 interface AgentPlanViewProps {
   plan: AgentPlan;
   notifyMessages?: string[];
+  stepNotifyMessages?: { stepId: string; text: string }[];
   onToolPress?: (tool: SelectedToolInfo) => void;
 }
 
@@ -48,22 +50,33 @@ function cleanCitations(raw: string): string {
     .replace(/<\/?co[^>]*>/g, "");
 }
 
-function PulsingDot({ size = 6, color = "#888888" }: { size?: number; color?: string }) {
-  const opacity = useRef(new Animated.Value(0.4)).current;
+function SpinnerIcon({ size = 16, color = "#a0a0a0" }: { size?: number; color?: string }) {
+  const rotation = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1,   duration: 600, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-      ])
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
     );
     anim.start();
     return () => anim.stop();
   }, []);
+  const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   return (
-    <Animated.View
-      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, opacity }}
-    />
+    <Animated.View style={{ transform: [{ rotate }], width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <View style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: 2,
+        borderColor: "transparent",
+        borderTopColor: color,
+        borderRightColor: color + "60",
+      }} />
+    </Animated.View>
   );
 }
 
@@ -84,9 +97,11 @@ function normalizeStepTool(raw: StepToolEntry): AgentEvent {
 
 function StepRow({
   step,
+  stepNotifyTexts,
   onToolPress,
 }: {
   step: AgentPlanStep;
+  stepNotifyTexts?: string[];
   onToolPress?: (tool: SelectedToolInfo) => void;
 }) {
   const isRunning = step.status === "running";
@@ -95,10 +110,19 @@ function StepRow({
   const rawTools: StepToolEntry[] = (step as AgentPlanStep & { tools?: StepToolEntry[] }).tools || [];
   const hasTools = rawTools.length > 0;
 
-  const [toolsExpanded, setToolsExpanded] = useState(hasTools);
+  const [toolsExpanded, setToolsExpanded] = useState(isRunning || isDone);
+
+  useEffect(() => {
+    if (isRunning) setToolsExpanded(true);
+  }, [isRunning]);
 
   return (
-    <View style={styles.stepRow}>
+    <View style={[
+      styles.stepRow,
+      isRunning && styles.stepRowRunning,
+      isDone && styles.stepRowDone,
+      isFailed && styles.stepRowFailed,
+    ]}>
       <TouchableOpacity
         style={styles.stepHeader}
         onPress={() => hasTools && setToolsExpanded(prev => !prev)}
@@ -110,9 +134,9 @@ function StepRow({
           isFailed  && styles.stepBulletFailed,
           isRunning && styles.stepBulletRunning,
         ]}>
-          {isDone   && <NativeIcon name="checkmark" size={9} color="#686868" />}
-          {isFailed && <NativeIcon name="close"     size={9} color="#f87171" />}
-          {isRunning && <PulsingDot size={5} color="#999999" />}
+          {isDone   && <NativeIcon name="checkmark" size={10} color="#4ade80" />}
+          {isFailed && <NativeIcon name="close"     size={10} color="#f87171" />}
+          {isRunning && <SpinnerIcon size={14} color="#7dd3fc" />}
         </View>
 
         <Text
@@ -131,7 +155,7 @@ function StepRow({
           <NativeIcon
             name={toolsExpanded ? "chevron-up" : "chevron-down"}
             size={12}
-            color="#555555"
+            color={isRunning ? "#7dd3fc" : "#555555"}
           />
         )}
       </TouchableOpacity>
@@ -164,11 +188,31 @@ function StepRow({
           })}
         </View>
       )}
+
+      {stepNotifyTexts && stepNotifyTexts.length > 0 && (
+        <View style={styles.stepNotifyBlock}>
+          {stepNotifyTexts.map((msg, i) => (
+            <AgentGoalMessage key={i} message={msg} />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
-export function AgentPlanView({ plan, notifyMessages, onToolPress }: AgentPlanViewProps) {
+export function AgentGoalMessage({ message }: { message: string }) {
+  return (
+    <View style={goalStyles.container}>
+      <View style={goalStyles.iconRow}>
+        <NativeIcon name="chatbubble-ellipses" size={12} color="#7dd3fc" />
+        <Text style={goalStyles.labelText}>Agent</Text>
+      </View>
+      <Text style={goalStyles.messageText}>{cleanCitations(message)}</Text>
+    </View>
+  );
+}
+
+export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onToolPress }: AgentPlanViewProps) {
   const steps = plan.steps || [];
   const visibleSteps = steps.filter(
     s => s.status === "running" || s.status === "completed" || s.status === "failed"
@@ -176,22 +220,60 @@ export function AgentPlanView({ plan, notifyMessages, onToolPress }: AgentPlanVi
 
   return (
     <View style={styles.container}>
-      {visibleSteps.map((step, i) => (
-        <StepRow key={step.id || i} step={step} onToolPress={onToolPress} />
-      ))}
+      {visibleSteps.map((step, i) => {
+        const stepTexts = (stepNotifyMessages || [])
+          .filter(n => n.stepId === step.id)
+          .map(n => n.text);
+        return (
+          <StepRow
+            key={step.id || i}
+            step={step}
+            stepNotifyTexts={stepTexts.length > 0 ? stepTexts : undefined}
+            onToolPress={onToolPress}
+          />
+        );
+      })}
       {notifyMessages && notifyMessages.length > 0 && (
         <View style={styles.notifyBlock}>
           {notifyMessages.map((msg, i) => (
-            <View key={i} style={styles.notifyRow}>
-              <NativeIcon name="chatbubble-ellipses" size={11} color="#686868" />
-              <Text style={styles.notifyText}>{cleanCitations(msg)}</Text>
-            </View>
+            <AgentGoalMessage key={i} message={msg} />
           ))}
         </View>
       )}
     </View>
   );
 }
+
+const goalStyles = StyleSheet.create({
+  container: {
+    backgroundColor: "#1e2a2e",
+    borderLeftWidth: 3,
+    borderLeftColor: "#7dd3fc",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: 2,
+  },
+  iconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  labelText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    color: "#7dd3fc",
+    letterSpacing: 0.2,
+  },
+  messageText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 15,
+    color: "#e8e8e8",
+    lineHeight: 22,
+    letterSpacing: -0.1,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -200,37 +282,55 @@ const styles = StyleSheet.create({
   },
 
   stepRow: {
-    gap: 4,
+    gap: 0,
+    borderRadius: 10,
+    backgroundColor: "transparent",
+    overflow: "hidden",
+  },
+  stepRowRunning: {
+    backgroundColor: "#1a2535",
+    borderWidth: 1,
+    borderColor: "#2a4060",
+  },
+  stepRowDone: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+  },
+  stepRowFailed: {
+    backgroundColor: "#1e1a1a",
+    borderWidth: 1,
+    borderColor: "#5a2020",
   },
   stepHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    paddingVertical: 3,
-    paddingHorizontal: 2,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   stepBullet: {
-    width: 17,
-    height: 17,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 1.5,
     borderColor: "#2a2a2a",
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
+    marginTop: 1,
     flexShrink: 0,
   },
   stepBulletDone: {
-    backgroundColor: "#242424",
-    borderColor: "#383838",
+    backgroundColor: "#162416",
+    borderColor: "#2a4a2a",
   },
   stepBulletFailed: {
     backgroundColor: "#2a1a1a",
     borderColor: "#5a2020",
   },
   stepBulletRunning: {
-    borderColor: "#555555",
+    backgroundColor: "#1a2e42",
+    borderColor: "#2a5a80",
     borderWidth: 1.5,
   },
   stepTitle: {
@@ -238,34 +338,37 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 14,
     lineHeight: 20,
-    color: "#888888",
+    color: "#686868",
     letterSpacing: -0.1,
   },
   stepTitleDone: {
-    color: "#606060",
+    color: "#707070",
     fontFamily: "Inter_400Regular",
   },
   stepTitleFailed: {
     color: "#f87171",
   },
   stepTitleRunning: {
-    color: "#e8e8e8",
+    color: "#f0f0f0",
     fontFamily: "Inter_600SemiBold",
   },
 
   toolsContainer: {
-    marginLeft: 8,
-    gap: 4,
-    paddingBottom: 2,
+    marginLeft: 0,
+    gap: 2,
+    paddingBottom: 6,
+    paddingTop: 0,
+  },
+
+  stepNotifyBlock: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 6,
   },
 
   notifyBlock: {
-    marginTop: 6,
-    marginLeft: 4,
+    marginTop: 4,
     gap: 6,
-    borderLeftWidth: 2,
-    borderLeftColor: "#242424",
-    paddingLeft: 10,
   },
   notifyRow: {
     flexDirection: "row",
@@ -275,8 +378,8 @@ const styles = StyleSheet.create({
   notifyText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#909090",
-    lineHeight: 18,
+    fontSize: 15,
+    color: "#e8e8e8",
+    lineHeight: 22,
   },
 });
