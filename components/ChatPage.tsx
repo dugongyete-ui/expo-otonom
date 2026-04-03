@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image, Share, Alert, ScrollView, Animated } from "react-native";
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Linking, Modal, Image, Share, Alert, ScrollView, Animated, Easing } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
@@ -79,6 +79,32 @@ interface BrowserEventState {
   title?: string;
 }
 
+function AnimatedPlanDot() {
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  return <Animated.View style={[planDotStyles.dot, { opacity: pulseAnim }]} />;
+}
+
+const planDotStyles = StyleSheet.create({
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4a7cf0",
+  },
+});
+
 function ManusThinkingIndicator({ label }: { label: string }) {
   const pulseAnim = useRef(new Animated.Value(0.5)).current;
 
@@ -140,20 +166,108 @@ const TOOL_LABEL_MAP: Record<string, string> = {
 };
 
 function buildInlineLabel(fnName: string, args: Record<string, unknown>): string {
+  // Browser-specific richer labels
+  if (fnName === "browser_navigate" || fnName === "web_browse") {
+    const url = String(args.url || args.page || "");
+    if (url) {
+      try {
+        const domain = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+        return `Navigasi ke ${domain}`;
+      } catch {
+        return `Navigasi ke ${url.slice(0, 40)}`;
+      }
+    }
+    return "Navigasi halaman";
+  }
+  if (fnName === "browser_scroll") {
+    const dir = String(args.direction || "").toLowerCase();
+    const page = String(args.page || args.url || "");
+    const dirLabel = dir === "up" ? "ke atas" : dir === "down" ? "ke bawah" : dir ? `ke ${dir}` : "";
+    if (page) {
+      try {
+        const domain = new URL(page.startsWith("http") ? page : `https://${page}`).hostname.replace(/^www\./, "");
+        return `Scroll ${dirLabel} di ${domain}`.trim();
+      } catch {}
+    }
+    return dirLabel ? `Scroll ${dirLabel}` : "Scroll halaman";
+  }
+  if (fnName === "browser_click") {
+    const sel = String(args.selector || args.element || args.label || args.text || "");
+    if (sel) return `Klik: ${sel.slice(0, 45)}`;
+    return "Klik elemen";
+  }
+  if (fnName === "browser_type" || fnName === "browser_input") {
+    const text = String(args.text || args.value || args.input || "");
+    const field = String(args.selector || args.field || "");
+    if (text && field) return `Mengetik '${text.slice(0, 30)}' di ${field.slice(0, 25)}`;
+    if (text) return `Mengetik: '${text.slice(0, 40)}'`;
+    return "Mengetik teks";
+  }
+  if (fnName === "browser_view") {
+    const page = String(args.page || args.url || "");
+    if (page) {
+      try {
+        const domain = new URL(page.startsWith("http") ? page : `https://${page}`).hostname.replace(/^www\./, "");
+        return `Melihat ${domain}`;
+      } catch {}
+    }
+    return "Melihat halaman";
+  }
+  if (fnName === "browser_tab_new") {
+    const url = String(args.url || "");
+    if (url) {
+      try {
+        const domain = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+        return `Tab baru: ${domain}`;
+      } catch {}
+    }
+    return "Buka tab baru";
+  }
+  // Search tools
+  if (fnName === "web_search" || fnName === "info_search_web") {
+    const q = String(args.query || args.q || "");
+    if (q) return `Mencari '${q.slice(0, 45)}'`;
+    return "Mencari informasi";
+  }
+  // Shell tools
+  if (fnName === "shell_exec") {
+    const cmd = String(args.command || args.cmd || "");
+    if (cmd) return `Jalankan: ${cmd.slice(0, 45)}`;
+    return "Jalankan perintah";
+  }
+  // File tools
+  if (fnName === "file_read") {
+    const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
+    if (file) return `Membaca ${file.slice(0, 45)}`;
+    return "Membaca file";
+  }
+  if (fnName === "file_write") {
+    const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
+    if (file) return `Menulis ${file.slice(0, 45)}`;
+    return "Menulis file";
+  }
+  if (fnName === "file_str_replace") {
+    const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
+    if (file) return `Mengedit ${file.slice(0, 45)}`;
+    return "Mengedit file";
+  }
+  if (fnName === "message_notify_user") {
+    const text = String(args.text || args.message || "");
+    if (text) return `Notifikasi: ${text.slice(0, 40)}`;
+    return "Notifikasi";
+  }
+  if (fnName === "message_ask_user") {
+    const text = String(args.text || args.question || "");
+    if (text) return `Tanya: ${text.slice(0, 40)}`;
+    return "Pertanyaan";
+  }
+  // Generic fallback
   const primaryArgMap: Record<string, string> = {
-    web_search: "query", info_search_web: "query",
-    browser_navigate: "url", browser_view: "page", browser_tab_new: "url", web_browse: "url",
-    shell_exec: "command",
-    file_read: "file", file_write: "file", file_str_replace: "file",
     file_find_by_name: "path", file_find_in_content: "file",
   };
   const actionMap: Record<string, string> = {
-    web_search: "Mencari", info_search_web: "Mencari",
-    browser_navigate: "Membuka", browser_view: "Melihat", browser_tab_new: "Tab baru", web_browse: "Membuka",
-    shell_exec: "Jalankan", shell_view: "Lihat output",
-    file_read: "Membaca", file_write: "Menulis", file_str_replace: "Edit",
+    shell_view: "Lihat output",
     file_find_by_name: "Cari file", file_find_in_content: "Cari dalam",
-    message_notify_user: "Notifikasi", message_ask_user: "Tanya",
   };
   const argKey = primaryArgMap[fnName];
   let argVal = argKey && args[argKey] ? String(args[argKey]) : "";
@@ -170,14 +284,47 @@ function buildInlineLabel(fnName: string, args: Record<string, unknown>): string
 }
 
 
+function InlineSpinner() {
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(rotateAnim, { toValue: 1, duration: 800, easing: Easing.linear, useNativeDriver: true })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  return (
+    <Animated.View style={{ transform: [{ rotate }] }}>
+      <View style={inlineSpinnerStyles.ring} />
+    </Animated.View>
+  );
+}
+
+const inlineSpinnerStyles = StyleSheet.create({
+  ring: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: "#4a7cf0",
+    borderTopColor: "transparent",
+  },
+});
+
 function ManusInlineToolStep({ tool }: { tool: any }) {
   const fnName = tool.function_name || tool.name || "tool";
   const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
   const label = buildInlineLabel(fnName, args);
+  const status = tool.status;
+
+  const isRunning = status === "calling";
+  const isDone = status === "called";
+  const isError = status === "error";
 
   const category = getToolCategory(fnName);
+  const iconColor = isRunning ? "#4a7cf0" : isDone ? "#4CAF50" : isError ? "#e05c5c" : "#666666";
   let iconEl: React.ReactNode;
-  const iconColor = "#888888";
   switch (category) {
     case "browser":
     case "desktop":
@@ -205,10 +352,15 @@ function ManusInlineToolStep({ tool }: { tool: any }) {
 
   return (
     <View style={inlineToolStyles.row}>
-      <View style={inlineToolStyles.iconWrap}>
+      <View style={[inlineToolStyles.iconWrap, isRunning && { backgroundColor: "rgba(74,124,240,0.1)" }, isDone && { backgroundColor: "rgba(76,175,80,0.08)" }]}>
         {iconEl}
       </View>
-      <Text style={inlineToolStyles.label} numberOfLines={1}>{label}</Text>
+      <Text style={[inlineToolStyles.label, isRunning && { color: "#a0b4e8" }, isDone && { color: "#888888" }, isError && { color: "#c07070" }]} numberOfLines={1}>{label}</Text>
+      <View style={inlineToolStyles.statusWrap}>
+        {isRunning && <InlineSpinner />}
+        {isDone && <Text style={inlineToolStyles.checkMark}>✓</Text>}
+        {isError && <Text style={inlineToolStyles.errorMark}>✕</Text>}
+      </View>
     </View>
   );
 }
@@ -235,6 +387,23 @@ const inlineToolStyles = StyleSheet.create({
     fontSize: 13,
     color: "#888888",
     flex: 1,
+  },
+  statusWrap: {
+    width: 14,
+    height: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  checkMark: {
+    fontSize: 11,
+    color: "#4CAF50",
+    fontWeight: "700",
+  },
+  errorMark: {
+    fontSize: 10,
+    color: "#e05c5c",
+    fontWeight: "700",
   },
 });
 
@@ -686,17 +855,66 @@ export function ChatPage({
       case "tool": {
         const { toolName, functionName, callId, status, args, result, toolContent } = ev;
 
-        const toolLabels: Record<string, string> = {
-          browser: "Membuka browser",
-          shell: "Menjalankan perintah",
-          file: "Membaca file",
-          search: "Mencari informasi",
-          mcp: "Memanggil MCP",
-          todo: "Mengatur todo",
-          task: "Mengelola tugas",
-          message: "Mengirim pesan",
+        // Build a descriptive live status label for the thinking indicator
+        const buildLiveStatusLabel = (fn: string, toolArgs: Record<string, any> | undefined): string => {
+          if (fn === "browser_navigate" || fn === "web_browse") {
+            const url = String((toolArgs?.url || toolArgs?.page || ""));
+            if (url) {
+              try {
+                const domain = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+                return `Menggunakan peramban: ${domain}`;
+              } catch {}
+            }
+            return "Menggunakan peramban";
+          }
+          if (fn === "browser_scroll") {
+            const dir = String(toolArgs?.direction || "").toLowerCase();
+            return dir === "up" ? "Scroll ke atas" : dir === "down" ? "Scroll ke bawah" : "Scroll halaman";
+          }
+          if (fn === "browser_click") {
+            const el = String(toolArgs?.selector || toolArgs?.element || toolArgs?.label || toolArgs?.text || "");
+            return el ? `Klik: ${el.slice(0, 40)}` : "Mengklik elemen";
+          }
+          if (fn === "browser_type" || fn === "browser_input") {
+            const text = String(toolArgs?.text || toolArgs?.value || "");
+            return text ? `Mengetik: '${text.slice(0, 35)}'` : "Mengetik teks";
+          }
+          if (fn === "browser_view") return "Melihat halaman";
+          if (fn === "web_search" || fn === "info_search_web") {
+            const q = String(toolArgs?.query || toolArgs?.q || "");
+            return q ? `Sedang mencari '${q.slice(0, 40)}'...` : "Mencari informasi terbaru...";
+          }
+          if (fn === "shell_exec") {
+            const cmd = String(toolArgs?.command || "");
+            return cmd ? `Menjalankan: ${cmd.slice(0, 40)}` : "Menjalankan perintah";
+          }
+          if (fn === "file_read") {
+            const file = String(toolArgs?.file || toolArgs?.path || "").replace(/^\/home\/ubuntu\//, "~/");
+            return file ? `Membaca file ${file.slice(0, 40)}` : "Membaca file";
+          }
+          if (fn === "file_write") {
+            const file = String(toolArgs?.file || toolArgs?.path || "").replace(/^\/home\/ubuntu\//, "~/");
+            return file ? `Mengedit file ${file.slice(0, 40)}` : "Menulis file";
+          }
+          if (fn === "file_str_replace") {
+            const file = String(toolArgs?.file || toolArgs?.path || "").replace(/^\/home\/ubuntu\//, "~/");
+            return file ? `Mengedit file ${file.slice(0, 40)}` : "Mengedit file";
+          }
+          if (fn === "message_notify_user" || fn === "message_ask_user") return "Mengirim pesan";
+          // Category fallbacks
+          const toolLabels: Record<string, string> = {
+            browser: "Menggunakan peramban",
+            shell: "Menjalankan perintah",
+            file: "Memproses file",
+            search: "Mencari informasi...",
+            mcp: "Memanggil MCP",
+            todo: "Mengatur todo",
+            task: "Mengelola tugas",
+            message: "Mengirim pesan",
+          };
+          return toolLabels[toolName] || `Menggunakan ${toolName}`;
         };
-        const thinkLabel = toolLabels[toolName] || `Menggunakan ${toolName}`;
+        const thinkLabel = buildLiveStatusLabel(functionName, args);
 
         // Helper: update a tool entry inside the currently-running plan step
         const upsertToolInCurrentStep = (updater: (prev: any[]) => any[]) => {
@@ -1711,24 +1929,31 @@ export function ChatPage({
       />
 
       {isAgentMode && isLoading && activePlanTitle ? (
-        <TouchableOpacity
-          style={styles.floatingPlanBar}
-          onPress={() => setPlanBarExpanded(v => !v)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.floatingPlanBarLeft}>
-            <View style={styles.floatingPlanDot} />
-            <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
-          </View>
-          <Text style={styles.floatingPlanTimer}>
-            {`${Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`}
-          </Text>
-          {planBarExpanded ? (
-            <ChevronDownIcon size={14} color="#666666" />
-          ) : (
-            <ChevronUpIcon size={14} color="#666666" />
-          )}
-        </TouchableOpacity>
+        <View style={styles.floatingPlanBarWrapper}>
+          {planBarExpanded && thinking.active && thinking.label ? (
+            <View style={styles.floatingPlanExpandedPanel}>
+              <Text style={styles.floatingPlanExpandedLabel} numberOfLines={2}>{thinking.label}</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={styles.floatingPlanBar}
+            onPress={() => setPlanBarExpanded(v => !v)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.floatingPlanBarLeft}>
+              <AnimatedPlanDot />
+              <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
+            </View>
+            <Text style={styles.floatingPlanTimer}>
+              {`${Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`}
+            </Text>
+            {planBarExpanded ? (
+              <ChevronDownIcon size={14} color="#666666" />
+            ) : (
+              <ChevronUpIcon size={14} color="#666666" />
+            )}
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       <ChatBox
@@ -2061,6 +2286,24 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   // Manus-style floating plan bar
+  floatingPlanBarWrapper: {
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+  },
+  floatingPlanExpandedPanel: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#111111",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1e1e1e",
+  },
+  floatingPlanExpandedLabel: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#888888",
+    fontStyle: "italic",
+    lineHeight: 18,
+  },
   floatingPlanBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -2068,8 +2311,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: "#141414",
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
   },
   floatingPlanBarLeft: {
     flex: 1,
@@ -2081,7 +2322,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#4A90D9",
+    backgroundColor: "#4a7cf0",
   },
   floatingPlanTitle: {
     flex: 1,
