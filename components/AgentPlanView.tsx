@@ -185,7 +185,7 @@ export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onTool
   const steps = plan.steps || [];
   const [expanded, setExpanded] = useState(true);
 
-  const isAllDone = plan.status === "completed" || steps.every(s => s.status === "completed" || s.status === "failed");
+  const isAllDone = plan.status === "completed" || (steps.length > 0 && steps.every(s => s.status === "completed" || s.status === "failed"));
   const isRunning = plan.status === "running" || steps.some(s => s.status === "running");
 
   // Collect all tool steps and narrative messages in order
