@@ -496,6 +496,7 @@ export function ChatPage({
   const [planBarExpanded, setPlanBarExpanded] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [starRating, setStarRating] = useState(0);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -1363,6 +1364,7 @@ export function ChatPage({
     setTaskCompleted(false);
     setCompletedSteps([]);
     setTaskFinalNarrative(null);
+    setStarRating(0);
     lastNotifyTextRef.current = null;
     if (!wasContinuation) {
       setStepHistory([]);
@@ -1913,11 +1915,21 @@ export function ChatPage({
                 )}
                 {/* Star rating row like Manus */}
                 <View style={styles.starRatingRow}>
-                  <Text style={styles.starRatingLabel}>Beri nilai hasil ini</Text>
+                  <Text style={styles.starRatingLabel}>
+                    {starRating > 0 ? "Terima kasih atas penilaianmu!" : "Beri nilai hasil ini"}
+                  </Text>
                   <View style={styles.starRatingStars}>
                     {[1, 2, 3, 4, 5].map(n => (
-                      <TouchableOpacity key={n} activeOpacity={0.7}>
-                        <StarIcon size={20} color="#555555" />
+                      <TouchableOpacity
+                        key={n}
+                        activeOpacity={0.7}
+                        onPress={() => setStarRating(n)}
+                      >
+                        <StarIcon
+                          size={22}
+                          color={n <= starRating ? "#f5a623" : "#444444"}
+                          filled={n <= starRating}
+                        />
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -1928,33 +1940,66 @@ export function ChatPage({
         }
       />
 
-      {isAgentMode && isLoading && activePlanTitle ? (
-        <View style={styles.floatingPlanBarWrapper}>
-          {planBarExpanded && thinking.active && thinking.label ? (
-            <View style={styles.floatingPlanExpandedPanel}>
-              <Text style={styles.floatingPlanExpandedLabel} numberOfLines={2}>{thinking.label}</Text>
-            </View>
-          ) : null}
-          <TouchableOpacity
-            style={styles.floatingPlanBar}
-            onPress={() => setPlanBarExpanded(v => !v)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.floatingPlanBarLeft}>
-              <AnimatedPlanDot />
-              <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
-            </View>
-            <Text style={styles.floatingPlanTimer}>
-              {`${Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`}
-            </Text>
-            {planBarExpanded ? (
-              <ChevronDownIcon size={14} color="#666666" />
-            ) : (
-              <ChevronUpIcon size={14} color="#666666" />
-            )}
-          </TouchableOpacity>
-        </View>
-      ) : null}
+      {isAgentMode && isLoading && activePlanTitle ? (() => {
+        const plan = currentPlanRef.current;
+        const steps = plan?.steps || [];
+        const completedCount = steps.filter(s => s.status === "completed").length;
+        const totalCount = steps.length;
+        return (
+          <View style={styles.floatingPlanBarWrapper}>
+            {planBarExpanded && plan && steps.length > 0 ? (
+              <ScrollView style={styles.floatingPlanExpandedPanel} showsVerticalScrollIndicator={false}>
+                {steps.map((step, i) => {
+                  const isRunning = step.status === "running";
+                  const isDone = step.status === "completed";
+                  const isFailed = step.status === "failed";
+                  return (
+                    <View key={step.id || i} style={styles.floatingPlanStep}>
+                      <View style={[
+                        styles.floatingPlanStepDot,
+                        isRunning && { backgroundColor: "#4a7cf0" },
+                        isDone && { backgroundColor: "#4CAF50" },
+                        isFailed && { backgroundColor: "#e05c5c" },
+                      ]} />
+                      <Text style={[
+                        styles.floatingPlanStepText,
+                        isRunning && { color: "#d0d0d0" },
+                        isDone && { color: "#555555" },
+                        isFailed && { color: "#c07070" },
+                      ]} numberOfLines={2}>{step.description}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            ) : planBarExpanded && thinking.active && thinking.label ? (
+              <View style={styles.floatingPlanExpandedSingle}>
+                <Text style={styles.floatingPlanExpandedLabel} numberOfLines={2}>{thinking.label}</Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              style={styles.floatingPlanBar}
+              onPress={() => setPlanBarExpanded(v => !v)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.floatingPlanBarLeft}>
+                <AnimatedPlanDot />
+                <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
+              </View>
+              {totalCount > 0 ? (
+                <Text style={styles.floatingPlanCounter}>{completedCount} / {totalCount}</Text>
+              ) : null}
+              <Text style={styles.floatingPlanTimer}>
+                {`${Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`}
+              </Text>
+              {planBarExpanded ? (
+                <ChevronDownIcon size={14} color="#666666" />
+              ) : (
+                <ChevronUpIcon size={14} color="#666666" />
+              )}
+            </TouchableOpacity>
+          </View>
+        );
+      })() : null}
 
       <ChatBox
         value={inputMessage}
@@ -2293,6 +2338,15 @@ const styles = StyleSheet.create({
   floatingPlanExpandedPanel: {
     paddingHorizontal: 16,
     paddingVertical: 8,
+    paddingBottom: 12,
+    backgroundColor: "#111111",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1e1e1e",
+    maxHeight: 200,
+  },
+  floatingPlanExpandedSingle: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: "#111111",
     borderBottomWidth: 1,
     borderBottomColor: "#1e1e1e",
@@ -2303,6 +2357,26 @@ const styles = StyleSheet.create({
     color: "#888888",
     fontStyle: "italic",
     lineHeight: 18,
+  },
+  floatingPlanStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 5,
+  },
+  floatingPlanStepDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#333333",
+    flexShrink: 0,
+  },
+  floatingPlanStepText: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#666666",
+    lineHeight: 17,
   },
   floatingPlanBar: {
     flexDirection: "row",
@@ -2329,6 +2403,11 @@ const styles = StyleSheet.create({
     color: "#a0a0a0",
     fontSize: 12,
     fontFamily: "Inter_500Medium",
+  },
+  floatingPlanCounter: {
+    color: "#666666",
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
   },
   floatingPlanTimer: {
     color: "#555555",

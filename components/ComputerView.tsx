@@ -8,16 +8,23 @@ import {
   SafeAreaView,
   StatusBar,
   Animated,
-  Dimensions,
-  Platform,
   Image,
+  ScrollView,
 } from "react-native";
 import { WebView } from "react-native-webview";
-import { NativeIcon, CloseIcon } from "@/components/icons/SvgIcon";
+import {
+  CloseIcon,
+  DesktopIcon,
+  ExpandIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ChevronBackIcon,
+  ChevronForwardIcon,
+  CheckCircleIcon,
+  HandIcon,
+} from "@/components/icons/SvgIcon";
 import { getApiUrl } from "@/lib/query-client";
 import type { AgentPlan } from "@/lib/chat";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface ComputerViewProps {
   plan?: AgentPlan | null;
@@ -27,7 +34,7 @@ interface ComputerViewProps {
   lastScreenshot?: string | null;
 }
 
-function LiveIndicator({ connected }: { connected: boolean }) {
+function LiveDot({ connected }: { connected: boolean }) {
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (!connected) return;
@@ -42,14 +49,20 @@ function LiveIndicator({ connected }: { connected: boolean }) {
   }, [opacity, connected]);
 
   return (
+    <Animated.View
+      style={[
+        styles.liveDotInner,
+        { opacity: connected ? opacity : 1 },
+        { backgroundColor: connected ? "#4CAF50" : "#555555" },
+      ]}
+    />
+  );
+}
+
+function LiveIndicator({ connected }: { connected: boolean }) {
+  return (
     <View style={styles.liveRow}>
-      <Animated.View
-        style={[
-          styles.liveDot,
-          { opacity: connected ? opacity : 1 },
-          { backgroundColor: connected ? "#888888" : "#555555" },
-        ]}
-      />
+      <LiveDot connected={connected} />
       <Text style={[styles.liveText, { color: connected ? "#e0e0e0" : "#888888" }]}>
         {connected ? "Live" : "Menghubungkan"}
       </Text>
@@ -57,13 +70,46 @@ function LiveIndicator({ connected }: { connected: boolean }) {
   );
 }
 
-function PlanBottomBar({ plan }: { plan: AgentPlan }) {
+function RunningDot() {
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.8, duration: 500, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return (
+    <Animated.View style={[styles.stepDot, { backgroundColor: "#4a7cf0", transform: [{ scale: scaleAnim }] }]} />
+  );
+}
+
+function StepStatusDot({ status }: { status: string }) {
+  if (status === "running") return <RunningDot />;
+  if (status === "completed") return <CheckCircleIcon size={14} color="#4CAF50" />;
+  if (status === "failed") return <View style={[styles.stepDot, { backgroundColor: "#e05c5c" }]} />;
+  return <View style={[styles.stepDot, { backgroundColor: "#444444" }]} />;
+}
+
+function PlanBottomBar({
+  plan,
+  planIndex,
+  planCount,
+  onPrevPlan,
+  onNextPlan,
+}: {
+  plan: AgentPlan;
+  planIndex?: number;
+  planCount?: number;
+  onPrevPlan?: () => void;
+  onNextPlan?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const completedCount = plan.steps.filter((s) => s.status === "completed").length;
   const totalCount = plan.steps.length;
-  const currentStep =
-    plan.steps.find((s) => s.status === "running") ||
-    plan.steps[plan.steps.length - 1];
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
@@ -75,6 +121,10 @@ function PlanBottomBar({ plan }: { plan: AgentPlan }) {
       useNativeDriver: false,
     }).start();
   }, [progress, progressAnim]);
+
+  const isAllDone = plan.status === "completed" || completedCount === totalCount;
+  const idx = planIndex ?? 0;
+  const count = planCount ?? 1;
 
   return (
     <View style={styles.planBar}>
@@ -97,54 +147,54 @@ function PlanBottomBar({ plan }: { plan: AgentPlan }) {
         activeOpacity={0.7}
       >
         <View style={styles.planBarLeft}>
-          <Ionicons
-            name={completedCount === totalCount ? "checkmark-circle" : "layers-outline"}
-            size={15}
-            color={completedCount === totalCount ? "#888888" : "#555555"}
-          />
+          {isAllDone
+            ? <CheckCircleIcon size={14} color="#4CAF50" />
+            : <View style={styles.planBarRunningDot} />
+          }
           <Text style={styles.planBarTitle} numberOfLines={1}>
-            {currentStep?.description || plan.title || "Menjalankan tugas"}
+            {plan.title || "Menjalankan tugas"}
           </Text>
         </View>
         <View style={styles.planBarRight}>
-          <Text style={styles.planBarCount}>{completedCount} / {totalCount}</Text>
-          <Ionicons
-            name={expanded ? "chevron-down" : "chevron-up"}
-            size={13}
-            color="#8a8780"
-          />
+          {count > 1 && (
+            <View style={styles.planNavRow}>
+              <TouchableOpacity onPress={onPrevPlan} style={styles.planNavBtn} activeOpacity={0.7}>
+                <ChevronBackIcon size={13} color={idx > 0 ? "#a0a0a0" : "#444444"} />
+              </TouchableOpacity>
+              <Text style={styles.planBarCount}>{idx + 1} / {count}</Text>
+              <TouchableOpacity onPress={onNextPlan} style={styles.planNavBtn} activeOpacity={0.7}>
+                <ChevronForwardIcon size={13} color={idx < count - 1 ? "#a0a0a0" : "#444444"} />
+              </TouchableOpacity>
+            </View>
+          )}
+          {count <= 1 && (
+            <Text style={styles.planBarCount}>{completedCount} / {totalCount}</Text>
+          )}
+          {expanded
+            ? <ChevronDownIcon size={13} color="#8a8780" />
+            : <ChevronUpIcon size={13} color="#8a8780" />
+          }
         </View>
       </TouchableOpacity>
       {expanded && (
-        <View style={styles.planBarSteps}>
+        <ScrollView style={styles.planBarSteps} showsVerticalScrollIndicator={false}>
           {plan.steps.map((step, i) => (
             <View key={step.id || i} style={styles.planBarStep}>
-              <Ionicons
-                name={
-                  step.status === "completed" ? "checkmark-circle" :
-                  step.status === "running" ? "radio-button-on" :
-                  step.status === "failed" ? "close-circle" : "radio-button-off"
-                }
-                size={13}
-                color={
-                  step.status === "completed" ? "#888888" :
-                  step.status === "running" ? "#888888" :
-                  step.status === "failed" ? "#666666" : "#555555"
-                }
-              />
+              <StepStatusDot status={step.status} />
               <Text
                 style={[
                   styles.planBarStepText,
                   step.status === "completed" && styles.planBarStepDone,
                   step.status === "running" && styles.planBarStepRunning,
+                  step.status === "failed" && styles.planBarStepFailed,
                 ]}
-                numberOfLines={1}
+                numberOfLines={2}
               >
                 {step.description}
               </Text>
             </View>
           ))}
-        </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -166,7 +216,6 @@ function VNCViewer({
   const webviewRef = useRef<any>(null);
   const baseUrl = getApiUrl().replace(/\/$/, "");
 
-  // Build VNC URL with session ID and takeover params
   const queryParams: string[] = [];
   if (isTakeover) queryParams.push("takeover=1");
   if (e2bSessionId) queryParams.push(`session=${e2bSessionId}`);
@@ -177,7 +226,6 @@ function VNCViewer({
     (event: any) => {
       try {
         const msg = JSON.parse(event.nativeEvent.data);
-        // Handle messages from the postMessage bridge in e2b-vnc-view.html
         if (msg.type === "vnc_connected") onConnected();
         else if (msg.type === "vnc_disconnected") onDisconnected();
         else if (msg.type === "vnc_takeover_changed") onTakeoverChange(!!msg.takeover);
@@ -186,10 +234,8 @@ function VNCViewer({
     [onConnected, onDisconnected, onTakeoverChange],
   );
 
-  // Send takeover/release to the VNC HTML page via postMessage bridge
   const prevTakeoverRef = useRef(isTakeover);
   useEffect(() => {
-    // Only send postMessage when takeover actually changes (not on initial render)
     if (prevTakeoverRef.current !== isTakeover && webviewRef.current) {
       const msg = isTakeover ? '{"type":"takeover"}' : '{"type":"release"}';
       webviewRef.current.postMessage(msg);
@@ -237,11 +283,11 @@ function FullScreenVNC({
       <SafeAreaView style={styles.fullHeader}>
         <View style={styles.fullHeaderInner}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn} activeOpacity={0.7}>
-            <Ionicons name="close" size={20} color="#FFFFFF" />
+            <CloseIcon size={18} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.fullHeaderCenter}>
-            <Ionicons name="desktop-outline" size={16} color="#888888" />
+            <DesktopIcon size={16} color="#888888" />
             <Text style={styles.fullHeaderTitle}>Komputer Dzeck</Text>
           </View>
 
@@ -259,28 +305,35 @@ function FullScreenVNC({
         />
       </View>
 
+      {/* Bottom nav bar: prev | • Live | next */}
       <View style={styles.navBar}>
         <TouchableOpacity style={styles.navBtn} activeOpacity={0.7}>
-          <Ionicons name="play-skip-back" size={18} color="#8a8780" />
+          <ChevronBackIcon size={18} color="#8a8780" />
         </TouchableOpacity>
 
+        <View style={styles.navCenterArea}>
+          <View style={styles.navLiveRow}>
+            <LiveDot connected={connected} />
+            <Text style={styles.navLiveText}>Live</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.navBtn} activeOpacity={0.7}>
+          <ChevronForwardIcon size={18} color="#8a8780" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Ambil Kendali button */}
+      <View style={styles.takeoverContainer}>
         <TouchableOpacity
           style={[styles.takeoverBtn, isTakeover && styles.takeoverBtnActive]}
           onPress={() => setIsTakeover(!isTakeover)}
           activeOpacity={0.75}
         >
-          <Ionicons
-            name={isTakeover ? "pause-circle-outline" : "hand-left-outline"}
-            size={15}
-            color={isTakeover ? "#888888" : "#555555"}
-          />
+          <HandIcon size={15} color={isTakeover ? "#888888" : "#f3f4f6"} />
           <Text style={[styles.takeoverText, isTakeover && styles.takeoverTextActive]}>
             {isTakeover ? "Lepas Kendali" : "Ambil Kendali"}
           </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navBtn} activeOpacity={0.7}>
-          <Ionicons name="play-skip-forward" size={18} color="#8a8780" />
         </TouchableOpacity>
       </View>
 
@@ -303,31 +356,31 @@ export function ComputerView({ plan, onClose, visible = false, agentSessionId, l
       >
         <View style={styles.compactHeader}>
           <View style={styles.compactHeaderLeft}>
-            <Ionicons name="desktop-outline" size={14} color="#888888" />
+            <DesktopIcon size={14} color="#888888" />
             <Text style={styles.compactTitle}>Komputer Dzeck</Text>
             <View style={styles.liveBadge}>
               <View style={[styles.liveBadgeDot, connected && styles.liveBadgeDotOn]} />
               <Text style={styles.liveBadgeText}>{connected ? "Live" : "Tap buka"}</Text>
             </View>
           </View>
-          <Ionicons name="expand-outline" size={13} color="#8a8780" />
+          <ExpandIcon size={13} color="#8a8780" />
         </View>
-          <View style={styles.compactPreview}>
-            {lastScreenshot ? (
-              <Image
-                source={{ uri: lastScreenshot }}
-                style={styles.compactScreenshot}
-                resizeMode="contain"
-              />
-            ) : (
-              <>
-                <Ionicons name="desktop-outline" size={32} color="#3a3a3a" />
-                <Text style={styles.compactPreviewText}>
-                  Tap untuk buka VNC live
-                </Text>
-              </>
-            )}
-          </View>
+        <View style={styles.compactPreview}>
+          {lastScreenshot ? (
+            <Image
+              source={{ uri: lastScreenshot }}
+              style={styles.compactScreenshot}
+              resizeMode="contain"
+            />
+          ) : (
+            <>
+              <DesktopIcon size={32} color="#3a3a3a" />
+              <Text style={styles.compactPreviewText}>
+                Tap untuk buka VNC live
+              </Text>
+            </>
+          )}
+        </View>
       </TouchableOpacity>
     );
   }
@@ -398,7 +451,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ccc8be",
   },
   liveBadgeDotOn: {
-    backgroundColor: "#888888",
+    backgroundColor: "#4CAF50",
   },
   liveBadgeText: {
     fontFamily: "Inter_500Medium",
@@ -479,7 +532,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  liveDot: {
+  liveDotInner: {
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -495,8 +548,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: "#2a2a2a",
+    paddingVertical: 8,
+    backgroundColor: "#141414",
     borderTopWidth: 1,
     borderTopColor: "#2a2a2a",
   },
@@ -505,14 +558,38 @@ const styles = StyleSheet.create({
     width: 34,
     alignItems: "center",
   },
+  navCenterArea: {
+    flex: 1,
+    alignItems: "center",
+  },
+  navLiveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  navLiveText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: "#e0e0e0",
+  },
+
+  // ─── Takeover button ──────────────────────────────────────────────────────
+  takeoverContainer: {
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    backgroundColor: "#141414",
+    borderTopWidth: 1,
+    borderTopColor: "#1e1e1e",
+  },
   takeoverBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: "#2a2a2a",
     borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: "#3a3a3a",
   },
@@ -531,18 +608,19 @@ const styles = StyleSheet.create({
 
   // ─── Plan bottom bar ──────────────────────────────────────────────────────
   planBar: {
-    backgroundColor: "#242424",
+    backgroundColor: "#141414",
     borderTopWidth: 1,
     borderTopColor: "#2a2a2a",
     paddingBottom: 8,
+    maxHeight: 240,
   },
   progressBarTrack: {
     height: 2,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#2a2a2a",
   },
   progressBarFill: {
     height: 2,
-    backgroundColor: "#888888",
+    backgroundColor: "#4a7cf0",
   },
   planBarHeader: {
     flexDirection: "row",
@@ -557,6 +635,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  planBarRunningDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4a7cf0",
+  },
   planBarTitle: {
     flex: 1,
     fontFamily: "Inter_500Medium",
@@ -569,6 +653,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  planNavRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  planNavBtn: {
+    padding: 2,
+  },
   planBarCount: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
@@ -577,20 +669,28 @@ const styles = StyleSheet.create({
   planBarSteps: {
     paddingHorizontal: 16,
     paddingBottom: 6,
-    gap: 6,
+    maxHeight: 150,
   },
   planBarStep: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingVertical: 4,
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
   },
   planBarStepText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#a0a0a0",
+    color: "#666666",
     lineHeight: 17,
   },
   planBarStepDone: { color: "#3a3a3a" },
   planBarStepRunning: { color: "#f3f4f6" },
+  planBarStepFailed: { color: "#e05c5c" },
 });
