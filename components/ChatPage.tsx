@@ -497,6 +497,8 @@ export function ChatPage({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [starRating, setStarRating] = useState(0);
+  const [planHistory, setPlanHistory] = useState<AgentPlan[]>([]);
+  const [activePlanIndex, setActivePlanIndex] = useState(0);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -792,11 +794,19 @@ export function ChatPage({
           setMessages(prev => [...prev, planMsg]);
           setThinking({ active: true, label: planData.title || "Membuat rencana...", stepLabel: planData.title });
           if (planData.title) setActivePlanTitle(planData.title);
+          setPlanHistory(prev => {
+            const exists = prev.some(p => p.id === planData.id);
+            if (exists) return prev;
+            const updated = [...prev, planData];
+            setActivePlanIndex(updated.length - 1);
+            return updated;
+          });
         } else if (planData && planMsgIdRef.current) {
           currentPlanRef.current = planData;
           setMessages(prev => prev.map(m =>
             m.id === planMsgIdRef.current ? { ...m, plan: planData } : m
           ));
+          setPlanHistory(prev => prev.map(p => p.id === planData.id ? planData : p));
           if (planStatus === "completed") {
             setThinking({ active: false, label: "" });
           }
