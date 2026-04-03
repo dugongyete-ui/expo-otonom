@@ -6,13 +6,13 @@ import { ChatBox } from "./ChatBox";
 import { AgentPlanView } from "./AgentPlanView";
 import { ToolDetailModal } from "./ToolDetailModal";
 import {
-  MenuIcon, TerminalIcon, ShareIcon, LogOutIcon, EllipsisIcon,
-  FlashIcon, ChatbubbleIcon, SettingsIcon, ServerIcon,
-  AlertCircleIcon, CheckIcon, HelpCircleIcon, SparklesIcon,
-  CheckCircleIcon, CloseCircleIcon, DocumentTextIcon,
-  ChevronUpIcon, ChevronDownIcon,
+  ShareIcon, LogOutIcon, EllipsisIcon,
+  SettingsIcon, ServerIcon,
+  CheckCircleIcon, DocumentTextIcon,
+  ChevronUpIcon, ChevronDownIcon, ChevronBackIcon,
+  StarIcon,
 } from "@/components/icons/SvgIcon";
-import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon, McpIcon } from "@/components/icons/ToolIcons";
+import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
 import { processAgentEvent } from "../lib/agent-event-processor";
 import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
@@ -23,7 +23,7 @@ import { MCPPanel } from "./MCPPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { cleanAgentText } from "@/lib/text-utils";
-import { getToolDisplayInfo, getToolCategory, getToolCategoryColor } from "@/lib/tool-constants";
+import { getToolDisplayInfo, getToolCategory } from "@/lib/tool-constants";
 import type { ToolContent } from "@/lib/chat";
 
 interface AgentPlanStep {
@@ -79,48 +79,24 @@ interface BrowserEventState {
   title?: string;
 }
 
-function ThinkingIndicator({ label }: { label: string }) {
-  const dot1 = useRef(new Animated.Value(0.3)).current;
-  const dot2 = useRef(new Animated.Value(0.3)).current;
-  const dot3 = useRef(new Animated.Value(0.3)).current;
+function ManusThinkingIndicator({ label }: { label: string }) {
+  const pulseAnim = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    const anim = (dot: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(dot, { toValue: 1, duration: 350, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0.3, duration: 350, useNativeDriver: true }),
-        ])
-      );
-    const a1 = anim(dot1, 0);
-    const a2 = anim(dot2, 160);
-    const a3 = anim(dot3, 320);
-    a1.start(); a2.start(); a3.start();
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.5, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
   }, []);
 
   return (
     <View style={thinkingStyles.row}>
-      <Image
-        source={require("../assets/images/dzeck-logo.jpg")}
-        style={thinkingStyles.avatarImage}
-        resizeMode="cover"
-      />
-      <View style={thinkingStyles.bubble}>
-        <View style={thinkingStyles.dotsRow}>
-          {([dot1, dot2, dot3] as Animated.Value[]).map((d, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                thinkingStyles.dot,
-                { opacity: d, transform: [{ scaleY: d }], backgroundColor: "#888888" },
-              ]}
-            />
-          ))}
-        </View>
-        <Text style={thinkingStyles.label} numberOfLines={1}>{label || "Dzeck sedang berpikir..."}</Text>
-      </View>
+      <Animated.View style={[thinkingStyles.blueDot, { opacity: pulseAnim }]} />
+      <Text style={thinkingStyles.label} numberOfLines={1}>{label || "Sedang berpikir"}</Text>
     </View>
   );
 }
@@ -129,38 +105,21 @@ const thinkingStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    gap: 10,
-  },
-  avatarImage: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    flexShrink: 0,
-    overflow: "hidden",
-  },
-  bubble: {
-    flexDirection: "row",
-    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     gap: 8,
-    flex: 1,
   },
-  dotsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+  blueDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4A90D9",
+    flexShrink: 0,
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
     color: "#888888",
-    fontStyle: "italic",
     flex: 1,
   },
 });
@@ -210,78 +169,40 @@ function buildInlineLabel(fnName: string, args: Record<string, unknown>): string
   return TOOL_LABEL_MAP[fnName] || fnName;
 }
 
-function renderInlineIcon(fnName: string, color: string) {
+
+function ManusInlineToolStep({ tool }: { tool: any }) {
+  const fnName = tool.function_name || tool.name || "tool";
+  const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
+  const label = buildInlineLabel(fnName, args);
+
   const category = getToolCategory(fnName);
+  let iconEl: React.ReactNode;
+  const iconColor = "#888888";
   switch (category) {
     case "browser":
     case "desktop":
-      return <BrowserIcon size={11} color={color} />;
+      iconEl = <BrowserIcon size={12} color={iconColor} />;
+      break;
     case "file":
     case "image":
     case "multimedia":
-      return <EditIcon size={11} color={color} />;
+      iconEl = <EditIcon size={12} color={iconColor} />;
+      break;
     case "search":
     case "info":
-      return <SearchIcon size={11} color={color} />;
-    case "mcp":
-      return <McpIcon size={11} color={color} />;
-    case "message":
-    case "todo":
-    case "task":
-    case "email":
-      return <MessageIcon size={11} color={color} />;
-    case "shell":
+      iconEl = <SearchIcon size={12} color={iconColor} />;
+      break;
     default:
-      return <ShellIcon size={11} color={color} />;
+      iconEl = <ShellIcon size={12} color={iconColor} />;
+      break;
   }
-}
-
-function InlineToolStep({ tool }: { tool: any }) {
-  const fnName = tool.function_name || tool.name || "tool";
-  const isRunning = tool.status === "calling";
-  const isDone = tool.status === "called";
-  const isError = tool.status === "error";
-  const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
-  const label = buildInlineLabel(fnName, args);
-  const catColor = getToolCategoryColor(fnName);
-
-  const snippet = isDone && (tool.output || tool.function_result)
-    ? (tool.output || tool.function_result || "").trim().replace(/\n/g, " ").slice(0, 100)
-    : null;
-
-  const iconColor = "#888888";
-  const bgColor = isError
-    ? "#1e1e1e"
-    : isDone
-    ? "rgba(255,255,255,0.04)"
-    : isRunning
-    ? "rgba(255,255,255,0.04)"
-    : "#1e1e1e";
 
   return (
     <View style={inlineToolStyles.row}>
-      <View style={[
-        inlineToolStyles.iconWrap,
-        { backgroundColor: bgColor },
-      ]}>
-        {renderInlineIcon(fnName, iconColor)}
+      <View style={inlineToolStyles.iconWrap}>
+        {iconEl}
       </View>
-      <View style={inlineToolStyles.labelArea}>
-        <Text style={[
-          inlineToolStyles.label,
-          isError && inlineToolStyles.labelError,
-          isRunning && inlineToolStyles.labelRunning,
-          isDone && inlineToolStyles.labelDone,
-        ]} numberOfLines={1}>
-          {label}
-        </Text>
-        {snippet ? (
-          <Text style={inlineToolStyles.snippetText} numberOfLines={2}>{snippet}</Text>
-        ) : null}
-      </View>
-      {isRunning && <View style={inlineToolStyles.runningDot} />}
-      {isDone && <CheckIcon size={11} color="#888888" />}
-      {isError && <CloseCircleIcon size={11} color="#888888" />}
+      <Text style={inlineToolStyles.label} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -289,61 +210,25 @@ function InlineToolStep({ tool }: { tool: any }) {
 const inlineToolStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
   },
   iconWrap: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    backgroundColor: "#2a2a2a",
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    backgroundColor: "#1e1e1e",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    marginTop: 2,
-  },
-  iconWrapDone: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  iconWrapRunning: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  iconWrapError: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-  labelArea: {
-    flex: 1,
-    gap: 1,
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#787878",
-  },
-  labelRunning: {
-    color: "#d0d0d0",
-    fontFamily: "Inter_500Medium",
-  },
-  labelDone: {
     color: "#888888",
-  },
-  labelError: {
-    color: "#888888",
-  },
-  snippetText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#606060",
-    lineHeight: 15,
-  },
-  runningDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#888888",
-    flexShrink: 0,
-    marginTop: 5,
+    flex: 1,
   },
 });
 
@@ -1488,51 +1373,25 @@ export function ChatPage({
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={onToggleLeftPanel}
-          style={styles.settingsBtn}
-          hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
-        >
-          <MenuIcon size={22} color="#b0b0b0" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Image
-            source={require("../assets/images/dzeck-logo.jpg")}
-            style={{ width: 32, height: 32, borderRadius: 8 }}
-            resizeMode="cover"
-          />
+        <View style={styles.headerLeft}>
+          <TouchableOpacity
+            onPress={onToggleLeftPanel}
+            style={styles.headerBackBtn}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          >
+            <ChevronBackIcon size={22} color="#b0b0b0" />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => onAgentModeChange?.(!isAgentMode)}
-            style={[styles.modeBadge, isAgentMode ? styles.modeBadgeAgent : styles.modeBadgeChat]}
-            hitSlop={{ top: 6, left: 6, right: 6, bottom: 6 }}
+            style={styles.headerBrandRow}
             activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6 }}
           >
-            {isAgentMode
-              ? <FlashIcon size={10} color="#888888" />
-              : <ChatbubbleIcon size={10} color="#888888" />
-            }
-            <Text style={[styles.modeBadgeText, isAgentMode ? styles.modeBadgeTextAgent : styles.modeBadgeTextChat]}>
-              {isAgentMode ? "Agent" : "Chat"}
-            </Text>
+            <Text style={styles.headerBrandName}>Dzeck 1.6 {isAgentMode ? "Agent" : "Lite"}</Text>
+            <ChevronDownIcon size={14} color="#888888" />
           </TouchableOpacity>
         </View>
         <View style={styles.headerRight}>
-          {onOpenTools && (
-            <TouchableOpacity
-              onPress={onOpenTools}
-              style={[styles.settingsBtn, activeToolsCount > 0 && styles.toolsBtnActive]}
-              hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
-            >
-              <View>
-                <TerminalIcon size={20} color="#a0a0a0" />
-                {toolsCount > 0 && (
-                  <View style={styles.toolsBadge}>
-                    <Text style={styles.toolsBadgeText}>{toolsCount > 9 ? "9+" : toolsCount}</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             onPress={handleShare}
             style={styles.settingsBtn}
@@ -1543,13 +1402,6 @@ export function ChatPage({
               size={20}
               color={messages.length === 0 ? "#555555" : "#a0a0a0"}
             />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={async () => { await logout(); }}
-            style={styles.settingsBtn}
-            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
-          >
-            <LogOutIcon size={20} color="#a0a0a0" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSettings(true)}
@@ -1685,7 +1537,7 @@ export function ChatPage({
             }
           }
 
-          // Plan message — show agent header + AgentPlanView card(s)
+          // Plan message — Manus-style: agent header (dzeck + Agent badge) + text + collapsible task
           if (item.plan) {
             const isPlanRunning = item.plan.status === "running" || item.plan.steps.some(s => s.status === "running");
             const isPlanDone = item.plan.status === "completed" || item.plan.steps.every(s => s.status === "completed" || s.status === "failed");
@@ -1697,22 +1549,10 @@ export function ChatPage({
             return (
               <View style={styles.agentTurnBlock}>
                 <View style={styles.agentTurnHeader}>
-                  <Image
-                    source={require("../assets/images/dzeck-logo.jpg")}
-                    style={styles.agentTurnLogo}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.agentTurnName}>Dzeck</Text>
-                  {isPlanRunning && !isPlanDone && (
-                    <View style={styles.agentTurnBadgeRunning}>
-                      <Text style={[styles.agentTurnBadgeText, { color: "#888888" }]}>Working…</Text>
-                    </View>
-                  )}
-                  {isPlanDone && (
-                    <View style={styles.agentTurnBadgeDone}>
-                      <Text style={[styles.agentTurnBadgeText, { color: "#888888" }]}>Done</Text>
-                    </View>
-                  )}
+                  <Text style={styles.agentTurnName}>dzeck</Text>
+                  <View style={styles.agentTurnModeBadge}>
+                    <Text style={styles.agentTurnModeBadgeText}>Agent</Text>
+                  </View>
                 </View>
                 {precedingText ? (
                   <Text style={styles.agentPrecedingText}>{precedingText}</Text>
@@ -1764,12 +1604,10 @@ export function ChatPage({
             return (
               <View style={styles.fileCardsBlock}>
                 <View style={styles.agentTurnHeader}>
-                  <Image
-                    source={require("../assets/images/dzeck-logo.jpg")}
-                    style={styles.agentTurnLogo}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.agentTurnName}>Dzeck</Text>
+                  <Text style={styles.agentTurnName}>dzeck</Text>
+                  <View style={styles.agentTurnModeBadge}>
+                    <Text style={styles.agentTurnModeBadgeText}>Agent</Text>
+                  </View>
                 </View>
                 {item.files.map((f, i) => (
                   <TouchableOpacity
@@ -1815,32 +1653,33 @@ export function ChatPage({
         ListFooterComponent={
           thinking.active ? (
             <View>
-              <ThinkingIndicator label={thinking.label} />
+              <ManusThinkingIndicator label={thinking.label} />
               {isAgentMode && !planMsgIdRef.current && tools.length > 0 && (
                 <View style={styles.inlineToolsBlock}>
                   {tools.slice(-3).map((tool, i) => (
-                    <InlineToolStep key={tool.tool_call_id || i} tool={tool} />
+                    <ManusInlineToolStep key={tool.tool_call_id || i} tool={tool} />
                   ))}
                 </View>
               )}
             </View>
           ) : taskCompleted ? (
             <View style={styles.taskCompletedWrap}>
+              {/* Manus-style: checkmark + task title + "Tugas telah selesai" */}
               <View style={styles.taskCompletedCard}>
                 <View style={styles.taskCompletedCardHeader}>
-                  <View style={styles.taskCompletedIconNew}>
-                    <CheckIcon size={14} color="#888888" />
-                  </View>
-                  <View style={styles.taskCompletedTitleArea}>
-                    <Text style={styles.taskCompletedTitle}>Tugas Selesai</Text>
-                    <Text style={styles.taskCompletedSubtitle}>{completedSteps.length} langkah diselesaikan</Text>
-                  </View>
+                  <CheckCircleIcon size={18} color="#4CAF50" />
+                  <Text style={styles.taskCompletedTitle}>Tugas telah selesai</Text>
                 </View>
+                {taskFinalNarrative ? (
+                  <View style={styles.taskCompletedNarrative}>
+                    <Text style={styles.taskCompletedNarrativeText}>{taskFinalNarrative}</Text>
+                  </View>
+                ) : null}
                 {completedSteps.length > 0 && (
                   <View style={styles.taskCompletedSteps}>
                     {completedSteps.map((step, i) => (
                       <View key={step.id || i} style={styles.taskCompletedStepRow}>
-                        <CheckCircleIcon size={14} color="#888888" />
+                        <CheckCircleIcon size={14} color="#4CAF50" />
                         <Text style={styles.taskCompletedStepText} numberOfLines={2}>
                           {step.description}
                         </Text>
@@ -1848,11 +1687,17 @@ export function ChatPage({
                     ))}
                   </View>
                 )}
-                {taskFinalNarrative ? (
-                  <View style={styles.taskCompletedNarrative}>
-                    <Text style={styles.taskCompletedNarrativeText}>{taskFinalNarrative}</Text>
+                {/* Star rating row like Manus */}
+                <View style={styles.starRatingRow}>
+                  <Text style={styles.starRatingLabel}>Beri nilai hasil ini</Text>
+                  <View style={styles.starRatingStars}>
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <TouchableOpacity key={n} activeOpacity={0.7}>
+                        <StarIcon size={20} color="#555555" />
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                ) : null}
+                </View>
               </View>
             </View>
           ) : null
@@ -1865,8 +1710,10 @@ export function ChatPage({
           onPress={() => setPlanBarExpanded(v => !v)}
           activeOpacity={0.8}
         >
-          <View style={styles.floatingPlanDot} />
-          <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
+          <View style={styles.floatingPlanBarLeft}>
+            <View style={styles.floatingPlanDot} />
+            <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
+          </View>
           <Text style={styles.floatingPlanTimer}>
             {`${Math.floor(elapsedSeconds / 60).toString().padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`}
           </Text>
@@ -1915,60 +1762,37 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingBottom: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     backgroundColor: "#0D0D0D",
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
+    borderBottomColor: "#1e1e1e",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  headerCenter: {
-    flex: 1,
+  headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginHorizontal: 8,
+    gap: 4,
+    flex: 1,
   },
-  headerBrand: {
-    fontSize: 16,
+  headerBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  headerBrandName: {
     fontFamily: "Inter_700Bold",
+    fontSize: 16,
     color: "#e0e0e0",
     letterSpacing: -0.3,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#e0e0e0",
-    flex: 1,
-  },
-  modeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  modeBadgeChat: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderColor: "#333333",
-  },
-  modeBadgeAgent: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderColor: "#333333",
-  },
-  modeBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.1,
-  },
-  modeBadgeTextChat: {
-    color: "#888888",
-  },
-  modeBadgeTextAgent: {
-    color: "#888888",
   },
   headerRight: {
     flexDirection: "row",
@@ -2134,57 +1958,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2a2a2a",
   },
+  // Manus-style agent turn block
   agentTurnBlock: {
     paddingHorizontal: 16,
-    paddingVertical: 4,
-    gap: 6,
+    paddingVertical: 8,
+    gap: 8,
   },
   agentTurnHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  agentTurnIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    backgroundColor: "#222222",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  agentTurnLogo: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    overflow: "hidden",
-  },
   agentTurnName: {
     fontFamily: "Inter_700Bold",
-    fontSize: 14,
+    fontSize: 15,
     color: "#e0e0e0",
     letterSpacing: -0.2,
   },
-  agentTurnBadgeRunning: {
-    paddingHorizontal: 7,
+  agentTurnModeBadge: {
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 5,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#333333",
   },
-  agentTurnBadgeDone: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
-  agentTurnBadgeText: {
+  agentTurnModeBadgeText: {
     fontFamily: "Inter_500Medium",
-    fontSize: 10,
+    fontSize: 11,
     color: "#888888",
-    letterSpacing: -0.1,
+    letterSpacing: 0.1,
   },
   agentPrecedingText: {
     fontFamily: "Inter_400Regular",
@@ -2192,7 +1995,7 @@ const styles = StyleSheet.create({
     color: "#e8e8e8",
     lineHeight: 22,
     letterSpacing: -0.1,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   fileCardsBlock: {
     paddingHorizontal: 12,
@@ -2203,7 +2006,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#242424",
+    backgroundColor: "#1a1a1a",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#2a2a2a",
@@ -2247,39 +2050,11 @@ const styles = StyleSheet.create({
   fileViewAllLink: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#888888",
+    color: "#4A90D9",
     paddingLeft: 2,
     paddingTop: 2,
   },
-  thinkingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  thinkingDotWrap: {
-    width: 10,
-    height: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  thinkingDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: "#c8c8c8",
-  },
-  thinkingDotPulse: {
-    backgroundColor: "#888888",
-  },
-  thinkingLabel: {
-    flex: 1,
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#a0a0a0",
-    fontStyle: "italic",
-  },
+  // Manus-style floating plan bar
   floatingPlanBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -2290,23 +2065,30 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#2a2a2a",
   },
+  floatingPlanBarLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   floatingPlanDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#888888",
+    backgroundColor: "#4A90D9",
   },
   floatingPlanTitle: {
     flex: 1,
     color: "#a0a0a0",
     fontSize: 12,
-    fontWeight: "500",
+    fontFamily: "Inter_500Medium",
   },
   floatingPlanTimer: {
     color: "#555555",
     fontSize: 11,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
+  // Manus-style task completed
   taskCompletedWrap: {
     marginHorizontal: 16,
     marginVertical: 8,
@@ -2317,43 +2099,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2a2a2a",
     overflow: "hidden",
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   taskCompletedCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a2a",
   },
-  taskCompletedIconNew: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "#222222",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    flexShrink: 0,
-  },
-  taskCompletedTitleArea: {
-    flex: 1,
-    gap: 2,
-  },
   taskCompletedTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
     color: "#e8e8e8",
-    letterSpacing: -0.3,
-  },
-  taskCompletedSubtitle: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#888888",
-    letterSpacing: -0.1,
+    letterSpacing: -0.2,
   },
   taskCompletedSteps: {
     paddingHorizontal: 16,
@@ -2375,12 +2136,10 @@ const styles = StyleSheet.create({
   },
   taskCompletedNarrative: {
     marginHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#161616",
-    borderLeftWidth: 2,
-    borderLeftColor: "#3a3a3a",
+    backgroundColor: "#111111",
     borderRadius: 8,
   },
   taskCompletedNarrativeText: {
@@ -2388,6 +2147,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#d0d0d0",
     lineHeight: 21,
+  },
+  // Star rating like Manus
+  starRatingRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+    marginTop: 4,
+    gap: 8,
+  },
+  starRatingLabel: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#888888",
+  },
+  starRatingStars: {
+    flexDirection: "row",
+    gap: 8,
   },
   flatList: {
     flex: 1,
@@ -2428,7 +2205,7 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     width: 160,
-    backgroundColor: "#242424",
+    backgroundColor: "#1a1a1a",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#2a2a2a",
@@ -2461,7 +2238,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
   },
   inlineToolsBlock: {
-    marginLeft: 30,
+    marginLeft: 16,
     marginTop: 2,
     marginBottom: 4,
     paddingHorizontal: 0,
