@@ -118,6 +118,24 @@ export function TakeOverIcon({ size = 16, color }: IconProps) {
   );
 }
 
+// Message/Notification Icon - Chat bubble in rounded rectangle
+export function MessageIcon({ size = 21, color }: IconProps) {
+  if (Platform.OS === "web") {
+    const svg = `<svg width="${size}" height="${size}" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="14" height="14" rx="2.7" fill="#2a2a2a" stroke="#3a3a3a" stroke-width="0.857"/>
+      <path d="M5.5 6.5H13.5M5.5 9H10.5M5.5 11.5L4 14L7 12.5H13.5C14.05 12.5 14.5 12.05 14.5 11.5V6.5C14.5 5.95 14.05 5.5 13.5 5.5H5.5C4.95 5.5 4.5 5.95 4.5 6.5V11.5C4.5 12.05 4.95 12.5 5.5 12.5Z" stroke="${color || '#888888'}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    return <WebSvgIcon size={size} svgContent={svg} />;
+  }
+  const c = color || "#888888";
+  return (
+    <Svg width={size} height={size} viewBox="0 0 19 18" fill="none">
+      <Path d="M2 4.7C2 3.21 3.21 2 4.7 2H14.3C15.79 2 17 3.21 17 4.7V13.3C17 14.79 15.79 16 14.3 16H4.7C3.21 16 2 14.79 2 13.3V4.7Z" fill="#2a2a2a" stroke="#3a3a3a" strokeWidth={0.857} />
+      <Path d="M5.5 6.5H13.5M5.5 9H10.5M5.5 11.5L4 14L7 12.5H13.5C14.05 12.5 14.5 12.05 14.5 11.5V6.5C14.5 5.95 14.05 5.5 13.5 5.5H5.5C4.95 5.5 4.5 5.95 4.5 6.5V11.5C4.5 12.05 4.95 12.5 5.5 12.5Z" stroke={c} strokeWidth={1.1} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 // MCP Icon - Puzzle piece
 export function McpIcon({ size = 21, color }: IconProps) {
   if (Platform.OS === "web") {
@@ -226,6 +244,7 @@ export default {
   EditIcon,
   SearchIcon,
   TakeOverIcon,
+  MessageIcon,
   McpIcon,
   SpinningIcon,
   SuccessIcon,

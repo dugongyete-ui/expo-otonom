@@ -342,6 +342,43 @@ export function getToolDisplayInfo(functionName: string): ToolDisplayInfo {
   };
 }
 
+// ─── Tool Category Color Palette ───────────────────────────────────────────
+export interface ToolCategoryColor {
+  icon: string;
+  background: string;
+  accent: string;
+}
+
+/**
+ * Get vivid-but-tasteful colors for a tool category (dark-theme optimised).
+ */
+export function getToolCategoryColor(functionName: string): ToolCategoryColor {
+  const category = getToolCategory(functionName);
+  switch (category) {
+    case "search":
+    case "info":
+      return { icon: "#f59e0b", background: "rgba(245,158,11,0.15)", accent: "#f59e0b" };
+    case "browser":
+    case "desktop":
+      return { icon: "#38bdf8", background: "rgba(56,189,248,0.15)", accent: "#38bdf8" };
+    case "shell":
+      return { icon: "#34d399", background: "rgba(52,211,153,0.15)", accent: "#34d399" };
+    case "file":
+    case "image":
+    case "multimedia":
+      return { icon: "#a78bfa", background: "rgba(167,139,250,0.15)", accent: "#a78bfa" };
+    case "mcp":
+      return { icon: "#818cf8", background: "rgba(129,140,248,0.15)", accent: "#818cf8" };
+    case "message":
+    case "todo":
+    case "task":
+    case "email":
+      return { icon: "#2dd4bf", background: "rgba(45,212,191,0.15)", accent: "#2dd4bf" };
+    default:
+      return { icon: "#94a3b8", background: "rgba(148,163,184,0.12)", accent: "#64748b" };
+  }
+}
+
 /**
  * Get the action verb for a tool function.
  */

@@ -18,8 +18,8 @@ import {
   AlertCircleIcon, ChevronUpIcon, ChevronDownIcon,
 } from "@/components/icons/SvgIcon";
 import type { AgentEvent, ToolContent } from "@/lib/chat";
-import { getToolDisplayInfo, getToolActionVerb, getToolPrimaryArg, getToolCategory } from "@/lib/tool-constants";
-import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, McpIcon, SpinningIcon, SuccessIcon, ErrorIcon } from "./icons/ToolIcons";
+import { getToolDisplayInfo, getToolActionVerb, getToolPrimaryArg, getToolCategory, getToolCategoryColor } from "@/lib/tool-constants";
+import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon, McpIcon, SpinningIcon, SuccessIcon, ErrorIcon } from "./icons/ToolIcons";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -352,24 +352,32 @@ function buildDescriptiveLabel(
   return verb;
 }
 
-// Helper: render custom icon for tool card based on function name (always monochrome)
+// Helper: render custom icon for tool card based on function name (colored by category)
 function renderCardIcon(functionName: string) {
   const category = getToolCategory(functionName);
-  const iconColor = "#a0a0a0";
+  const { icon: iconColor } = getToolCategoryColor(functionName);
   switch (category) {
     case "shell":
       return <ShellIcon size={15} color={iconColor} />;
     case "browser":
+    case "desktop":
       return <BrowserIcon size={15} color={iconColor} />;
     case "file":
+    case "image":
+    case "multimedia":
       return <EditIcon size={15} color={iconColor} />;
     case "search":
+    case "info":
       return <SearchIcon size={15} color={iconColor} />;
     case "mcp":
       return <McpIcon size={15} color={iconColor} />;
-    default: {
+    case "message":
+    case "todo":
+    case "task":
+    case "email":
+      return <MessageIcon size={15} color={iconColor} />;
+    default:
       return <ShellIcon size={15} color={iconColor} />;
-    }
   }
 }
 
@@ -383,7 +391,7 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
   const isError = event.status === "error";
 
   const { label } = getToolDisplayInfo(functionName);
-  const color = "#888888";
+  const categoryColor = getToolCategoryColor(functionName);
   const verb = getToolActionVerb(functionName);
   const primaryArg = getToolPrimaryArg(functionName, functionArgs);
   const descriptiveLabel = buildDescriptiveLabel(functionName, functionArgs, verb, primaryArg);
@@ -430,8 +438,8 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
   return (
     <View style={styles.wrapper}>
       <View style={[styles.card, isError && styles.cardError]}>
-        {/* Neutral left accent bar */}
-        <View style={styles.accentBar} />
+        {/* Colored left accent bar */}
+        <View style={[styles.accentBar, !isError && { backgroundColor: categoryColor.accent }]} />
 
         <View style={styles.cardContent}>
           {/* Header row */}
@@ -441,7 +449,7 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
             activeOpacity={hasContent || isCalling ? 0.6 : 1}
           >
             {/* Icon */}
-            <View style={styles.iconWrap}>
+            <View style={[styles.iconWrap, !isError && { backgroundColor: categoryColor.background }]}>
               {renderCardIcon(functionName)}
             </View>
 

@@ -6,6 +6,7 @@ import {
   Animated,
   TouchableOpacity,
   Easing,
+  Image,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import { AgentToolCard } from "@/components/AgentToolCard";
@@ -134,9 +135,9 @@ function StepRow({
           isFailed  && styles.stepBulletFailed,
           isRunning && styles.stepBulletRunning,
         ]}>
-          {isDone   && <NativeIcon name="checkmark" size={10} color="#4ade80" />}
-          {isFailed && <NativeIcon name="close"     size={10} color="#f87171" />}
-          {isRunning && <SpinnerIcon size={14} color="#7dd3fc" />}
+          {isDone   && <NativeIcon name="checkmark" size={10} color="#ffffff" />}
+          {isFailed && <NativeIcon name="close"     size={10} color="#ffffff" />}
+          {isRunning && <SpinnerIcon size={14} color="#38bdf8" />}
         </View>
 
         <Text
@@ -204,7 +205,11 @@ export function AgentGoalMessage({ message }: { message: string }) {
   return (
     <View style={goalStyles.container}>
       <View style={goalStyles.iconRow}>
-        <NativeIcon name="chatbubble-ellipses" size={12} color="#7dd3fc" />
+        <Image
+          source={require("../assets/images/dzeck-logo.jpg")}
+          style={goalStyles.avatarImage}
+          resizeMode="cover"
+        />
         <Text style={goalStyles.labelText}>Agent</Text>
       </View>
       <Text style={goalStyles.messageText}>{cleanCitations(message)}</Text>
@@ -248,7 +253,7 @@ const goalStyles = StyleSheet.create({
   container: {
     backgroundColor: "#1e2a2e",
     borderLeftWidth: 3,
-    borderLeftColor: "#7dd3fc",
+    borderLeftColor: "#38bdf8",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -258,12 +263,18 @@ const goalStyles = StyleSheet.create({
   iconRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
+  },
+  avatarImage: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    overflow: "hidden",
   },
   labelText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
-    color: "#7dd3fc",
+    color: "#38bdf8",
     letterSpacing: 0.2,
   },
   messageText: {
@@ -285,12 +296,17 @@ const styles = StyleSheet.create({
     gap: 0,
     borderRadius: 10,
     backgroundColor: "transparent",
-    overflow: "hidden",
   },
   stepRowRunning: {
-    backgroundColor: "#1a2535",
-    borderWidth: 1,
-    borderColor: "#2a4060",
+    backgroundColor: "#0f1a2e",
+    borderWidth: 0,
+    borderLeftWidth: 2,
+    borderLeftColor: "#38bdf8",
+    shadowColor: "#38bdf8",
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
   stepRowDone: {
     backgroundColor: "transparent",
@@ -321,17 +337,17 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stepBulletDone: {
-    backgroundColor: "#162416",
-    borderColor: "#2a4a2a",
+    backgroundColor: "#22c55e",
+    borderColor: "#22c55e",
   },
   stepBulletFailed: {
-    backgroundColor: "#2a1a1a",
-    borderColor: "#5a2020",
+    backgroundColor: "#ef4444",
+    borderColor: "#ef4444",
   },
   stepBulletRunning: {
-    backgroundColor: "#1a2e42",
-    borderColor: "#2a5a80",
-    borderWidth: 1.5,
+    backgroundColor: "transparent",
+    borderColor: "#38bdf8",
+    borderWidth: 2,
   },
   stepTitle: {
     flex: 1,

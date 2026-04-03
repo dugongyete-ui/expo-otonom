@@ -12,6 +12,7 @@ import {
   CheckCircleIcon, CloseCircleIcon, DocumentTextIcon,
   ChevronUpIcon, ChevronDownIcon,
 } from "@/components/icons/SvgIcon";
+import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon, McpIcon } from "@/components/icons/ToolIcons";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
 import { processAgentEvent } from "../lib/agent-event-processor";
 import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
@@ -22,7 +23,7 @@ import { MCPPanel } from "./MCPPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { cleanAgentText } from "@/lib/text-utils";
-import { getToolDisplayInfo } from "@/lib/tool-constants";
+import { getToolDisplayInfo, getToolCategory, getToolCategoryColor } from "@/lib/tool-constants";
 import type { ToolContent } from "@/lib/chat";
 
 interface AgentPlanStep {
@@ -108,10 +109,13 @@ function ThinkingIndicator({ label }: { label: string }) {
       />
       <View style={thinkingStyles.bubble}>
         <View style={thinkingStyles.dotsRow}>
-          {[dot1, dot2, dot3].map((d, i) => (
+          {([dot1, dot2, dot3] as Animated.Value[]).map((d, i) => (
             <Animated.View
               key={i}
-              style={[thinkingStyles.dot, { opacity: d, transform: [{ scaleY: d }] }]}
+              style={[
+                thinkingStyles.dot,
+                { opacity: d, transform: [{ scaleY: d }], backgroundColor: ["#38bdf8", "#818cf8", "#a78bfa"][i] },
+              ]}
             />
           ))}
         </View>
@@ -151,7 +155,6 @@ const thinkingStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#3a3a3a",
   },
   label: {
     fontFamily: "Inter_400Regular",
@@ -207,6 +210,32 @@ function buildInlineLabel(fnName: string, args: Record<string, unknown>): string
   return TOOL_LABEL_MAP[fnName] || fnName;
 }
 
+function renderInlineIcon(fnName: string, color: string) {
+  const category = getToolCategory(fnName);
+  switch (category) {
+    case "browser":
+    case "desktop":
+      return <BrowserIcon size={11} color={color} />;
+    case "file":
+    case "image":
+    case "multimedia":
+      return <EditIcon size={11} color={color} />;
+    case "search":
+    case "info":
+      return <SearchIcon size={11} color={color} />;
+    case "mcp":
+      return <McpIcon size={11} color={color} />;
+    case "message":
+    case "todo":
+    case "task":
+    case "email":
+      return <MessageIcon size={11} color={color} />;
+    case "shell":
+    default:
+      return <ShellIcon size={11} color={color} />;
+  }
+}
+
 function InlineToolStep({ tool }: { tool: any }) {
   const fnName = tool.function_name || tool.name || "tool";
   const isRunning = tool.status === "calling";
@@ -214,20 +243,28 @@ function InlineToolStep({ tool }: { tool: any }) {
   const isError = tool.status === "error";
   const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
   const label = buildInlineLabel(fnName, args);
+  const catColor = getToolCategoryColor(fnName);
 
   const snippet = isDone && (tool.output || tool.function_result)
     ? (tool.output || tool.function_result || "").trim().replace(/\n/g, " ").slice(0, 100)
     : null;
 
+  const iconColor = isError ? "#f87171" : catColor.icon;
+  const bgColor = isError
+    ? "#2a1a1a"
+    : isDone
+    ? catColor.background
+    : isRunning
+    ? catColor.background
+    : "#2a2a2a";
+
   return (
     <View style={inlineToolStyles.row}>
       <View style={[
         inlineToolStyles.iconWrap,
-        isError && inlineToolStyles.iconWrapError,
-        isDone && inlineToolStyles.iconWrapDone,
-        isRunning && inlineToolStyles.iconWrapRunning,
+        { backgroundColor: bgColor },
       ]}>
-        <TerminalIcon size={11} color={isError ? "#f87171" : isRunning ? "#7dd3fc" : "#888888"} />
+        {renderInlineIcon(fnName, iconColor)}
       </View>
       <View style={inlineToolStyles.labelArea}>
         <Text style={[
