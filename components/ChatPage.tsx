@@ -10,7 +10,7 @@ import {
   SettingsIcon, ServerIcon,
   CheckCircleIcon, DocumentTextIcon,
   ChevronUpIcon, ChevronDownIcon, ChevronBackIcon,
-  StarIcon,
+  StarIcon, NativeIcon,
 } from "@/components/icons/SvgIcon";
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
@@ -958,14 +958,22 @@ export function ChatPage({
           setTools(prev => {
             const idx = prev.findIndex(t => t.tool_call_id === callId);
             if (idx >= 0) {
+              const existing = prev[idx];
+              // Status precedence: never regress a completed/errored tool back to calling
+              if (existing.status === "called" || existing.status === "error") return prev;
               const updated = [...prev];
-              updated[idx] = { ...updated[idx], status: "calling", function_name: functionName };
+              updated[idx] = { ...existing, status: "calling", function_name: functionName };
               return updated;
             }
             return [...prev, newToolEntry];
           });
           upsertToolInCurrentStep(stepTools => {
             const idx = stepTools.findIndex(t => t.tool_call_id === callId);
+            // Never regress completed/errored step tools back to calling
+            if (idx >= 0) {
+              const existing = stepTools[idx];
+              if (existing.status === "called" || existing.status === "error") return stepTools;
+            }
             if (idx >= 0) return stepTools;
             return [...stepTools, newToolEntry];
           });
@@ -974,13 +982,13 @@ export function ChatPage({
             s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
           setTools(prev => {
             const idx = prev.findIndex(t => t.tool_call_id === callId);
+            const newTc = toolContent || {};
+            const newShot = normalizeShot(newTc.screenshot_b64 || "");
             if (idx >= 0) {
               const updated = [...prev];
               const existing = updated[idx];
               // Deep-merge tool_content: preserve screenshot_b64/url/title from prior events
               const prevTc = existing.tool_content || {};
-              const newTc = toolContent || {};
-              const newShot = normalizeShot(newTc.screenshot_b64 || "");
               const mergedTc = {
                 ...prevTc,
                 ...newTc,
@@ -997,18 +1005,31 @@ export function ChatPage({
               };
               return updated;
             }
-            return prev;
+            // Tool arrived as "called" without a prior "calling" event — add it now
+            const mergedTc = { ...newTc, screenshot_b64: newShot || "" };
+            return [...prev, {
+              tool_call_id: callId,
+              type: "tool",
+              name: toolName,
+              function_name: functionName,
+              status: "called" as const,
+              input: args,
+              function_args: args,
+              output: result,
+              function_result: result,
+              tool_content: mergedTc,
+            }];
           });
           upsertToolInCurrentStep(stepTools => {
             const idx = stepTools.findIndex(t => t.tool_call_id === callId);
+            const newTc = toolContent || {};
+            const newShot = (newTc.screenshot_b64 && !newTc.screenshot_b64.startsWith("data:"))
+              ? `data:image/png;base64,${newTc.screenshot_b64}`
+              : (newTc.screenshot_b64 || "");
             if (idx >= 0) {
               const updated = [...stepTools];
               const existing = updated[idx];
               const prevTc = existing.tool_content || {};
-              const newTc = toolContent || {};
-              const newShot = (newTc.screenshot_b64 && !newTc.screenshot_b64.startsWith("data:"))
-                ? `data:image/png;base64,${newTc.screenshot_b64}`
-                : (newTc.screenshot_b64 || "");
               const mergedTc = {
                 ...prevTc,
                 ...newTc,
@@ -1026,32 +1047,100 @@ export function ChatPage({
               };
               return updated;
             }
-            return stepTools;
+            // Add tool if it arrived as "called" without prior "calling"
+            return [...stepTools, {
+              tool_call_id: callId,
+              type: "tool",
+              name: toolName,
+              function_name: functionName,
+              status: "called" as const,
+              input: args,
+              function_args: args,
+              output: result,
+              function_result: result,
+              tool_content: { ...newTc, screenshot_b64: newShot || "" },
+            }];
           });
         } else if (status === "error") {
+          const normalizeShot = (s: string) =>
+            s && !s.startsWith("data:") ? `data:image/png;base64,${s}` : s;
           setTools(prev => {
             const idx = prev.findIndex(t => t.tool_call_id === callId);
+            const newTc = toolContent || {};
+            const newShot = normalizeShot(newTc.screenshot_b64 || "");
             if (idx >= 0) {
               const updated = [...prev];
-              updated[idx] = { ...updated[idx], status: "error", function_name: functionName, error: result };
+              const existing = updated[idx];
+              const prevTc = existing.tool_content || {};
+              const mergedTc = {
+                ...prevTc,
+                ...newTc,
+                screenshot_b64: newShot || prevTc.screenshot_b64 || "",
+                url: newTc.url || prevTc.url || "",
+                title: newTc.title || prevTc.title || "",
+              };
+              updated[idx] = {
+                ...existing,
+                status: "error",
+                function_name: functionName,
+                error: result,
+                tool_content: mergedTc,
+              };
               return updated;
             }
-            return prev;
+            // Tool arrived as "error" without a prior "calling" event — add it now
+            return [...prev, {
+              tool_call_id: callId,
+              type: "tool",
+              name: toolName,
+              function_name: functionName,
+              status: "error" as const,
+              input: args,
+              function_args: args,
+              error: result,
+              tool_content: { ...newTc, screenshot_b64: newShot || "" },
+            }];
           });
           upsertToolInCurrentStep(stepTools => {
             const idx = stepTools.findIndex(t => t.tool_call_id === callId);
+            const newTc = toolContent || {};
+            const newShot = (newTc.screenshot_b64 && !newTc.screenshot_b64.startsWith("data:"))
+              ? `data:image/png;base64,${newTc.screenshot_b64}`
+              : (newTc.screenshot_b64 || "");
             if (idx >= 0) {
               const updated = [...stepTools];
+              const existing = updated[idx];
+              const prevTc = existing.tool_content || {};
+              const mergedTc = {
+                ...prevTc,
+                ...newTc,
+                screenshot_b64: newShot || prevTc.screenshot_b64 || "",
+                url: newTc.url || prevTc.url || "",
+                title: newTc.title || prevTc.title || "",
+              };
               updated[idx] = {
-                ...updated[idx],
+                ...existing,
                 status: "error",
                 function_name: functionName,
                 error: result,
                 function_result: result,
+                tool_content: mergedTc,
               };
               return updated;
             }
-            return stepTools;
+            // Tool arrived as "error" without a prior "calling" event — add it to step history too
+            return [...stepTools, {
+              tool_call_id: callId,
+              type: "tool",
+              name: toolName,
+              function_name: functionName,
+              status: "error" as const,
+              input: args,
+              function_args: args,
+              error: result,
+              function_result: result,
+              tool_content: { ...newTc, screenshot_b64: newShot || "" },
+            }];
           });
         }
         return;
@@ -1341,7 +1430,7 @@ export function ChatPage({
       default:
         return;
     }
-  }, [onVncSessionChange, isAgentMode]);
+  }, [onVncSessionChange, onSessionFilesChange, isAgentMode]);
 
   const handleSubmit = useCallback(async () => {
     if (!inputMessage.trim() && attachments.length === 0) return;
@@ -1628,6 +1717,26 @@ export function ChatPage({
           </TouchableOpacity>
         </View>
         <View style={styles.headerRight}>
+          {onOpenTools && toolsCount > 0 && (
+            <TouchableOpacity
+              onPress={onOpenTools}
+              style={styles.toolsBadgeBtn}
+              hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+            >
+              <NativeIcon name="terminal-outline" size={16} color="#a0a0a0" />
+              <View style={[
+                styles.toolsBadge,
+                activeToolsCount > 0 && styles.toolsBadgeActive,
+              ]}>
+                <Text style={[
+                  styles.toolsBadgeText,
+                  activeToolsCount > 0 && styles.toolsBadgeTextActive,
+                ]}>
+                  {activeToolsCount > 0 ? activeToolsCount : toolsCount}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={handleShare}
             style={styles.settingsBtn}
@@ -2092,6 +2201,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
+  },
+  toolsBadgeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 36,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "transparent",
+  },
+  toolsBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#2e2e2e",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  toolsBadgeActive: {
+    backgroundColor: "#4a7cf0",
+  },
+  toolsBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#888888",
+  },
+  toolsBadgeTextActive: {
+    color: "#ffffff",
   },
   settingsOverlay: {
     flex: 1,

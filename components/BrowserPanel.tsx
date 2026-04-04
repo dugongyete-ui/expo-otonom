@@ -76,10 +76,13 @@ export function BrowserPanel({
   }, []);
 
   // Auto-refresh screenshots when session is ready.
-  // Skip if VNCViewer is active (either via useVNC toggle or vncViewerActive prop)
-  // to avoid double polling.
+  // Skip if VNCViewer is active (either via useVNC toggle, or vncViewerActive + agent VNC session
+  // is fully connected) to avoid double polling.
   useEffect(() => {
-    const shouldSkipPolling = useVNC || vncViewerActive;
+    // vncViewerActive is only a reliable polling-suppress signal when an agent VNC session is
+    // actually established (e2bSessionId present), not just when a vncSession object exists.
+    const agentVncConnected = vncViewerActive && !!agentVncSession?.e2bSessionId;
+    const shouldSkipPolling = useVNC || agentVncConnected;
     if (sessionState === "ready" && sessionId && !shouldSkipPolling) {
       autoRefreshRef.current = setInterval(() => {
         refreshScreenshot();
@@ -95,7 +98,7 @@ export function BrowserPanel({
       clearInterval(autoRefreshRef.current);
       autoRefreshRef.current = null;
     }
-  }, [sessionState, sessionId, useVNC, vncViewerActive, refreshScreenshot]);
+  }, [sessionState, sessionId, useVNC, vncViewerActive, agentVncSession, refreshScreenshot]);
 
   // Auto-connect to agent's sandbox when vnc_stream_url event is received
   useEffect(() => {
@@ -355,17 +358,19 @@ export function BrowserPanel({
               </View>
             )}
 
-            {/* Session info */}
-            <View style={styles.sessionInfo}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Session</Text>
-                <Text style={styles.infoValue}>{sessionId}</Text>
+            {/* Session info — only show if a real desktop session is active */}
+            {sessionId && (
+              <View style={styles.sessionInfo}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Session</Text>
+                  <Text style={styles.infoValue}>{sessionId}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Resolusi</Text>
+                  <Text style={styles.infoValue}>{resolution.width}x{resolution.height}</Text>
+                </View>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Resolusi</Text>
-                <Text style={styles.infoValue}>{resolution.width}x{resolution.height}</Text>
-              </View>
-            </View>
+            )}
 
             {/* Current URL from agent */}
             {lastBrowserEvent?.url ? (

@@ -20,6 +20,8 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { TOOL_COLOR_MAP, TOOL_ICON_MAP, getToolCategory } from "@/lib/tool-constants";
@@ -924,6 +926,23 @@ function FallbackToolView({
   );
 }
 
+// ─── Live Pulse Dot ──────────────────────────────────────────────────────────
+
+function LivePulseDot() {
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 600, easing: Easing.linear, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return <Animated.View style={[styles.liveIndicator, { opacity: pulseAnim, backgroundColor: "#4a7cf0" }]} />;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 // Helper: render custom icon based on tool category
@@ -1054,18 +1073,28 @@ export function ToolPanelContent({
   return (
     <View style={styles.container}>
       {/* Content header */}
-      <View style={[styles.contentHeader, { borderLeftColor: color }]}>
+      <View style={[styles.contentHeader, {
+        borderLeftColor: status === "calling" ? "#4a7cf0" : status === "error" ? "#e05c5c" : "#4CAF50"
+      }]}>
         {renderCategoryIcon(category, color)}
-        <Text style={styles.contentHeaderTitle}>
+        <Text style={styles.contentHeaderTitle} numberOfLines={1}>
           {functionName || toolName}
         </Text>
+        {isLive && status === "calling" && (
+          <View style={styles.liveBadge}>
+            <LivePulseDot />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
+        )}
         <View style={[styles.statusBadge, {
           backgroundColor:
-            status === "calling" ? "rgba(255,255,255,0.05)" :
-            status === "error" ? "rgba(255,255,255,0.04)" :
-            "rgba(255,255,255,0.05)"
+            status === "calling" ? "rgba(74,124,240,0.1)" :
+            status === "error" ? "rgba(224,92,92,0.1)" :
+            "rgba(76,175,80,0.1)"
         }]}>
-          <Text style={[styles.statusText, { color: status === "error" ? "#666666" : "#888888" }]}>
+          <Text style={[styles.statusText, {
+            color: status === "calling" ? "#4a7cf0" : status === "error" ? "#e05c5c" : "#4CAF50"
+          }]}>
             {status === "calling" ? "Running" : status === "error" ? "Error" : "Done"}
           </Text>
         </View>
@@ -1104,7 +1133,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(74,124,240,0.1)",
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1117,7 +1146,7 @@ const styles = StyleSheet.create({
   liveText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#888888",
+    color: "#4a7cf0",
     letterSpacing: 0.5,
   },
   statusBadge: {

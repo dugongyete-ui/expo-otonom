@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -37,9 +37,9 @@ function getToolIcon(name: string): string {
 
 function getStatusColor(status: ToolItem["status"]): string {
   switch (status) {
-    case "calling": return "#888888";
-    case "called": return "#888888";
-    case "error": return "#666666";
+    case "calling": return "#4a7cf0";
+    case "called": return "#4CAF50";
+    case "error": return "#e05c5c";
   }
 }
 
@@ -59,13 +59,16 @@ export function ToolPanel({
   onSwitchToBrowser,
 }: ToolPanelProps) {
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
+  const selectedToolIdRef = useRef<string | null>(null);
 
   const selectedTool = tools.find(t => t.tool_call_id === selectedToolId) || null;
 
-  // Auto-select the latest "calling" tool so user sees live progress
+  // Auto-select the latest "calling" tool so user sees live progress.
+  // Uses a ref to avoid stale closure when multiple tools fire in quick succession.
   useEffect(() => {
     const callingTool = [...tools].reverse().find(t => t.status === "calling");
-    if (callingTool && callingTool.tool_call_id !== selectedToolId) {
+    if (callingTool && callingTool.tool_call_id !== selectedToolIdRef.current) {
+      selectedToolIdRef.current = callingTool.tool_call_id;
       setSelectedToolId(callingTool.tool_call_id);
     }
   }, [tools]);
@@ -128,11 +131,11 @@ export function ToolPanel({
                   styles.toolItem,
                   selectedToolId === tool.tool_call_id && styles.toolItemSelected,
                 ]}
-                onPress={() =>
-                  setSelectedToolId(
-                    selectedToolId === tool.tool_call_id ? null : tool.tool_call_id
-                  )
-                }
+                onPress={() => {
+                  const nextId = selectedToolId === tool.tool_call_id ? null : tool.tool_call_id;
+                  selectedToolIdRef.current = nextId;
+                  setSelectedToolId(nextId);
+                }}
                 activeOpacity={0.7}
               >
                 <View style={styles.toolIcon}>
@@ -148,7 +151,13 @@ export function ToolPanel({
                   </Text>
                   <View style={styles.toolStatusRow}>
                     {tool.status === "calling" && (
-                      <ActivityIndicator size="small" color="#888888" style={styles.spinner} />
+                      <ActivityIndicator size="small" color="#4a7cf0" style={styles.spinner} />
+                    )}
+                    {tool.status === "called" && (
+                      <Text style={[styles.toolStatus, { color: "#4CAF50", marginRight: 2 }]}>✓</Text>
+                    )}
+                    {tool.status === "error" && (
+                      <Text style={[styles.toolStatus, { color: "#e05c5c", marginRight: 2 }]}>✕</Text>
                     )}
                     <Text style={[styles.toolStatus, { color: getStatusColor(tool.status) }]}>
                       {getStatusLabel(tool.status)}
@@ -169,7 +178,7 @@ export function ToolPanel({
           <View style={styles.detailHeaderBar}>
             <TouchableOpacity
               style={styles.closeDetailBtn}
-              onPress={() => setSelectedToolId(null)}
+              onPress={() => { selectedToolIdRef.current = null; setSelectedToolId(null); }}
               activeOpacity={0.7}
             >
               <NativeIcon name="close" size={14} color="#636366" />

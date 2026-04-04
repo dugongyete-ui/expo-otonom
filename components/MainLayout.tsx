@@ -49,13 +49,19 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [showTakeOver, setShowTakeOver] = useState(false);
   const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
-  const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string } | null>(null);
+  const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string; ts: number } | null>(null);
+  // Tracks when the most recent browser tool_content screenshot arrived (React state for re-render consistency)
+  const [toolBrowserEventTs, setToolBrowserEventTs] = useState<number>(0);
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [sseFiles, setSseFiles] = useState<Array<{ filename: string; download_url: string; sandbox_path?: string; mime?: string }>>([]);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const isNarrowScreen = screenWidth < NARROW_BREAKPOINT;
+  const isNarrowScreenRef = useRef(isNarrowScreen);
+  useEffect(() => {
+    isNarrowScreenRef.current = isNarrowScreen;
+  }, [isNarrowScreen]);
 
   const toggleLeftPanel = useCallback(() => {
     setIsLeftPanelShow(v => !v);
@@ -65,42 +71,97 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     setSessionId(newSessionId);
   }, []);
 
+  const toolsRef = useRef<ToolItem[]>([]);
   const handleToolsChange = useCallback((newTools: ToolItem[]) => {
+    // When tools are reset (cleared), reset browser event tracking state too
+    if (newTools.length === 0 && toolsRef.current.length > 0) {
+      setLiveBrowserEvent(null);
+      setToolBrowserEventTs(0);
+      prevBrowserScreenshotRef.current = null;
+      prevBrowserToolIdRef.current = null;
+      prevToolsLenRef.current = 0;
+    }
+    toolsRef.current = newTools;
     setTools(newTools);
   }, []);
 
   const handleBrowserEventChange = useCallback((event: { url?: string; screenshot_b64?: string; title?: string } | null) => {
     if (event?.screenshot_b64) {
-      setLiveBrowserEvent(event);
-      if (!isNarrowScreen) {
+      setLiveBrowserEvent({ ...event, ts: Date.now() });
+      if (!isNarrowScreenRef.current) {
         setRightPanelMode("browser");
         setIsToolPanelVisible(true);
       }
     }
-  }, [isNarrowScreen]);
+  }, []);
 
   const prevToolsLenRef = useRef(0);
+  const prevBrowserToolIdRef = useRef<string | null>(null);
+  const prevBrowserScreenshotRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (tools.length > prevToolsLenRef.current) {
+    const isNewTool = tools.length > prevToolsLenRef.current;
+    prevToolsLenRef.current = tools.length;
+
+    // Always track screenshot recency regardless of screen width —
+    // this is needed for timestamp-based arbitration of lastBrowserEvent.
+    const latestBrowserWithScreenshot = [...tools]
+      .reverse()
+      .find(t => {
+        const fn = t.function_name || t.name;
+        return getToolCategory(fn) === "browser" && t.tool_content?.screenshot_b64;
+      });
+    if (latestBrowserWithScreenshot) {
+      const shot = latestBrowserWithScreenshot.tool_content?.screenshot_b64;
+      if (shot !== prevBrowserScreenshotRef.current) {
+        // New screenshot arrived in tool_content — record timestamp in state to trigger re-render
+        prevBrowserScreenshotRef.current = shot;
+        setToolBrowserEventTs(Date.now());
+      }
+    }
+
+    // UI panel auto-switching is only relevant on wide screens
+    if (isNarrowScreenRef.current) return;
+
+    if (isNewTool && tools.length > 0) {
       const latestTool = tools[tools.length - 1];
       const fnName = latestTool.function_name || latestTool.name;
       const category = getToolCategory(fnName);
-      if (category === "browser" && latestTool.status === "calling" && !isNarrowScreen) {
+      if (category === "browser" && latestTool.status === "calling") {
+        prevBrowserToolIdRef.current = latestTool.tool_call_id;
         setRightPanelMode("browser");
         setIsToolPanelVisible(true);
       }
     }
-    prevToolsLenRef.current = tools.length;
-  }, [tools, isNarrowScreen]);
 
-  const toolBrowserEvent = tools
+    if (latestBrowserWithScreenshot) {
+      if (latestBrowserWithScreenshot.tool_call_id !== prevBrowserToolIdRef.current) {
+        prevBrowserToolIdRef.current = latestBrowserWithScreenshot.tool_call_id;
+        setRightPanelMode("browser");
+        setIsToolPanelVisible(true);
+      }
+    }
+  }, [tools]);
+
+  const rawToolBrowserEvent = tools
     .filter(t => {
       const fn = t.function_name || t.name;
       return getToolCategory(fn) === "browser" && t.tool_content?.type === "browser";
     })
     .pop()?.tool_content || null;
 
-  const lastBrowserEvent = liveBrowserEvent ?? toolBrowserEvent;
+  // Pick the most recently updated browser event source to avoid stale liveBrowserEvent winning.
+  // Both liveBrowserEvent.ts and toolBrowserEventTs are React state, so this runs synchronously
+  // during the render that follows whichever state update happened most recently.
+  const lastBrowserEvent = (() => {
+    if (!liveBrowserEvent && !rawToolBrowserEvent) return null;
+    if (!liveBrowserEvent) return rawToolBrowserEvent;
+    if (!rawToolBrowserEvent?.screenshot_b64) return liveBrowserEvent;
+    // Both have screenshots — pick the more recent one
+    return liveBrowserEvent.ts >= toolBrowserEventTs
+      ? liveBrowserEvent
+      : rawToolBrowserEvent;
+  })();
 
   const handleSwitchToBrowser = useCallback(() => {
     setRightPanelMode("browser");

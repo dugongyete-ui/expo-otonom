@@ -270,7 +270,7 @@ function BrowserContent({
       {screenshotB64 ? (
         <View style={styles.screenshotWrapper}>
           <Image
-            source={{ uri: screenshotB64 }}
+            source={{ uri: screenshotB64.startsWith("data:") ? screenshotB64 : `data:image/png;base64,${screenshotB64}` }}
             style={styles.screenshotImage}
             resizeMode="contain"
           />
@@ -403,8 +403,8 @@ export function AgentToolView({
 
           {toolContent && (isCalled || isError) && (
             <View style={styles.resultContainer}>
-              {toolContent.type === "shell" && toolContent.console != null && (
-                <ShellContent content={toolContent.console} />
+              {toolContent.type === "shell" && (toolContent.console != null || toolContent.stdout != null) && (
+                <ShellContent content={toolContent.console || (toolContent.stdout || "") + (toolContent.stderr ? "\n" + toolContent.stderr : "")} />
               )}
               {toolContent.type === "search" && toolContent.results && (
                 <SearchContent results={toolContent.results} />
@@ -444,10 +444,10 @@ export function AgentToolView({
 
           {functionResult && (isCalled || isError) && (() => {
             const hasToolContent = toolContent && (
-              (toolContent.type === "shell" && toolContent.console) ||
+              (toolContent.type === "shell" && (toolContent.console || toolContent.stdout)) ||
               (toolContent.type === "file" && toolContent.content) ||
               (toolContent.type === "search" && toolContent.results) ||
-              (toolContent.type === "browser" && toolContent.content)
+              (toolContent.type === "browser" && (toolContent.content || toolContent.screenshot_b64))
             );
             if (hasToolContent) return null;
             const resultLang = functionName.startsWith("shell") ? "bash" :
