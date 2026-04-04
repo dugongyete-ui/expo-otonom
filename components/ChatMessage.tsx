@@ -8,11 +8,13 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { Ionicons } from "@expo/vector-icons";
 import { HelpIcon, AlertCircleIcon, CheckIcon, CopyOutlineIcon } from "@/components/icons/SvgIcon";
 import { CodeBlock } from "@/components/CodeBlock";
-import type { ChatMessage as ChatMessageType } from "@/lib/chat";
+import type { ChatMessage as ChatMessageType, AgentPlanStep, ToolContent, AgentEvent } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
 import { cleanText } from "@/lib/text-utils";
+import { getToolCategory } from "@/lib/tool-constants";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -197,12 +199,253 @@ function renderInline(text: string, color: string): React.ReactNode[] {
   return nodes;
 }
 
-export { ChatMessageBubble as ChatMessage };
-export function ChatMessageBubble({ message }: ChatMessageProps) {
+// ─── Tool category icon helper ────────────────────────────────────────────────
+
+const TOOL_CATEGORY_ICONS: Record<string, string> = {
+  shell: "terminal-outline",
+  file: "document-text-outline",
+  browser: "globe-outline",
+  desktop: "desktop-outline",
+  search: "search-outline",
+  mcp: "extension-puzzle-outline",
+  message: "chatbubble-outline",
+  todo: "checkmark-circle-outline",
+  task: "list-outline",
+  info: "information-circle-outline",
+  email: "mail-outline",
+  image: "image-outline",
+};
+
+// ─── Tool card message (ai-manus "ToolUse" style) ────────────────────────────
+
+type IonIconName = React.ComponentProps<typeof Ionicons>["name"];
+
+function ToolMessageCard({
+  toolContent,
+  functionName,
+  onPress,
+}: {
+  toolContent?: ToolContent | null;
+  functionName?: string;
+  onPress?: () => void;
+}) {
+  const name = functionName || toolContent?.type || "tool";
+  const category = getToolCategory(name);
+  const iconKey = TOOL_CATEGORY_ICONS[category] || "settings-outline";
+  const icon: IonIconName = iconKey as IonIconName;
+
+  return (
+    <TouchableOpacity
+      style={toolCardStyles.card}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
+      <View style={toolCardStyles.iconBox}>
+        <Ionicons name={icon} size={14} color="#888888" />
+      </View>
+      <View style={toolCardStyles.info}>
+        <Text style={toolCardStyles.name} numberOfLines={1}>{name}</Text>
+        {toolContent?.type && (
+          <Text style={toolCardStyles.type}>{category}</Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={14} color="#636366" />
+    </TouchableOpacity>
+  );
+}
+
+const toolCardStyles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginVertical: 3,
+  },
+  iconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  info: {
+    flex: 1,
+    gap: 1,
+  },
+  name: {
+    fontFamily: "monospace",
+    fontSize: 12,
+    color: "#d1d5db",
+    fontWeight: "500",
+  },
+  type: {
+    fontSize: 10,
+    color: "#9ca3af",
+  },
+});
+
+// ─── Step message (ai-manus "step" style: dashed border + expandable) ─────────
+
+interface StepTool {
+  tool_call_id?: string;
+  name?: string;
+  function_name?: string;
+  status?: string;
+  tool_content?: ToolContent;
+}
+
+function StepMessage({
+  step,
+  onToolPress,
+}: {
+  step: AgentPlanStep;
+  onToolPress?: (tool: StepTool) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isDone = step.status === "completed";
+  const isFailed = step.status === "failed";
+  const tools: StepTool[] = (step.tools as unknown as StepTool[]) || [];
+
+  return (
+    <View style={stepMsgStyles.container}>
+      <TouchableOpacity
+        style={stepMsgStyles.header}
+        onPress={() => setExpanded(e => !e)}
+        activeOpacity={0.7}
+      >
+        <View style={isDone ? stepMsgStyles.doneCircle : stepMsgStyles.pendingCircle}>
+          {isDone && <Ionicons name="checkmark" size={8} color="#888888" />}
+        </View>
+        <Text style={[stepMsgStyles.desc, isFailed && stepMsgStyles.descFailed]} numberOfLines={2}>
+          {step.description}
+        </Text>
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={14}
+          color="#636366"
+        />
+      </TouchableOpacity>
+      {expanded && tools.length > 0 && (
+        <View style={stepMsgStyles.toolsRow}>
+          <View style={stepMsgStyles.dashedBorder} />
+          <View style={stepMsgStyles.toolsList}>
+            {tools.map((tool, i) => (
+              <ToolMessageCard
+                key={tool.tool_call_id || i}
+                functionName={tool.function_name || tool.name}
+                toolContent={tool.tool_content}
+                onPress={onToolPress ? () => onToolPress(tool) : undefined}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const stepMsgStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pendingCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
+    flexShrink: 0,
+  },
+  doneCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  desc: {
+    flex: 1,
+    fontSize: 13,
+    color: "#d1d5db",
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  descFailed: {
+    color: "#e05c5c",
+  },
+  toolsRow: {
+    flexDirection: "row",
+    marginLeft: 6,
+    marginTop: 4,
+  },
+  dashedBorder: {
+    width: 1,
+    backgroundColor: "transparent",
+    borderLeftWidth: 1,
+    borderLeftColor: "#3a3a3a",
+    borderStyle: "dashed",
+    marginLeft: 7,
+    marginRight: 12,
+    alignSelf: "stretch",
+  },
+  toolsList: {
+    flex: 1,
+    gap: 3,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+});
+
+export { ChatMessageBubble as ChatMessage, StepMessage, ToolMessageCard };
+
+type OnToolPressHandler = (tool: StepTool) => void;
+
+export function ChatMessageBubble({ message, onToolPress }: ChatMessageProps & { onToolPress?: OnToolPressHandler }) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
   const isAsk = message.role === "ask";
   const segments = useMemo(() => parseContent(message.content), [message.content]);
+
+  // Render step message (expandable section with dashed left border)
+  if (message.step) {
+    return <StepMessage step={message.step} onToolPress={onToolPress} />;
+  }
+
+  // Render tool card message
+  if (message.toolContent) {
+    const ev = message.agentEvent as AgentEvent | undefined;
+    const fnName = ev?.function_name || ev?.tool_name;
+    const toolAsTool: StepTool = {
+      tool_call_id: ev?.tool_call_id,
+      name: ev?.tool_name,
+      function_name: ev?.function_name,
+      tool_content: message.toolContent,
+    };
+    return (
+      <View style={{ paddingHorizontal: 16, paddingVertical: 2 }}>
+        <ToolMessageCard
+          toolContent={message.toolContent}
+          functionName={fnName}
+          onPress={onToolPress ? () => onToolPress(toolAsTool) : undefined}
+        />
+      </View>
+    );
+  }
 
   const handleCopy = async () => {
     await Clipboard.setStringAsync(message.content);
@@ -229,6 +472,9 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
         </View>
       )}
       <View style={[styles.bubbleWrapper, isUser && styles.bubbleWrapperUser]}>
+        {!isUser && !isAsk && (
+          <Text style={styles.senderName}>Dzeck</Text>
+        )}
         <View style={[styles.bubble, isUser ? styles.userBubble : isAsk ? styles.askBubble : styles.aiBubble]}>
           {message.attachments?.map((att, i) => (
             <Image
@@ -308,6 +554,13 @@ const styles = StyleSheet.create({
   },
   avatarAsk: {
     backgroundColor: COLORS.avatarAsk,
+  },
+  senderName: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#888888",
+    marginBottom: 4,
+    marginLeft: 2,
   },
   bubbleWrapper: {
     maxWidth: "85%",

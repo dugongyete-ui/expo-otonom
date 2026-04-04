@@ -10,6 +10,7 @@
  * - TaskView: Task execution details
  */
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { VNCViewer } from "./VNCViewer";
 import {
   View,
   Text,
@@ -88,7 +89,46 @@ interface ToolPanelContentProps {
   isLive?: boolean;
   onTakeOver?: () => void;
   onSwitchToBrowser?: () => void;
+  onMinimize?: () => void;
+  agentVncSession?: { e2bSessionId?: string; vncUrl?: string } | null;
 }
+
+// ─── Shell Output Renderer (green PS1 + output per line) ─────────────────────
+
+function ShellOutput({ output }: { output: string }) {
+  if (!output) return null;
+
+  const lines = output.split("\n");
+  const elements: React.ReactNode[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line && i === lines.length - 1) continue;
+    const isPrompt = line.match(/^\$\s/) || line.match(/^ubuntu@/) || line.match(/^#\s/);
+    elements.push(
+      <Text key={i} style={isPrompt ? shellOutputStyles.promptLine : shellOutputStyles.outputLine} selectable>
+        {line || " "}
+      </Text>
+    );
+  }
+
+  return <View>{elements}</View>;
+}
+
+const shellOutputStyles = StyleSheet.create({
+  promptLine: {
+    fontFamily: "monospace",
+    fontSize: 11,
+    color: "#00bb00",
+    lineHeight: 17,
+  },
+  outputLine: {
+    fontFamily: "monospace",
+    fontSize: 11,
+    color: "#d1d5db",
+    lineHeight: 17,
+  },
+});
 
 // ─── Shell Tool View ─────────────────────────────────────────────────────────
 
@@ -198,9 +238,7 @@ function ShellToolView({
             <Text style={styles.runningLabel}>Executing...</Text>
           </View>
         ) : consoleOutput ? (
-          <Text style={styles.shellOutputText} selectable>
-            {consoleOutput}
-          </Text>
+          <ShellOutput output={consoleOutput} />
         ) : (
           <Text style={styles.emptyOutputText}>No output</Text>
         )}
@@ -243,17 +281,21 @@ function BrowserToolView({
   functionArgs,
   onTakeOver,
   onSwitchToBrowser,
+  agentVncSession,
 }: {
   content: ToolContentData | null;
   status: string;
   functionArgs?: Record<string, unknown>;
   onTakeOver?: () => void;
   onSwitchToBrowser?: () => void;
+  agentVncSession?: { e2bSessionId?: string; vncUrl?: string } | null;
 }) {
   const url = content?.url || (functionArgs?.url as string) || "";
   const title = content?.title || "";
   const screenshotB64 = content?.screenshot_b64 || "";
   const isRunning = status === "calling";
+  // Show live VNC stream when tool is actively running and a VNC session exists
+  const hasVncSession = isRunning && !!agentVncSession?.e2bSessionId;
 
   return (
     <View style={styles.viewContainer}>
@@ -285,9 +327,16 @@ function BrowserToolView({
         </Text>
       ) : null}
 
-      {/* Screenshot or loading */}
+      {/* Live VNC stream, screenshot, or loading — with floating Take Over button */}
       <View style={styles.browserPreview}>
-        {screenshotB64 ? (
+        {hasVncSession && Platform.OS === "web" ? (
+          // Live mode: show VNCViewer iframe when session is active (web only)
+          <VNCViewer
+            sessionId={agentVncSession!.e2bSessionId!}
+            enabled={true}
+            viewOnly={true}
+          />
+        ) : screenshotB64 ? (
           <Image
             source={{ uri: screenshotB64.startsWith("data:") ? screenshotB64 : `data:image/png;base64,${screenshotB64}` }}
             style={styles.screenshotImage}
@@ -304,11 +353,22 @@ function BrowserToolView({
             <Text style={styles.browserEmptyText}>No preview available</Text>
           </View>
         )}
+
+        {/* Floating Take Over button — bottom right overlay */}
+        {onTakeOver && (
+          <TouchableOpacity
+            style={styles.takeOverFloating}
+            onPress={onTakeOver}
+            activeOpacity={0.8}
+          >
+            <TakeOverIcon size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Actions */}
-      <View style={styles.browserActions}>
-        {onSwitchToBrowser && (
+      {/* Switch to desktop button — bottom bar only */}
+      {onSwitchToBrowser && (
+        <View style={styles.browserActions}>
           <TouchableOpacity
             style={styles.browserActionBtn}
             onPress={onSwitchToBrowser}
@@ -317,18 +377,8 @@ function BrowserToolView({
             <Ionicons name="desktop-outline" size={14} color="#888888" />
             <Text style={styles.browserActionText}>View Desktop</Text>
           </TouchableOpacity>
-        )}
-        {onTakeOver && (
-          <TouchableOpacity
-            style={[styles.browserActionBtn, styles.takeOverBtn]}
-            onPress={onTakeOver}
-            activeOpacity={0.7}
-          >
-            <TakeOverIcon size={14} color="#FFFFFF" />
-            <Text style={[styles.browserActionText, styles.takeOverText]}>Take Over</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -457,11 +507,13 @@ function FileToolView({
                 <Text key={i} style={styles.lineNumber}>{i + 1}</Text>
               ))}
             </View>
-            {/* Code content */}
+            {/* Syntax-highlighted code content */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.codeScrollH}>
-              <Text style={styles.fileContentText} selectable>
-                {fileContent}
-              </Text>
+              <View style={styles.codeLines}>
+                {fileContent.split("\n").map((line: string, i: number) => (
+                  <SyntaxHighlightedLine key={i} line={line} language={language} />
+                ))}
+              </View>
             </ScrollView>
           </View>
         ) : (
@@ -502,6 +554,112 @@ function detectLanguage(fileName: string): string {
   };
   return langMap[ext] || "";
 }
+
+// ─── Syntax Highlighter (token-level, regex-based) ───────────────────────────
+// Token types with corresponding colors (dark theme)
+const TOKEN_COLORS: Record<string, string> = {
+  keyword: "#C792EA",   // purple
+  string: "#C3E88D",    // green
+  comment: "#546E7A",   // grey-blue
+  number: "#F78C6C",    // orange
+  operator: "#89DDFF",  // cyan
+  type: "#FFCB6B",      // yellow
+  function: "#82AAFF",  // blue
+  builtin: "#FF5370",   // red
+  default: "#EEFFFF",   // near-white
+};
+
+type Token = { text: string; type: string };
+
+function tokenizeLine(line: string, language: string): Token[] {
+  const tokens: Token[] = [];
+  let remaining = line;
+
+  const eatToken = (text: string, type: string) => {
+    tokens.push({ text, type });
+    remaining = remaining.slice(text.length);
+  };
+
+  while (remaining.length > 0) {
+    // Comments
+    if (remaining.startsWith("//") || remaining.startsWith("#")) {
+      eatToken(remaining, "comment");
+      break;
+    }
+    if (remaining.startsWith("/*")) {
+      const end = remaining.indexOf("*/");
+      eatToken(end >= 0 ? remaining.slice(0, end + 2) : remaining, "comment");
+      continue;
+    }
+    if (remaining.startsWith("--")) {
+      eatToken(remaining, "comment");
+      break;
+    }
+
+    // Strings
+    const strMatch = remaining.match(/^("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/);
+    if (strMatch) { eatToken(strMatch[0], "string"); continue; }
+
+    // Numbers
+    const numMatch = remaining.match(/^\b-?\d+(\.\d+)?\b/);
+    if (numMatch) { eatToken(numMatch[0], "number"); continue; }
+
+    // Keywords by language
+    let kwMatch: RegExpMatchArray | null = null;
+    if (language === "python") kwMatch = remaining.match(/^(def|class|return|if|elif|else|for|while|break|continue|import|from|as|try|except|finally|raise|with|lambda|in|not|and|or|is|pass|None|True|False|global|nonlocal|yield|assert|del)\b/);
+    else if (language === "go") kwMatch = remaining.match(/^(func|var|const|type|struct|interface|map|chan|if|else|for|range|return|break|continue|switch|case|default|import|package|defer|go|select|nil|true|false)\b/);
+    else if (language === "rust") kwMatch = remaining.match(/^(fn|let|mut|const|struct|enum|impl|trait|use|mod|pub|priv|type|return|if|else|match|for|while|loop|break|continue|in|as|where|self|Self|super|true|false)\b/);
+    else if (language === "sql") kwMatch = remaining.match(/^(SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AS|GROUP|ORDER|BY|HAVING|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|INTO|VALUES|SET|DISTINCT|LIMIT|OFFSET|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|COUNT|SUM|AVG|MAX|MIN)\b/i);
+    else kwMatch = remaining.match(/^(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|class|extends|import|export|default|from|async|await|try|catch|finally|throw|new|delete|typeof|instanceof|in|of|this|super|null|undefined|true|false|void|yield|static|get|set)\b/);
+    if (kwMatch) { eatToken(kwMatch[0], "keyword"); continue; }
+
+    // Function calls: word(
+    const fnMatch = remaining.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()/);
+    if (fnMatch) { eatToken(fnMatch[0], "function"); continue; }
+
+    // Types / classes (CapitalCase identifier)
+    const typeMatch = remaining.match(/^[A-Z][a-zA-Z0-9_]*/);
+    if (typeMatch) { eatToken(typeMatch[0], "type"); continue; }
+
+    // Operators
+    const opMatch = remaining.match(/^(===|!==|==|!=|<=|>=|=>|->|::|&&|\|\||[+\-*/<>!&|^~=:?])/);
+    if (opMatch) { eatToken(opMatch[0], "operator"); continue; }
+
+    // Identifier / word
+    const wordMatch = remaining.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*/);
+    if (wordMatch) { eatToken(wordMatch[0], "default"); continue; }
+
+    // Eat one character as default
+    eatToken(remaining[0], "default");
+  }
+
+  return tokens;
+}
+
+function SyntaxHighlightedLine({ line, language }: { line: string; language: string }) {
+  if (!language || language === "markdown" || language === "text") {
+    return <Text style={syntaxStyles.codeLine} selectable>{line || " "}</Text>;
+  }
+  const tokens = tokenizeLine(line || " ", language);
+  return (
+    <Text style={syntaxStyles.codeLine} selectable>
+      {tokens.map((token, i) => (
+        <Text key={i} style={{ color: TOKEN_COLORS[token.type] || TOKEN_COLORS.default }}>
+          {token.text}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+const syntaxStyles = StyleSheet.create({
+  codeLine: {
+    fontFamily: "monospace",
+    fontSize: 11,
+    lineHeight: 18,
+    color: TOKEN_COLORS.default,
+  },
+});
 
 // ─── Search Tool View ────────────────────────────────────────────────────────
 
@@ -965,6 +1123,48 @@ function renderCategoryIcon(category: string, color: string) {
   }
 }
 
+// ─── Tool display name map ────────────────────────────────────────────────────
+
+const TOOL_NAME_MAP: Record<string, string> = {
+  shell: "Terminal",
+  file: "File Editor",
+  browser: "Browser",
+  desktop: "Desktop",
+  search: "Web Search",
+  info: "Information",
+  message: "Message",
+  mcp: "MCP Tool",
+  todo: "Todo",
+  task: "Task",
+  image: "Image Viewer",
+  multimedia: "Multimedia",
+  email: "Email",
+  idle: "Idle",
+};
+
+// ─── Tool arg label builder for ToolPanelContent header ──────────────────────
+
+function buildArgLabel(fnName: string, args?: Record<string, unknown>): string {
+  if (!args) return "";
+  const fnLower = fnName || "";
+  if (fnLower === "browser_navigate" || fnLower === "web_browse") {
+    const url = String(args.url || args.page || "");
+    return url ? url.slice(0, 60) : "";
+  }
+  if (fnLower === "web_search" || fnLower === "info_search_web") {
+    return String(args.query || args.q || "").slice(0, 60);
+  }
+  if (fnLower === "shell_exec") return String(args.command || args.cmd || "").slice(0, 60);
+  if (fnLower.startsWith("file_")) {
+    const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
+    return file.slice(0, 60);
+  }
+  if (fnLower === "browser_click") return String(args.selector || args.element || args.label || args.text || "").slice(0, 50);
+  if (fnLower === "browser_type" || fnLower === "browser_input") return String(args.text || args.value || "").slice(0, 50);
+  const firstKey = Object.keys(args).find(k => k !== "sudo" && k !== "attachments");
+  return firstKey ? String(args[firstKey] || "").slice(0, 60) : "";
+}
+
 export function ToolPanelContent({
   toolContent,
   toolName,
@@ -976,11 +1176,14 @@ export function ToolPanelContent({
   isLive,
   onTakeOver,
   onSwitchToBrowser,
+  onMinimize,
+  agentVncSession,
 }: ToolPanelContentProps) {
   const contentType = toolContent?.type || getToolCategory(functionName || toolName);
   const category = getToolCategory(functionName || toolName);
   const color = TOOL_COLOR_MAP[category] || "#8E8E93";
-  const icon = TOOL_ICON_MAP[category] || "settings-outline";
+
+  const argLabel = buildArgLabel(functionName || toolName, functionArgs);
 
   const renderContent = () => {
     switch (contentType) {
@@ -1002,6 +1205,7 @@ export function ToolPanelContent({
             functionArgs={functionArgs}
             onTakeOver={onTakeOver}
             onSwitchToBrowser={onSwitchToBrowser}
+            agentVncSession={agentVncSession}
           />
         );
       case "file":
@@ -1072,36 +1276,49 @@ export function ToolPanelContent({
 
   return (
     <View style={styles.container}>
-      {/* Content header */}
-      <View style={[styles.contentHeader, {
-        borderLeftColor: status === "calling" ? "#4a7cf0" : status === "error" ? "#e05c5c" : "#4CAF50"
-      }]}>
-        {renderCategoryIcon(category, color)}
-        <Text style={styles.contentHeaderTitle} numberOfLines={1}>
-          {functionName || toolName}
-        </Text>
+      {/* ai-manus style header: "Manus Computer" title + minimize button */}
+      <View style={styles.panelHeader}>
+        <Text style={styles.panelHeaderTitle}>Manus Computer</Text>
         {isLive && status === "calling" && (
           <View style={styles.liveBadge}>
             <LivePulseDot />
             <Text style={styles.liveText}>LIVE</Text>
           </View>
         )}
-        <View style={[styles.statusBadge, {
-          backgroundColor:
-            status === "calling" ? "rgba(74,124,240,0.1)" :
-            status === "error" ? "rgba(224,92,92,0.1)" :
-            "rgba(76,175,80,0.1)"
-        }]}>
-          <Text style={[styles.statusText, {
-            color: status === "calling" ? "#4a7cf0" : status === "error" ? "#e05c5c" : "#4CAF50"
-          }]}>
-            {status === "calling" ? "Running" : status === "error" ? "Error" : "Done"}
+        {onMinimize && (
+          <TouchableOpacity
+            style={styles.minimizeBtn}
+            onPress={onMinimize}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="chevron-down" size={16} color="#636366" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Tool info row: icon + category name + function badge with args */}
+      <View style={styles.toolInfoRow}>
+        <View style={styles.toolIconBox}>
+          {renderCategoryIcon(category, color)}
+        </View>
+        <View style={styles.toolInfoText}>
+          <Text style={styles.toolInfoUsing}>
+            Manus is using <Text style={styles.toolInfoCategoryName}>{(TOOL_NAME_MAP as Record<string, string>)[category] || category}</Text>
           </Text>
+          <View style={styles.toolFunctionBadge}>
+            <Text style={styles.toolFunctionName}>{functionName || toolName}</Text>
+            {argLabel ? (
+              <Text style={styles.toolFunctionArg} numberOfLines={1}>{argLabel}</Text>
+            ) : null}
+          </View>
         </View>
       </View>
 
-      {/* Content body */}
-      {renderContent()}
+      {/* Content body in rounded container */}
+      <View style={styles.contentContainer}>
+        {renderContent()}
+      </View>
     </View>
   );
 }
@@ -1111,23 +1328,98 @@ export function ToolPanelContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#242424",
+    backgroundColor: "#1e1e1e",
+    flexDirection: "column",
   },
-  contentHeader: {
+  panelHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2a2a2a",
+  },
+  panelHeaderTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 16,
+    color: "#f3f4f6",
+    flex: 1,
+  },
+  toolInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a2a",
-    borderLeftWidth: 3,
   },
-  contentHeaderTitle: {
+  toolIconBox: {
+    width: 36,
+    height: 36,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  toolInfoText: {
     flex: 1,
-    fontFamily: "monospace",
+    gap: 4,
+    minWidth: 0,
+  },
+  toolInfoUsing: {
+    fontSize: 11,
+    color: "#9ca3af",
+    lineHeight: 16,
+  },
+  toolInfoCategoryName: {
+    color: "#d1d5db",
+    fontWeight: "500",
+  },
+  toolFunctionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 4,
+    maxWidth: "100%",
+  },
+  toolFunctionName: {
     fontSize: 12,
-    color: "#f3f4f6",
+    color: "#d1d5db",
+    fontWeight: "500",
+    flexShrink: 0,
+  },
+  toolFunctionArg: {
+    fontFamily: "monospace",
+    fontSize: 11,
+    color: "#9ca3af",
+    flexShrink: 1,
+    overflow: "hidden",
+  },
+  contentContainer: {
+    flex: 1,
+    margin: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    backgroundColor: "#242424",
+  },
+  minimizeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 4,
   },
   liveBadge: {
     flexDirection: "row",
@@ -1148,15 +1440,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#4a7cf0",
     letterSpacing: 0.5,
-  },
-  statusBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "600",
   },
   statusDot: {
     width: 8,
@@ -1295,6 +1578,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a2a2a",
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
+  },
+  takeOverFloating: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
   screenshotImage: {
     width: "100%",
@@ -1430,6 +1728,9 @@ const styles = StyleSheet.create({
   },
   codeScrollH: {
     flex: 1,
+  },
+  codeLines: {
+    flexDirection: "column",
   },
   fileContentText: {
     fontFamily: "monospace",

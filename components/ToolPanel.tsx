@@ -6,20 +6,25 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Modal,
+  Platform,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, getToolCategory, TOOL_FUNCTION_MAP } from "@/lib/tool-constants";
 import { ToolPanelContent } from "./ToolPanelContent";
+import type { ToolContent } from "@/lib/chat";
 
 export interface ToolItem {
   tool_call_id: string;
   name: string;
   function_name?: string;
   status: "calling" | "called" | "error";
-  input?: any;
+  input?: Record<string, unknown>;
   output?: string;
   error?: string;
-  tool_content?: any;
+  tool_content?: ToolContent;
 }
 
 interface ToolPanelProps {
@@ -28,6 +33,13 @@ interface ToolPanelProps {
   onToggleVisible?: () => void;
   sessionId?: string;
   onSwitchToBrowser?: () => void;
+  onTakeOver?: () => void;
+  /** When set externally (e.g. from chat tool-card click), pins this tool and exits live-follow mode */
+  externalToolId?: string | null;
+  /** Active VNC session for live desktop streaming in browser tool view */
+  agentVncSession?: { e2bSessionId?: string; vncUrl?: string } | null;
+  /** If true, render as full-screen Modal overlay (mobile behavior) instead of inline slide-in */
+  isMobile?: boolean;
 }
 
 function getToolIcon(name: string): string {
@@ -57,25 +69,100 @@ export function ToolPanel({
   onToggleVisible,
   sessionId,
   onSwitchToBrowser,
+  onTakeOver,
+  externalToolId,
+  agentVncSession,
+  isMobile = false,
 }: ToolPanelProps) {
-  const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
-  const selectedToolIdRef = useRef<string | null>(null);
+  // Slide-in animation (from right, ai-manus style 0.2s ease-in-out)
+  // animVisible tracks whether we should still render the full panel during the exit animation
+  const slideAnim = useRef(new Animated.Value(isVisible ? 0 : 1)).current;
+  const [animVisible, setAnimVisible] = useState(isVisible);
 
-  // Filter to only show completed tools (not calling)
-  const completedTools = tools.filter(t => t.status !== "calling");
-
-  const selectedTool = completedTools.find(t => t.tool_call_id === selectedToolId) || null;
-
-  // Auto-select the latest completed tool
   useEffect(() => {
-    const latestCompletedTool = [...completedTools].reverse().find(t => t.status === "called" || t.status === "error");
-    if (latestCompletedTool && latestCompletedTool.tool_call_id !== selectedToolIdRef.current) {
-      selectedToolIdRef.current = latestCompletedTool.tool_call_id;
-      setSelectedToolId(latestCompletedTool.tool_call_id);
+    if (isVisible) {
+      setAnimVisible(true);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setAnimVisible(false);
+      });
     }
-  }, [completedTools]);
+  }, [isVisible]);
 
-  if (!isVisible) {
+  // "live follow" mode: when true, always show the latest completed tool
+  const [liveFollow, setLiveFollow] = useState(true);
+  // manually pinned tool id when user taps a specific one
+  const [pinnedToolId, setPinnedToolId] = useState<string | null>(null);
+
+  // Respond to external tool selection (e.g. from chat message tool-card tap)
+  useEffect(() => {
+    if (externalToolId) {
+      setLiveFollow(false);
+      setPinnedToolId(externalToolId);
+    }
+  }, [externalToolId]);
+
+  // All tools including currently calling ones
+  const allTools = tools;
+  // Latest completed (non-calling) tool id
+  const latestDoneId = [...allTools].reverse().find(t => t.status === "called" || t.status === "error")?.tool_call_id ?? null;
+  // Latest tool overall (may be "calling")
+  const latestCallingTool = [...allTools].reverse().find(t => t.status === "calling") ?? null;
+
+  // Which tool to show in the detail pane
+  // In live mode: prefer the currently calling tool, then fall back to latest done
+  // In pinned mode: use the pinned tool id
+  const selectedToolId: string | null = liveFollow
+    ? (latestCallingTool?.tool_call_id ?? latestDoneId)
+    : pinnedToolId;
+
+  const selectedTool = allTools.find(t => t.tool_call_id === selectedToolId) ?? null;
+
+  // When a new tool completes and we're in live mode, track to latest id
+  // (no useEffect needed — liveFollow logic resolves it in render)
+
+  // Completed (non-calling) tools for the list display
+  const completedTools = allTools.filter(t => t.status !== "calling");
+
+  // Is user looking at an older tool while a newer one exists?
+  const isViewingHistory = !liveFollow && pinnedToolId !== null && pinnedToolId !== (latestCallingTool?.tool_call_id ?? latestDoneId);
+
+  const handleSelectTool = (toolId: string) => {
+    const currentLiveId = latestCallingTool?.tool_call_id ?? latestDoneId;
+    if (toolId === currentLiveId) {
+      // tapping the live/latest — enter live follow mode
+      setLiveFollow(true);
+      setPinnedToolId(null);
+    } else {
+      // tapping a historical tool — pin it, exit live follow
+      setLiveFollow(false);
+      setPinnedToolId(toolId);
+    }
+  };
+
+  const jumpToLive = () => {
+    setLiveFollow(true);
+    setPinnedToolId(null);
+  };
+
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 60],
+  });
+  const opacity = slideAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+
+  if (!animVisible) {
     return (
       <TouchableOpacity
         style={styles.collapsedContainer}
@@ -87,8 +174,9 @@ export function ToolPanel({
     );
   }
 
-  return (
-    <View style={styles.container}>
+  // Shared panel body used in both desktop (Animated.View) and mobile (Modal) paths
+  const panelBody = (
+    <>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -133,11 +221,7 @@ export function ToolPanel({
                   styles.toolItem,
                   selectedToolId === tool.tool_call_id && styles.toolItemSelected,
                 ]}
-                onPress={() => {
-                  const nextId = selectedToolId === tool.tool_call_id ? null : tool.tool_call_id;
-                  selectedToolIdRef.current = nextId;
-                  setSelectedToolId(nextId);
-                }}
+                onPress={() => handleSelectTool(tool.tool_call_id)}
                 activeOpacity={0.7}
               >
                 <View style={styles.toolIcon}>
@@ -166,7 +250,6 @@ export function ToolPanel({
                     </Text>
                   </View>
                 </View>
-                {/* Status indicator dot */}
                 <View style={[styles.statusDot, { backgroundColor: getStatusColor(tool.status) }]} />
               </TouchableOpacity>
             );
@@ -178,9 +261,20 @@ export function ToolPanel({
       {selectedTool && (
         <View style={styles.detailContainer}>
           <View style={styles.detailHeaderBar}>
+            {/* Jump to Live button — shows when viewing history */}
+            {isViewingHistory && (
+              <TouchableOpacity
+                style={styles.jumpToLiveBtn}
+                onPress={jumpToLive}
+                activeOpacity={0.7}
+              >
+                <NativeIcon name="play" size={11} color="#FFFFFF" />
+                <Text style={styles.jumpToLiveText}>Jump to Live</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.closeDetailBtn}
-              onPress={() => { selectedToolIdRef.current = null; setSelectedToolId(null); }}
+              onPress={() => { setLiveFollow(false); setPinnedToolId(null); }}
               activeOpacity={0.7}
             >
               <NativeIcon name="close" size={14} color="#636366" />
@@ -195,15 +289,48 @@ export function ToolPanel({
             status={selectedTool.status}
             sessionId={sessionId}
             isLive={selectedTool.status === "calling"}
+            onMinimize={() => { setLiveFollow(false); setPinnedToolId(null); }}
             onSwitchToBrowser={
               getToolCategory(selectedTool.function_name || selectedTool.name) === "browser"
                 ? onSwitchToBrowser
                 : undefined
             }
+            onTakeOver={
+              getToolCategory(selectedTool.function_name || selectedTool.name) === "browser"
+                ? onTakeOver
+                : undefined
+            }
+            agentVncSession={
+              getToolCategory(selectedTool.function_name || selectedTool.name) === "browser"
+                ? agentVncSession
+                : undefined
+            }
           />
         </View>
       )}
-    </View>
+    </>
+  );
+
+  // Mobile: full-screen overlay Modal with slide-up transition
+  if (isMobile) {
+    return (
+      <Modal
+        visible={isVisible}
+        animationType="slide"
+        presentationStyle={Platform.OS === "ios" ? "fullScreen" : undefined}
+        onRequestClose={onToggleVisible}
+        transparent={false}
+      >
+        <View style={styles.container}>{panelBody}</View>
+      </Modal>
+    );
+  }
+
+  // Desktop/tablet: slide-in from right with Animated.View (0.2s ease-in-out)
+  return (
+    <Animated.View style={[styles.container, { transform: [{ translateX }], opacity }]}>
+      {panelBody}
+    </Animated.View>
   );
 }
 
@@ -343,10 +470,29 @@ const styles = StyleSheet.create({
   detailHeaderBar: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a2a",
+    gap: 6,
+  },
+  jumpToLiveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 100,
+    backgroundColor: "#2a2a2a",
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
+    marginRight: "auto",
+  },
+  jumpToLiveText: {
+    fontSize: 11,
+    color: "#d1d5db",
+    fontWeight: "500",
   },
   closeDetailBtn: {
     width: 24,

@@ -22,16 +22,7 @@ import { getToolCategory } from "@/lib/tool-constants";
 import type { VncSessionInfo } from "./ChatPage";
 import type { AgentPlan } from "@/lib/chat";
 
-interface ToolItem {
-  tool_call_id: string;
-  name: string;
-  function_name?: string;
-  status: "calling" | "called" | "error";
-  input?: any;
-  output?: string;
-  error?: string;
-  tool_content?: any;
-}
+import type { ToolItem } from "./ToolPanel";
 
 interface MainLayoutProps {
   sessionId?: string;
@@ -56,6 +47,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const hasPlanAutoSwitchedRef = useRef(false);
   const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
+  const [externalToolId, setExternalToolId] = useState<string | null>(null);
   const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string; ts: number } | null>(null);
   // Tracks when the most recent browser tool_content screenshot arrived (React state for re-render consistency)
   const [toolBrowserEventTs, setToolBrowserEventTs] = useState<number>(0);
@@ -222,6 +214,22 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     setShowToolsModal(false);
   }, []);
 
+  const handleSelectTool = useCallback((toolCallId: string) => {
+    setExternalToolId(toolCallId);
+    setRightPanelMode("tools");
+    setIsToolPanelVisible(true);
+    // On narrow screens, open the tools modal so the selection is visible
+    if (isNarrowScreenRef.current) {
+      setShowToolsModal(true);
+    }
+  }, []);
+
+  // Take-over from ToolPanel's BrowserToolView uses the active VNC/E2B session id, not the chat sessionId
+  const handleToolPanelTakeOver = useCallback(() => {
+    const e2bId = vncSession?.e2bSessionId || sessionId;
+    if (e2bId) handleTakeOver(e2bId);
+  }, [vncSession, sessionId, handleTakeOver]);
+
   const leftPanelWidth = isLeftPanelShow ? (Platform.OS === "web" ? 260 : Math.min(280, screenWidth * 0.75)) : 0;
   const toolPanelWidth = isToolPanelVisible ? TOOL_PANEL_WIDTH : 32;
 
@@ -274,6 +282,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
             toolsCount={totalToolsCount}
             activeToolsCount={activeToolsCount}
             onPlanChange={handlePlanChange}
+            onSelectTool={handleSelectTool}
           />
         </View>
 
@@ -287,6 +296,9 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 onToggleVisible={() => setIsToolPanelVisible(v => !v)}
                 sessionId={sessionId}
                 onSwitchToBrowser={handleSwitchToBrowser}
+                onTakeOver={handleToolPanelTakeOver}
+                externalToolId={externalToolId}
+                agentVncSession={vncSession}
               />
             ) : rightPanelMode === "browser" ? (
               <BrowserPanel
@@ -382,7 +394,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
         <Modal
           visible={showToolsModal}
           animationType="slide"
-          presentationStyle="pageSheet"
+          presentationStyle={Platform.OS === "ios" ? "fullScreen" : undefined}
           onRequestClose={handleCloseToolsModal}
         >
           <View style={[styles.toolsModalContainer, {
@@ -451,6 +463,9 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                   onSwitchToBrowser={() => {
                     setRightPanelMode("browser");
                   }}
+                  onTakeOver={handleToolPanelTakeOver}
+                  externalToolId={externalToolId}
+                  agentVncSession={vncSession}
                 />
               ) : rightPanelMode === "plan" && currentPlan ? (
                 <PlanPanel

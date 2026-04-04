@@ -426,6 +426,8 @@ interface ChatPageProps {
     notifyMessages: string[],
     isRunning: boolean,
   ) => void;
+  /** Called when user taps a tool card in chat; provides the tool_call_id for ToolPanel to focus */
+  onSelectTool?: (toolCallId: string) => void;
 }
 
 export function ChatPage({
@@ -442,6 +444,7 @@ export function ChatPage({
   toolsCount = 0,
   activeToolsCount = 0,
   onPlanChange,
+  onSelectTool,
 }: ChatPageProps = {}) {
   const { mode } = useLocalSearchParams<{ mode: string }>();
   const isAgentMode = agentModeProp ?? mode === "agent";
@@ -2103,7 +2106,22 @@ export function ChatPage({
                       <Text style={styles.agentTurnModeBadgeText}>Agent</Text>
                     </View>
                   </View>
-                  <MessageComponent message={item} />
+                  <MessageComponent message={item} onToolPress={(tool) => {
+                    if (tool.tool_call_id && onSelectTool) {
+                      onSelectTool(tool.tool_call_id);
+                    } else {
+                      const info = getToolDisplayInfo(tool.function_name || tool.name || "");
+                      setSelectedTool({
+                        functionName: tool.function_name || tool.name || "",
+                        functionArgs: {},
+                        status: tool.status || "called",
+                        toolContent: tool.tool_content,
+                        label: info.label,
+                        icon: info.icon,
+                        iconColor: info.color,
+                      });
+                    }
+                  }} />
                 </View>
               );
             }
@@ -2112,6 +2130,22 @@ export function ChatPage({
           return (
             <MessageComponent
               message={item}
+              onToolPress={(tool) => {
+                if (tool.tool_call_id && onSelectTool) {
+                  onSelectTool(tool.tool_call_id);
+                } else {
+                  const info = getToolDisplayInfo(tool.function_name || tool.name || "");
+                  setSelectedTool({
+                    functionName: tool.function_name || tool.name || "",
+                    functionArgs: {},
+                    status: tool.status || "called",
+                    toolContent: tool.tool_content,
+                    label: info.label,
+                    icon: info.icon,
+                    iconColor: info.color,
+                  });
+                }
+              }}
             />
           );
         }}
