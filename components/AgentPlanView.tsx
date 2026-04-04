@@ -175,8 +175,6 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
 }
 
 // ─── Tool Pill ───────────────────────────────────────────────────────────────
-// Shows ALL tools — calling (with spinner), called (with check), error (with ✕)
-// Consistent gray color scheme throughout (no colorful dots)
 
 interface ToolPillProps {
   tool: StepToolEntry;
@@ -204,7 +202,6 @@ function ToolPill({ tool, animDelay = 0, onPress }: ToolPillProps) {
         activeOpacity={onPress ? 0.7 : 1}
         disabled={!onPress}
       >
-        {/* Status indicator on left — always gray scheme */}
         <View style={[
           pillStyles.statusDot,
           isCalling && pillStyles.statusDotCalling,
@@ -219,7 +216,6 @@ function ToolPill({ tool, animDelay = 0, onPress }: ToolPillProps) {
           ) : null}
         </View>
 
-        {/* Label */}
         <Text
           style={[
             pillStyles.label,
@@ -257,8 +253,6 @@ const pillStyles = StyleSheet.create({
     borderColor: "#382020",
     backgroundColor: "#160f0f",
   },
-
-  // Left status indicator circle
   statusDot: {
     width: 18,
     height: 18,
@@ -278,7 +272,6 @@ const pillStyles = StyleSheet.create({
     borderColor: "#502828",
     backgroundColor: "#1a0f0f",
   },
-
   checkChar: {
     fontSize: 9,
     color: "#606060",
@@ -291,7 +284,6 @@ const pillStyles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 11,
   },
-
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
@@ -307,55 +299,47 @@ const pillStyles = StyleSheet.create({
   },
 });
 
-// ─── Narrative filter ─────────────────────────────────────────────────────────
-// Only show short, clean goal summaries — filter out verbose AI step results
+// ─── Verbose filter ───────────────────────────────────────────────────────────
+// Only filter truly verbose/formatted content (markdown tables, long numbered lists).
+// Goal descriptions ("Saya menemukan...", "Menemukan...") SHOULD pass through.
 
-const VERBOSE_PREFIXES_LC = [
-  "saya telah menyelesaikan:",
-  "berikut adalah",
-  "berikut ini",
-  "rencana selesai",
-  "langkah-langkah berikutnya",
+const VERBOSE_EXACT_PREFIXES_LC = [
   "step execution error",
-  "saya telah:",
-  "telah selesai:",
-  "hasil pencarian:",
-  "informasi yang ditemukan:",
-  "laporan ringkas",
-  "laporan terbaru",
-  "laporan komprehensif",
-  "laporan tentang",
-  "laporan ini",
-  "informasi tentang timnas",
-  "tim nasional indonesia saat ini",
-  "1. **",
-  "**pembaruan",
-  "peringkat fifa:",
-  "berikut ringkasan",
+  "rencana selesai",
+  "saya telah menyelesaikan semua",
 ];
 
 function isVerbose(text: string): boolean {
   const lc = text.toLowerCase().trim();
-  if (lc.length > 260) return true;
-  for (const p of VERBOSE_PREFIXES_LC) {
+
+  // Extremely long multi-paragraph content
+  if (lc.length > 600) return true;
+
+  // Markdown formatted content (tables, headers, numbered bullet lists)
+  if (/^#{1,4}\s/.test(lc)) return true;
+  if (/\|\s*---/.test(lc)) return true;
+  if (/^(\d+\.\s+\*\*|[-*]\s+\*\*)/.test(lc)) return true;
+
+  // Exact prefix matches for truly unhelpful messages
+  for (const p of VERBOSE_EXACT_PREFIXES_LC) {
     if (lc.startsWith(p)) return true;
   }
+
   return false;
 }
 
-function pickBestNarrative(messages: string[]): string | null {
-  const clean = messages.filter(t => {
+// Returns ALL clean narratives (not just the best one)
+function getCleanNarratives(messages: string[]): string[] {
+  return messages.filter(t => {
     const c = cleanText(t) || "";
     return c.trim().length > 10 && !isVerbose(c);
   });
-  if (clean.length === 0) return null;
-  return clean[clean.length - 1];
 }
 
 // ─── Narrative line ───────────────────────────────────────────────────────────
 
 function NarrativeLine({ text, animDelay = 0 }: { text: string; animDelay?: number }) {
-  const MAX_CHARS = 220;
+  const MAX_CHARS = 380;
   const raw = cleanText(text) || "";
   const display = raw.length > MAX_CHARS ? raw.slice(0, MAX_CHARS).trimEnd() + "…" : raw;
   return (
@@ -371,7 +355,7 @@ const narStyles = StyleSheet.create({
     fontSize: 13.5,
     color: "#b0b0b0",
     lineHeight: 20,
-    paddingVertical: 5,
+    paddingVertical: 6,
     paddingHorizontal: 2,
   },
 });
@@ -440,9 +424,9 @@ const goalStyles = StyleSheet.create({
 /**
  * AgentPlanView — Manus.im-style task block
  *
- * Shows ALL tools (calling=spinner, called=✓, error=✕) so pills never disappear.
- * Narrative: only the last clean short summary per step (verbose text filtered out).
- * Consistent gray color scheme throughout.
+ * Shows ALL tools (calling=spinner, called=✓, error=✕) interleaved with
+ * ALL intermediate goal descriptions after each tool batch.
+ * Goal descriptions are shown as plain text (not filtered to just the "best" one).
  */
 export function AgentPlanView({
   plan,
@@ -486,7 +470,7 @@ export function AgentPlanView({
       .filter(n => n.stepId === step.id)
       .map(n => n.text);
 
-    // Show ALL tools regardless of status (calling, called, error)
+    // Show ALL tools (calling, called, error)
     tools.forEach((tool, tIdx) => {
       displayItems.push({
         kind: "pill",
@@ -495,18 +479,19 @@ export function AgentPlanView({
       });
     });
 
-    // One clean narrative per step
-    const best = pickBestNarrative(stepMsgs);
-    if (best) {
-      displayItems.push({ kind: "narrative", key: `${step.id}-nar`, text: best });
-    }
+    // Show ALL clean goal narratives for this step (not just the last one)
+    const cleanNarratives = getCleanNarratives(stepMsgs);
+    cleanNarratives.forEach((msg, mIdx) => {
+      displayItems.push({
+        kind: "narrative",
+        key: `${step.id}-nar-${mIdx}`,
+        text: msg,
+      });
+    });
   }
 
-  // Plan-level narratives
-  const planNarratives = (notifyMessages || []).filter(t => {
-    const c = cleanText(t) || "";
-    return c.trim().length > 10 && !isVerbose(c);
-  });
+  // Plan-level narratives (not tied to a specific step)
+  const planNarratives = getCleanNarratives(notifyMessages || []);
 
   const hasContent = displayItems.length > 0 || planNarratives.length > 0;
 
