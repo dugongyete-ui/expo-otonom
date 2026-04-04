@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Easing,
 } from "react-native";
-import type { AgentPlan, AgentPlanStep, AgentEvent, ToolContent } from "@/lib/chat";
+import type { AgentPlan, ToolContent } from "@/lib/chat";
 import { getToolCategory } from "@/lib/tool-constants";
 import { cleanText } from "@/lib/text-utils";
 
@@ -44,7 +44,7 @@ interface StepToolEntry {
   tool_content?: ToolContent;
 }
 
-// Manus-style label for each tool call
+// Build a human-readable label for each tool call
 function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
   if (fnName === "browser_navigate" || fnName === "web_browse") {
     const url = String(args.url || args.page || "");
@@ -53,7 +53,7 @@ function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
         const domain = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
         return `Navigasi ke ${domain}`;
       } catch {
-        return `Navigasi ke ${url.slice(0, 40)}`;
+        return `Navigasi ke ${url.slice(0, 50)}`;
       }
     }
     return "Navigasi halaman";
@@ -64,12 +64,12 @@ function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
   }
   if (fnName === "browser_click") {
     const sel = String(args.selector || args.element || args.label || args.text || "");
-    if (sel) return `Klik: ${sel.slice(0, 45)}`;
+    if (sel) return `Klik: ${sel.slice(0, 50)}`;
     return "Klik elemen";
   }
   if (fnName === "browser_type" || fnName === "browser_input") {
     const text = String(args.text || args.value || args.input || "");
-    if (text) return `Mengetik: '${text.slice(0, 40)}'`;
+    if (text) return `Mengetik: '${text.slice(0, 45)}'`;
     return "Mengetik teks";
   }
   if (fnName === "browser_view") {
@@ -94,50 +94,48 @@ function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
   }
   if (fnName === "web_search" || fnName === "info_search_web") {
     const q = String(args.query || args.q || "");
-    if (q) return `Mencari informasi terbaru tentang ${q.slice(0, 50)}`;
+    if (q) return `Mencari ${q.slice(0, 60)}`;
     return "Mencari informasi";
   }
   if (fnName === "shell_exec") {
     const cmd = String(args.command || args.cmd || "");
-    if (cmd) return `Jalankan: ${cmd.slice(0, 45)}`;
+    if (cmd) return `Jalankan: ${cmd.slice(0, 50)}`;
     return "Jalankan perintah";
   }
   if (fnName === "shell_view") return "Lihat output terminal";
   if (fnName === "file_read") {
     const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
-    if (file) return `Membaca ${file.slice(0, 45)}`;
+    if (file) return `Membaca ${file.slice(0, 50)}`;
     return "Membaca file";
   }
   if (fnName === "file_write") {
     const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
-    if (file) return `Mengedit file ${file.slice(0, 45)}`;
+    if (file) return `Menyimpan ${file.slice(0, 50)}`;
     return "Menulis file";
   }
   if (fnName === "file_str_replace") {
     const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
-    if (file) return `Mengedit ${file.slice(0, 45)}`;
+    if (file) return `Mengedit ${file.slice(0, 50)}`;
     return "Mengedit file";
   }
   if (fnName === "message_notify_user") {
     const text = String(args.text || args.message || "");
-    if (text) return text.slice(0, 60);
+    if (text) return text.slice(0, 65);
     return "Notifikasi";
   }
   if (fnName === "message_ask_user") {
     const text = String(args.text || args.question || "");
-    if (text) return `Tanya: ${text.slice(0, 40)}`;
+    if (text) return `Tanya: ${text.slice(0, 45)}`;
     return "Pertanyaan";
   }
-  // Generic fallback
   const first = Object.keys(args).find(k => k !== "sudo" && k !== "attachments");
   let argVal = first ? String(args[first] || "") : "";
   argVal = argVal.replace(/^\/home\/ubuntu\//, "~/");
-  if (argVal.length > 55) argVal = argVal.slice(0, 55) + "…";
+  if (argVal.length > 60) argVal = argVal.slice(0, 60) + "…";
   if (argVal) return `${fnName.replace(/_/g, " ")}: ${argVal}`;
   return fnName.replace(/_/g, " ");
 }
 
-// Map tool function name to a small icon character
 function getToolIconChar(fnName: string): string {
   const category = getToolCategory(fnName);
   switch (category) {
@@ -194,14 +192,14 @@ function SpinnerIcon({ size = 12 }: { size?: number }) {
   );
 }
 
-// Fade+slide in for new rows appearing
-function FadeSlideIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+// Fade + slide-up animation when a row appears
+function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const fade = useRef(new Animated.Value(0)).current;
-  const slide = useRef(new Animated.Value(6)).current;
+  const slide = useRef(new Animated.Value(8)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 250, delay, useNativeDriver: true }),
-      Animated.timing(slide, { toValue: 0, duration: 250, delay, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 220, delay, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 220, delay, useNativeDriver: true }),
     ]).start();
   }, []);
   return (
@@ -211,168 +209,172 @@ function FadeSlideIn({ children, delay = 0 }: { children: React.ReactNode; delay
   );
 }
 
-// A single tool-call row (Manus.im style)
-// Shows: [icon circle] [label text...] [status]
-interface ToolRowProps {
+// Manus-style tool pill — shown for COMPLETED tools only
+interface ToolPillProps {
   tool: StepToolEntry;
+  animDelay?: number;
   onPress?: () => void;
 }
 
-function ToolRow({ tool, onPress }: ToolRowProps) {
+function ToolPill({ tool, animDelay = 0, onPress }: ToolPillProps) {
   const fnName = tool.function_name || tool.name || "";
   const args = tool.function_args || tool.input || {};
   const label = buildToolLabel(fnName, args);
-  const status = tool.status;
-  const isRunning = status === "calling";
-  const isDone = status === "called";
-  const isError = status === "error";
+  const isError = tool.status === "error";
   const iconChar = getToolIconChar(fnName);
 
   return (
-    <TouchableOpacity
-      style={trStyles.row}
-      onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
-      disabled={!onPress}
-    >
-      {/* Small icon circle */}
-      <View style={[
-        trStyles.iconCircle,
-        isRunning && trStyles.iconCircleRunning,
-        isDone && trStyles.iconCircleDone,
-        isError && trStyles.iconCircleError,
-      ]}>
-        <Text style={trStyles.iconChar}>{iconChar}</Text>
-      </View>
-
-      {/* Label */}
-      <Text
-        style={[
-          trStyles.label,
-          isRunning && trStyles.labelRunning,
-          isDone && trStyles.labelDone,
-          isError && trStyles.labelError,
-        ]}
-        numberOfLines={2}
+    <FadeIn delay={animDelay}>
+      <TouchableOpacity
+        style={[pillStyles.pill, isError && pillStyles.pillError]}
+        onPress={onPress}
+        activeOpacity={onPress ? 0.7 : 1}
+        disabled={!onPress}
       >
-        {label}
-      </Text>
+        {/* Icon circle */}
+        <View style={[pillStyles.iconCircle, isError && pillStyles.iconCircleError]}>
+          <Text style={pillStyles.iconChar}>{iconChar}</Text>
+        </View>
 
-      {/* Status indicator */}
-      <View style={trStyles.statusWrap}>
-        {isRunning && <SpinnerIcon size={11} />}
-        {isDone && <Text style={trStyles.checkmark}>✓</Text>}
-        {isError && <Text style={trStyles.errormark}>✕</Text>}
-      </View>
-    </TouchableOpacity>
+        {/* Label — single line, truncated */}
+        <Text
+          style={[pillStyles.label, isError && pillStyles.labelError]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {label}
+        </Text>
+
+        {/* Trailing icon: error X, or nothing for done */}
+        {isError ? (
+          <Text style={pillStyles.errorMark}>✕</Text>
+        ) : null}
+      </TouchableOpacity>
+    </FadeIn>
   );
 }
 
-const trStyles = StyleSheet.create({
-  row: {
+const pillStyles = StyleSheet.create({
+  pill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 6,
+    backgroundColor: "#1b1b1b",
+    borderWidth: 1,
+    borderColor: "#282828",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 5,
+    gap: 8,
+  },
+  pillError: {
+    borderColor: "#3a1f1f",
+    backgroundColor: "#1a1515",
   },
   iconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#1e1e1e",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#232323",
     borderWidth: 1,
-    borderColor: "#2d2d2d",
+    borderColor: "#303030",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  iconCircleRunning: {
-    borderColor: "#3a5fc0",
-    backgroundColor: "rgba(74, 124, 240, 0.08)",
-  },
-  iconCircleDone: {
-    borderColor: "#2a4a2a",
-    backgroundColor: "rgba(76, 175, 80, 0.06)",
-  },
   iconCircleError: {
-    borderColor: "#4a2a2a",
-    backgroundColor: "rgba(220, 80, 80, 0.06)",
+    borderColor: "#4a2020",
+    backgroundColor: "#221515",
   },
   iconChar: {
-    fontSize: 12,
+    fontSize: 11,
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#888888",
+    color: "#787878",
     flex: 1,
-    lineHeight: 19,
-  },
-  labelRunning: {
-    color: "#b8c8f0",
-  },
-  labelDone: {
-    color: "#606060",
+    lineHeight: 18,
   },
   labelError: {
-    color: "#a06060",
+    color: "#8a5050",
   },
-  statusWrap: {
-    width: 18,
-    height: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  checkmark: {
-    fontSize: 12,
-    color: "#5a9e60",
-    fontWeight: "700",
-  },
-  errormark: {
+  errorMark: {
     fontSize: 11,
-    color: "#b05050",
+    color: "#a06060",
     fontWeight: "700",
+    flexShrink: 0,
   },
 });
 
-// A narrative line shown between tool calls (from notify messages)
-function NarrativeLine({ text }: { text: string }) {
+// Narrative line — short text between tool pills
+function NarrativeLine({ text, animDelay = 0 }: { text: string; animDelay?: number }) {
+  // Truncate very long notify messages to keep it clean
+  const MAX_CHARS = 180;
+  const cleaned = cleanText(text) || "";
+  const display = cleaned.length > MAX_CHARS ? cleaned.slice(0, MAX_CHARS).trimEnd() + "…" : cleaned;
+
   return (
-    <Text style={narStyles.text} numberOfLines={4}>
-      {cleanText(text)}
-    </Text>
+    <FadeIn delay={animDelay}>
+      <Text style={narStyles.text}>
+        {display}
+      </Text>
+    </FadeIn>
   );
 }
 
 const narStyles = StyleSheet.create({
   text: {
     fontFamily: "Inter_400Regular",
-    fontStyle: "italic",
-    fontSize: 12.5,
-    color: "#909090",
-    lineHeight: 18,
-    paddingVertical: 3,
-    paddingLeft: 34,
+    fontSize: 13,
+    color: "#a0a0a0",
+    lineHeight: 19,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
   },
 });
 
-// Build a flat list of items: tool calls + narrative inserts, ordered by step
-interface FlatItem {
-  kind: "tool";
-  tool: StepToolEntry;
-  stepId: string;
-  key: string;
-  onPress?: () => void;
+// "Sedang berpikir" / "Sedang mencari" pulsing indicator inside the block
+function ThinkingRow() {
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return (
+    <View style={thinkStyles.row}>
+      <Animated.View style={[thinkStyles.dot, { opacity: pulseAnim }]} />
+      <Text style={thinkStyles.label}>Sedang berpikir</Text>
+    </View>
+  );
 }
 
-interface NarrativeItem {
-  kind: "narrative";
-  text: string;
-  key: string;
-}
-
-type DisplayItem = FlatItem | NarrativeItem;
+const thinkStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4a7cf0",
+  },
+  label: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#6080b8",
+  },
+});
 
 export function AgentGoalMessage({ message }: { message: string }) {
   return <Text style={goalStyles.text}>{cleanText(message)}</Text>;
@@ -389,26 +391,27 @@ const goalStyles = StyleSheet.create({
 });
 
 /**
- * Manus-style AgentPlanView
+ * Manus.im-style AgentPlanView
  *
- * Renders a single collapsible task block.
- * Inside, tool calls from all active steps appear ONE BY ONE as they execute.
- * Narrative/notify text appears inline between them.
- * Pending steps (not yet started) produce no visible rows.
+ * Layout:
+ *  [○ / ✓]  Task title                              2/2  ⌃
+ *  │  [pill: 🔍 Mencari informasi terbaru Timnas...]
+ *  │  [pill: 🔍 Mencari status Kualifikasi Piala...]
+ *  │  Saya menemukan ranking FIFA terbaru Indonesia di posisi 122…
+ *  │  [pill: 📄 Menyimpan temuan awal tentang Timnas...]
+ *  │  ● Sedang berpikir   ← only when still running
+ *
+ * Only COMPLETED (called/error) tool calls are shown as pills inside the block.
+ * The currently RUNNING tool is handled by ChatPage's ManusThinkingIndicator (external).
+ * Narrative text (stepNotifyMessages) appears between pills, truncated to 180 chars.
  */
 export function AgentPlanView({
   plan,
   notifyMessages,
   stepNotifyMessages,
-  thoughtStream,
   onToolPress,
 }: AgentPlanViewProps) {
   const allSteps = plan.steps || [];
-
-  // Only process steps that have been started
-  const activeSteps = allSteps.filter(
-    s => s.status === "running" || s.status === "completed" || s.status === "failed"
-  );
 
   const isAllDone =
     plan.status === "completed" ||
@@ -419,67 +422,73 @@ export function AgentPlanView({
   const completedCount = allSteps.filter(s => s.status === "completed" || s.status === "failed").length;
   const totalCount = allSteps.length;
 
-  // Collapse on done, expand while running
-  const [expanded, setExpanded] = useState(true);
+  // Always expanded during execution; can toggle when done
+  const [expanded, setExpanded] = React.useState(true);
   useEffect(() => {
     if (isRunning) setExpanded(true);
   }, [isRunning]);
 
-  // Build flat display list: tools + narratives interleaved by step
+  // Build a flat ordered list: pills for DONE tools + narrative text interleaved
+  // Only completed/error tools appear — running tools show via ChatPage's indicator
+  interface DisplayItem {
+    kind: "pill" | "narrative";
+    key: string;
+    tool?: StepToolEntry;
+    text?: string;
+    stepId?: string;
+  }
+
   const displayItems: DisplayItem[] = [];
+  const activeSteps = allSteps.filter(
+    s => s.status === "running" || s.status === "completed" || s.status === "failed"
+  );
+
+  let globalIdx = 0;
   for (const step of activeSteps) {
     const tools: StepToolEntry[] = (step as any).tools || [];
     const narratives = (stepNotifyMessages || [])
       .filter(n => n.stepId === step.id)
       .map(n => n.text);
 
-    // Add tool call rows for this step
-    tools.forEach((tool, idx) => {
-      const fnName = tool.function_name || tool.name || "";
-      displayItems.push({
-        kind: "tool",
-        tool,
-        stepId: step.id,
-        key: `${step.id}-tool-${tool.tool_call_id || idx}`,
-        onPress: onToolPress
-          ? () => {
-              onToolPress({
-                functionName: fnName,
-                functionArgs: tool.function_args || tool.input || {},
-                status: tool.status || "called",
-                toolContent: tool.tool_content,
-                functionResult: tool.function_result || tool.output,
-                label: fnName,
-                icon: "search",
-                iconColor: "#4a7cf0",
-              });
-            }
-          : undefined,
-      });
+    // Add COMPLETED tools as pills
+    tools.forEach((tool, tIdx) => {
+      const isDone = tool.status === "called" || tool.status === "error";
+      if (isDone) {
+        displayItems.push({
+          kind: "pill",
+          key: `${step.id}-tool-${tool.tool_call_id || tIdx}`,
+          tool,
+          stepId: step.id,
+        });
+        globalIdx++;
+      }
     });
 
-    // Add narrative rows after this step's tools
+    // Add narrative text after this step's tools
     narratives.forEach((text, i) => {
       displayItems.push({
         kind: "narrative",
-        text,
         key: `${step.id}-nar-${i}`,
+        text,
       });
+      globalIdx++;
     });
   }
 
-  // Plan-level notify messages appear at the bottom
+  // Plan-level narratives (not tied to a specific step)
   const planNarratives = notifyMessages || [];
+
+  // Whether there are any completed pills at all
+  const hasContent = displayItems.length > 0 || planNarratives.length > 0;
 
   return (
     <View style={planStyles.container}>
-      {/* Phase header — Manus-style: circle icon + task title + progress + chevron */}
+      {/* Header: circle status + task title + counter + chevron */}
       <TouchableOpacity
         style={planStyles.header}
         onPress={() => setExpanded(v => !v)}
         activeOpacity={0.75}
       >
-        {/* Phase status circle */}
         <View
           style={[
             planStyles.phaseCircle,
@@ -488,17 +497,14 @@ export function AgentPlanView({
           ]}
         >
           {isAllDone ? (
-            <Text style={planStyles.phaseCircleCheck}>✓</Text>
+            <Text style={planStyles.phaseCheck}>✓</Text>
           ) : isRunning ? (
             <SpinnerIcon size={10} />
           ) : null}
         </View>
 
         <Text
-          style={[
-            planStyles.phaseTitle,
-            isAllDone && planStyles.phaseTitleDone,
-          ]}
+          style={[planStyles.phaseTitle, isAllDone && planStyles.phaseTitleDone]}
           numberOfLines={2}
         >
           {plan.title || "Mengerjakan tugas"}
@@ -514,36 +520,61 @@ export function AgentPlanView({
         </View>
       </TouchableOpacity>
 
-      {/* Content — flat list of tool rows + narrative lines */}
-      {expanded && displayItems.length > 0 && (
-        <View style={planStyles.content}>
-          {displayItems.map(item => (
-            <FadeSlideIn key={item.key}>
-              {item.kind === "tool" ? (
-                <ToolRow
-                  tool={(item as FlatItem).tool}
-                  onPress={(item as FlatItem).onPress}
-                />
-              ) : (
-                <NarrativeLine text={(item as NarrativeItem).text} />
-              )}
-            </FadeSlideIn>
-          ))}
+      {/* Body: pills + narrative lines */}
+      {expanded && (
+        <View style={planStyles.body}>
+          {/* Left border line */}
+          <View style={planStyles.leftBorder} />
 
-          {/* Plan-level narratives */}
-          {planNarratives.map((text, i) => (
-            <FadeSlideIn key={`plan-nar-${i}`}>
-              <NarrativeLine text={text} />
-            </FadeSlideIn>
-          ))}
-        </View>
-      )}
+          {/* Content */}
+          <View style={planStyles.content}>
+            {hasContent ? (
+              <>
+                {displayItems.map((item, i) =>
+                  item.kind === "pill" && item.tool ? (
+                    <ToolPill
+                      key={item.key}
+                      tool={item.tool}
+                      animDelay={i * 40}
+                      onPress={onToolPress ? () => {
+                        const fnName = item.tool!.function_name || item.tool!.name || "";
+                        onToolPress({
+                          functionName: fnName,
+                          functionArgs: item.tool!.function_args || item.tool!.input || {},
+                          status: item.tool!.status || "called",
+                          toolContent: item.tool!.tool_content,
+                          functionResult: item.tool!.function_result || item.tool!.output,
+                          label: fnName,
+                          icon: "search",
+                          iconColor: "#4a7cf0",
+                        });
+                      } : undefined}
+                    />
+                  ) : (
+                    <NarrativeLine
+                      key={item.key}
+                      text={item.text || ""}
+                      animDelay={i * 40}
+                    />
+                  )
+                )}
 
-      {/* Empty state while loading first step */}
-      {expanded && displayItems.length === 0 && isRunning && (
-        <View style={planStyles.loadingRow}>
-          <SpinnerIcon size={10} />
-          <Text style={planStyles.loadingText}>Mempersiapkan...</Text>
+                {/* Plan-level narratives */}
+                {planNarratives.map((text, i) => (
+                  <NarrativeLine
+                    key={`plan-nar-${i}`}
+                    text={text}
+                    animDelay={(displayItems.length + i) * 40}
+                  />
+                ))}
+              </>
+            ) : null}
+
+            {/* "Sedang berpikir" — shown while running and no content yet */}
+            {isRunning && !hasContent && (
+              <ThinkingRow />
+            )}
+          </View>
         </View>
       )}
     </View>
@@ -567,20 +598,20 @@ const planStyles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#1e1e1e",
     borderWidth: 1.5,
-    borderColor: "#383838",
+    borderColor: "#363636",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   phaseCircleRunning: {
     borderColor: "#4a7cf0",
-    backgroundColor: "rgba(74, 124, 240, 0.1)",
+    backgroundColor: "rgba(74, 124, 240, 0.10)",
   },
   phaseCircleDone: {
     borderColor: "#4CAF50",
-    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    backgroundColor: "rgba(76, 175, 80, 0.10)",
   },
-  phaseCircleCheck: {
+  phaseCheck: {
     fontSize: 10,
     color: "#5CAF5C",
     fontWeight: "700",
@@ -589,12 +620,12 @@ const planStyles = StyleSheet.create({
   phaseTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
-    color: "#d0d0d0",
+    color: "#d8d8d8",
     lineHeight: 20,
     flex: 1,
   },
   phaseTitleDone: {
-    color: "#808080",
+    color: "#888888",
   },
   headerRight: {
     flexDirection: "row",
@@ -605,28 +636,28 @@ const planStyles = StyleSheet.create({
   counter: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#505050",
+    color: "#555555",
   },
   chevron: {
     fontSize: 11,
-    color: "#505050",
+    color: "#555555",
+  },
+  body: {
+    flexDirection: "row",
+    paddingLeft: 9,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  leftBorder: {
+    width: 1.5,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 1,
+    marginRight: 14,
+    flexShrink: 0,
   },
   content: {
-    paddingLeft: 30,
+    flex: 1,
     paddingTop: 2,
-    paddingBottom: 4,
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingLeft: 30,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  loadingText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#606060",
+    paddingBottom: 2,
   },
 });
