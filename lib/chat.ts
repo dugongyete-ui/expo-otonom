@@ -1,5 +1,3 @@
-import { fetch } from "expo/fetch";
-
 /**
  * Stream chat responses from Cerebras AI via SSE.
  * Yields text chunks as they arrive.
