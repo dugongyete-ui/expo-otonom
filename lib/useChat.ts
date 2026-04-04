@@ -1,15 +1,17 @@
-import { useState, useCallback, useRef } from "react";
-import { apiService, ChatMessage, ChatResponse, AgentEvent } from "./api-service";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { apiService, ChatMessage, ChatResponse, AgentEvent, getStoredToken } from "./api-service";
 import { getToolActionVerb } from "./tool-constants";
 import {
   processAgentEvent,
   applyEventToFlatMessages,
   FlatMessage,
   FlatChatReducerCallbacks,
+  AgentPhase,
 } from "./agent-event-processor";
 
 // Re-export FlatMessage as Message for backward-compat with existing consumers.
 export type Message = FlatMessage;
+export type { AgentPhase };
 
 export interface AgentPlan {
   title?: string;
@@ -40,6 +42,7 @@ export interface BrowserEventInfo {
 export function useChat(
   onVncUrl?: (info: VncInfo) => void,
   onBrowserEvent?: (info: BrowserEventInfo) => void,
+  initialSessionId?: string,
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,9 +51,14 @@ export function useChat(
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
   const [agentFiles, setAgentFiles] = useState<AgentFile[]>([]);
+  const [agentPhase, setAgentPhase] = useState<AgentPhase>("IDLE");
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
+  const currentStepIdRef = useRef<string | null>(null);
+  const historyLoadedForSessionRef = useRef<string | null>(null);
+  const liveStartedRef = useRef<boolean>(false);
 
   const addMessage = useCallback((message: Message) => {
     setMessages((prev) => [...prev, message]);
@@ -133,13 +141,20 @@ export function useChat(
   const reducerCallbacks = useCallback((): FlatChatReducerCallbacks => ({
     onSessionId: (id) => { sessionIdRef.current = id; setSessionId(id); },
     onWaitingForUser: () => { setIsWaitingForUser(true); setIsLoading(false); },
-    onPlan: (plan) => {
+    onPlan: (plan, status) => {
       if (plan) {
         setAgentPlan({
           title: plan.title,
           steps: (plan.steps || []).map((s: any) => ({ id: s.id, title: s.title || s.description || "", status: s.status })),
-          status: plan.status,
+          status: plan.status || status,
         });
+      }
+      if (status === "created") {
+        setAgentPhase("PLANNING");
+      } else if (status === "updated") {
+        setAgentPhase("UPDATING");
+      } else if (status === "completed") {
+        setAgentPhase("IDLE");
       }
     },
     onVncUrl: (vncUrl, sandboxId, e2bSessionId) => {
@@ -155,13 +170,41 @@ export function useChat(
         return [...prev, ...newFiles.filter((f) => !existing.has(f.path))];
       });
     },
-    onError: (message) => setError(message),
+    onError: (message) => {
+      setError(message);
+      setIsLoading(false);
+      setAgentPhase("IDLE");
+    },
+    onDone: () => {
+      setIsLoading(false);
+      setAgentPhase("IDLE");
+      setAgentPlan(prev => {
+        if (!prev) return prev;
+        const allDone = prev.steps.every(s => s.status === "completed" || s.status === "failed");
+        if (allDone) return prev;
+        return {
+          ...prev,
+          status: "completed",
+          steps: prev.steps.map(s =>
+            s.status !== "completed" && s.status !== "failed"
+              ? { ...s, status: "completed" }
+              : s
+          ),
+        };
+      });
+    },
+    onPhaseChange: (phase) => {
+      setAgentPhase(phase);
+    },
+    onSummarize: () => {
+      setAgentPhase("SUMMARIZING");
+    },
   }), [onVncUrl, onBrowserEvent]);
 
   // Dispatch one agent event through the shared flat-message reducer
   const handleNormalizedEvent = useCallback(
     (ev: ReturnType<typeof processAgentEvent>) => {
-      setMessages((prev) => applyEventToFlatMessages(prev, ev, streamingMsgIdRef, getToolActionVerb, reducerCallbacks()));
+      setMessages((prev) => applyEventToFlatMessages(prev, ev, streamingMsgIdRef, getToolActionVerb, reducerCallbacks(), currentStepIdRef));
     },
     [reducerCallbacks]
   );
@@ -169,16 +212,23 @@ export function useChat(
   const handleAgentChat = useCallback(
     async (text: string, existingSessionId?: string, isContinuation?: boolean, attachments?: any[], currentMessages?: Message[]) => {
       return new Promise<void>((resolve, reject) => {
+        liveStartedRef.current = true;
+        setAgentPhase("PLANNING");
+
         const onEvent = (event: AgentEvent) => {
           handleNormalizedEvent(processAgentEvent(event));
         };
 
         const onError = (error: Error) => {
           setError(error.message);
+          setIsLoading(false);
+          setAgentPhase("IDLE");
           reject(error);
         };
 
         const onComplete = () => {
+          setIsLoading(false);
+          setAgentPhase("IDLE");
           resolve();
         };
 
@@ -208,10 +258,60 @@ export function useChat(
     [handleNormalizedEvent]
   );
 
+  /**
+   * Load historical messages for an existing session from the backend.
+   * Call this when reopening a session. Will not conflict with live events since
+   * it sets messages before any SSE stream is started.
+   */
+  const loadSessionHistory = useCallback(async (sid: string) => {
+    if (!sid) return;
+    try {
+      const baseUrl = apiService["baseUrl"] as string;
+      const token = getStoredToken();
+      const res = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sid)}/messages`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        historyLoadedForSessionRef.current = sid;
+        setIsHistoryLoaded(true);
+        return;
+      }
+      const data = await res.json();
+      historyLoadedForSessionRef.current = sid;
+      setIsHistoryLoaded(true);
+      // Guard: if live streaming or user interaction has started, don't overwrite live state
+      if (liveStartedRef.current) return;
+      if (!Array.isArray(data.messages) || data.messages.length === 0) return;
+      const restored: Message[] = data.messages
+        .filter((m: any) => m.role && m.content)
+        .map((m: any) => ({
+          id: m.id || `hist-${Date.now()}-${Math.random()}`,
+          type: (m.role === "user" ? "user" : "assistant") as Message["type"],
+          content: m.content,
+          timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+          isLoading: false,
+        }));
+      if (restored.length > 0 && !liveStartedRef.current) {
+        sessionIdRef.current = sid;
+        setSessionId(sid);
+        setMessages(prev => (prev.length === 0 ? restored : prev));
+      }
+    } catch {
+      historyLoadedForSessionRef.current = sid;
+      setIsHistoryLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!initialSessionId || historyLoadedForSessionRef.current === initialSessionId) return;
+    loadSessionHistory(initialSessionId);
+  }, [initialSessionId, loadSessionHistory]);
+
   const sendMessage = useCallback(
     async (text: string, useAgent: boolean = false, attachments: any[] = []) => {
       if (!text.trim() && attachments.length === 0) return;
 
+      liveStartedRef.current = true;
       setError(null);
 
       const userMessage: Message = {
@@ -262,15 +362,22 @@ export function useChat(
       cancelRef.current = null;
     }
     streamingMsgIdRef.current = null;
+    currentStepIdRef.current = null;
     setIsLoading(false);
+    setAgentPhase("IDLE");
   }, []);
 
   const clear = useCallback(() => {
     streamingMsgIdRef.current = null;
+    currentStepIdRef.current = null;
+    historyLoadedForSessionRef.current = null;
+    liveStartedRef.current = false;
     setMessages([]);
     setError(null);
     setAgentPlan(null);
     setAgentFiles([]);
+    setAgentPhase("IDLE");
+    setIsHistoryLoaded(false);
   }, []);
 
   return {
@@ -286,5 +393,8 @@ export function useChat(
     sessionId,
     agentPlan,
     agentFiles,
+    agentPhase,
+    isHistoryLoaded,
+    loadSessionHistory,
   };
 }

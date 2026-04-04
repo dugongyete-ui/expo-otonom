@@ -185,6 +185,11 @@ export interface AgentEvent {
   url?: string;
   results?: Array<{ title: string; url: string; snippet?: string; content?: string }>;
   query?: string;
+  items?: Array<{ id: string; text: string; status: string; [key: string]: any }>;
+  todo_items?: Array<{ id: string; text: string; status: string; [key: string]: any }>;
+  output?: string;
+  task?: Record<string, any>;
+  search_query?: string;
   _streamId?: string;
 }
 

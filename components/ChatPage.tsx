@@ -1289,14 +1289,25 @@ export function ChatPage({
           setStreamingContent("");
         }
         setThinking({ active: false, label: "", stepLabel: undefined });
+        currentRunningStepIdRef.current = null;
+        lastStepIdRef.current = null;
         setIsLoading(false);
         if (isAgentMode && currentPlanRef.current) {
           const steps = currentPlanRef.current?.steps || [];
           if (steps.length > 0) {
-            const doneSteps = steps
-              .filter(s => s.status === "completed" || s.status === "failed")
-              .map(s => ({ id: s.id, description: s.description }));
-            setCompletedSteps(doneSteps.length > 0 ? doneSteps : steps.map(s => ({ id: s.id, description: s.description })));
+            const allCompleted = steps.map(s =>
+              s.status !== "completed" && s.status !== "failed"
+                ? { ...s, status: "completed" as const }
+                : s
+            );
+            const updatedPlan: AgentPlan = { ...currentPlanRef.current, steps: allCompleted, status: "completed" };
+            currentPlanRef.current = updatedPlan;
+            if (planMsgIdRef.current) {
+              setMessages(prev => prev.map(m =>
+                m.id === planMsgIdRef.current ? { ...m, plan: updatedPlan } : m
+              ));
+            }
+            setCompletedSteps(allCompleted.map(s => ({ id: s.id, description: s.description })));
             setTaskFinalNarrative(lastNotifyTextRef.current);
             lastNotifyTextRef.current = null;
             setTaskCompleted(true);
@@ -1480,17 +1491,78 @@ export function ChatPage({
         return;
       }
 
-      case "todo_update":
+      case "summarize": {
+        setThinking({ active: true, label: "Menyimpulkan..." });
+        if (ev.text) {
+          const summaryMsg: ChatMessage = {
+            id: `msg_${Date.now()}_${msgCounterRef.current++}_summary`,
+            role: "assistant",
+            content: ev.text,
+            timestamp: Date.now(),
+            isStreaming: false,
+          };
+          setMessages(prev => [...prev, summaryMsg]);
+        }
         return;
+      }
 
-      case "task_update":
+      case "todo_update": {
+        if (ev.items && ev.items.length > 0) {
+          const todoMsg: ChatMessage = {
+            id: `msg_${Date.now()}_${msgCounterRef.current++}_todo`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            todoItems: ev.items,
+          };
+          setMessages(prev => [...prev, todoMsg]);
+        }
         return;
+      }
 
-      case "search_results":
+      case "task_update": {
+        if (ev.task) {
+          const taskMsg: ChatMessage = {
+            id: `msg_${Date.now()}_${msgCounterRef.current++}_task`,
+            role: "assistant",
+            content: ev.task.title || ev.task.description || "",
+            timestamp: Date.now(),
+            taskUpdate: ev.task,
+          };
+          setMessages(prev => [...prev, taskMsg]);
+        }
         return;
+      }
 
-      case "shell_output":
+      case "search_results": {
+        if (ev.results && ev.results.length > 0) {
+          const searchMsg: ChatMessage = {
+            id: `msg_${Date.now()}_${msgCounterRef.current++}_search`,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            searchResults: ev.results,
+            searchQuery: ev.query,
+          };
+          setMessages(prev => [...prev, searchMsg]);
+        }
         return;
+      }
+
+      case "shell_output": {
+        if (ev.output) {
+          setTools(prev => {
+            const idx = ev.callId ? prev.findIndex(t => t.tool_call_id === ev.callId) : -1;
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], output: (updated[idx].output || "") + ev.output };
+              return updated;
+            }
+            return prev;
+          });
+        }
+        return;
+      }
 
       default:
         return;

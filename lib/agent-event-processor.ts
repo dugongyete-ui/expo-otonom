@@ -30,6 +30,7 @@ export const AGENT_EVENT_TYPES = {
   DESKTOP_SCREENSHOT: "desktop_screenshot",
   ERROR: "error",
   DONE: "done",
+  SUMMARIZE: "summarize",
   TODO_UPDATE: "todo_update",
   TASK_UPDATE: "task_update",
   SEARCH_RESULTS: "search_results",
@@ -102,6 +103,12 @@ export interface NormalizedStepEvent {
   kind: "step";
   step: any;
   status?: string;
+  stepId?: string;
+}
+
+export interface NormalizedSummarizeEvent {
+  kind: "summarize";
+  text?: string;
 }
 
 export interface NormalizedNotifyEvent {
@@ -198,6 +205,7 @@ export type NormalizedEvent =
   | NormalizedScreenshotEvent
   | NormalizedErrorEvent
   | NormalizedDoneEvent
+  | NormalizedSummarizeEvent
   | NormalizedTodoUpdateEvent
   | NormalizedTaskUpdateEvent
   | NormalizedSearchResultsEvent
@@ -216,7 +224,10 @@ export interface FlatMessage {
   toolCallId?: string;
   toolStatus?: "calling" | "called" | "error";
   isLoading?: boolean;
+  stepId?: string;
 }
+
+export type AgentPhase = "IDLE" | "PLANNING" | "EXECUTING" | "UPDATING" | "SUMMARIZING";
 
 export interface FlatChatReducerCallbacks {
   onSessionId?: (id: string) => void;
@@ -227,6 +238,8 @@ export interface FlatChatReducerCallbacks {
   onError?: (message: string) => void;
   onWaitingForUser?: () => void;
   onDone?: () => void;
+  onPhaseChange?: (phase: AgentPhase) => void;
+  onSummarize?: (text?: string) => void;
 }
 
 /**
@@ -243,6 +256,7 @@ export function applyEventToFlatMessages(
   streamingIdRef: { current: string | null },
   getToolLabel: (functionName: string) => string,
   callbacks: FlatChatReducerCallbacks = {},
+  currentStepIdRef?: { current: string | null },
 ): FlatMessage[] {
   switch (ev.kind) {
     case "session": {
@@ -251,11 +265,18 @@ export function applyEventToFlatMessages(
     }
 
     case "done": {
+      callbacks.onPhaseChange?.("IDLE");
       callbacks.onDone?.();
+      if (currentStepIdRef) currentStepIdRef.current = null;
+      const hasLoadingItems = prev.some(m => m.isLoading);
+      if (hasLoadingItems) {
+        return prev.map(m => m.isLoading ? { ...m, isLoading: false } : m);
+      }
       return prev;
     }
 
     case "waiting_for_user": {
+      callbacks.onPhaseChange?.("IDLE");
       callbacks.onWaitingForUser?.();
       return prev;
     }
@@ -327,6 +348,23 @@ export function applyEventToFlatMessages(
 
     case "tool": {
       const label = getToolLabel(ev.functionName);
+      const activeStepId = currentStepIdRef?.current ?? undefined;
+      const existingIdx = prev.findIndex(m => m.id === ev.callId);
+      if (existingIdx >= 0) {
+        const existing = prev[existingIdx];
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...existing,
+          content: label,
+          toolName: ev.functionName,
+          toolArgs: ev.args ?? existing.toolArgs,
+          toolCallId: ev.callId,
+          toolStatus: ev.status,
+          isLoading: ev.status === "calling",
+          stepId: existing.stepId ?? activeStepId,
+        };
+        return updated;
+      }
       const toolMsg: FlatMessage = {
         id: ev.callId,
         type: "tool",
@@ -337,13 +375,8 @@ export function applyEventToFlatMessages(
         toolCallId: ev.callId,
         toolStatus: ev.status,
         isLoading: ev.status === "calling",
+        stepId: activeStepId,
       };
-      const existingIdx = prev.findIndex(m => m.id === ev.callId);
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        updated[existingIdx] = { ...updated[existingIdx], ...toolMsg };
-        return updated;
-      }
       return [...prev, toolMsg];
     }
 
@@ -360,7 +393,22 @@ export function applyEventToFlatMessages(
 
     case "step": {
       const stepContent = ev.step?.description || ev.step?.title || "Processing...";
-      return [...prev, { id: `msg-${Date.now()}`, type: "step", content: stepContent, timestamp: new Date(), isLoading: true }];
+      const stepId = ev.step?.id || ev.stepId;
+      const stepStatus = ev.status;
+      if (stepStatus === "running" || stepStatus === "started") {
+        callbacks.onPhaseChange?.("EXECUTING");
+        if (currentStepIdRef && stepId) currentStepIdRef.current = stepId;
+        return [...prev, { id: `msg-step-${stepId || Date.now()}`, type: "step", content: stepContent, timestamp: new Date(), isLoading: true, stepId }];
+      } else if (stepStatus === "completed" || stepStatus === "failed") {
+        if (currentStepIdRef) currentStepIdRef.current = null;
+        const stepMsgId = `msg-step-${stepId || ""}`;
+        const existing = prev.find(m => m.id === stepMsgId);
+        if (existing) {
+          return prev.map(m => m.id === stepMsgId ? { ...m, isLoading: false } : m);
+        }
+        return prev;
+      }
+      return [...prev, { id: `msg-step-${stepId || Date.now()}`, type: "step", content: stepContent, timestamp: new Date(), isLoading: true, stepId }];
     }
 
     case "thinking": {
@@ -385,7 +433,35 @@ export function applyEventToFlatMessages(
     }
 
     case "plan": {
+      if (ev.status === "created" || ev.status === "updated") {
+        callbacks.onPhaseChange?.(ev.status === "updated" ? "UPDATING" : "PLANNING");
+      } else if (ev.status === "completed") {
+        callbacks.onPhaseChange?.("IDLE");
+      }
       callbacks.onPlan?.(ev.plan, ev.status);
+      return prev;
+    }
+
+    case "summarize": {
+      callbacks.onPhaseChange?.("SUMMARIZING");
+      callbacks.onSummarize?.(ev.text);
+      if (ev.text) {
+        const SUMMARIZE_ID = "msg-summarize-current";
+        const existingIdx = prev.findIndex(m => m.id === SUMMARIZE_ID);
+        const summaryMsg: FlatMessage = {
+          id: SUMMARIZE_ID,
+          type: "assistant" as const,
+          content: ev.text,
+          timestamp: new Date(),
+          isLoading: false,
+        };
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = summaryMsg;
+          return updated;
+        }
+        return [...prev, summaryMsg];
+      }
       return prev;
     }
 
@@ -405,8 +481,16 @@ export function applyEventToFlatMessages(
     }
 
     case "error": {
+      callbacks.onPhaseChange?.("IDLE");
+      if (currentStepIdRef) currentStepIdRef.current = null;
       callbacks.onError?.(ev.message);
-      return prev;
+      return [...prev, {
+        id: `msg-error-${Date.now()}`,
+        type: "assistant" as const,
+        content: `⚠️ ${ev.message}`,
+        timestamp: new Date(),
+        isLoading: false,
+      }];
     }
 
     case "todo_update": {
@@ -556,6 +640,7 @@ export function processAgentEvent(event: AgentEvent): NormalizedEvent {
         kind: "step",
         step: event.step,
         status: event.status,
+        stepId: event.step?.id,
       };
 
     case AGENT_EVENT_TYPES.NOTIFY:
@@ -605,6 +690,9 @@ export function processAgentEvent(event: AgentEvent): NormalizedEvent {
 
     case AGENT_EVENT_TYPES.DONE:
       return { kind: "done" };
+
+    case AGENT_EVENT_TYPES.SUMMARIZE:
+      return { kind: "summarize", text: event.text || event.content || event.message || "" };
 
     case AGENT_EVENT_TYPES.TODO_UPDATE:
       return {
