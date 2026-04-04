@@ -477,6 +477,7 @@ export function ChatPage({
   const planMsgIdRef = useRef<string | null>(null);
   const currentPlanRef = useRef<AgentPlan | null>(null);
   const currentRunningStepIdRef = useRef<string | null>(null);
+  const lastStepIdRef = useRef<string | null>(null);
   const lastNotifyTextRef = useRef<string | null>(null);
   const isWaitingRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
@@ -727,6 +728,8 @@ export function ChatPage({
       setStepHistory([]);
       planMsgIdRef.current = null;
       currentPlanRef.current = null;
+      currentRunningStepIdRef.current = null;
+      lastStepIdRef.current = null;
       streamingMsgIdRef.current = null;
       filesShownViaNotifyRef.current = false;
       setStreamingContent('');
@@ -863,6 +866,7 @@ export function ChatPage({
         }
 
         if (status === "running" && step?.description) {
+          lastStepIdRef.current = null;
           currentRunningStepIdRef.current = step.id;
           setStepHistory(prev => {
             if (prev.length > 0 && prev[prev.length - 1] === step.description) return prev;
@@ -871,6 +875,7 @@ export function ChatPage({
           setThinking({ active: true, label: step.description, stepLabel: step.description });
         } else if (status === "completed" || status === "failed") {
           if (step?.id === currentRunningStepIdRef.current) {
+            lastStepIdRef.current = step.id;
             currentRunningStepIdRef.current = null;
           }
           setThinking({ active: true, label: "Menyelesaikan langkah..." });
@@ -1342,7 +1347,7 @@ export function ChatPage({
           if (!cleanedText) return;
           lastNotifyTextRef.current = cleanedText;
           if (planMsgIdRef.current) {
-            const stepId = currentRunningStepIdRef.current;
+            const stepId = currentRunningStepIdRef.current || lastStepIdRef.current;
             setMessages(prev => prev.map(m => {
               if (m.id !== planMsgIdRef.current) return m;
               if (stepId) {
@@ -1501,6 +1506,7 @@ export function ChatPage({
       planMsgIdRef.current = null;
       currentPlanRef.current = null;
       currentRunningStepIdRef.current = null;
+      lastStepIdRef.current = null;
     }
     setThinking({ active: true, label: isAgentMode ? "Dzeck sedang berpikir..." : "Memikirkan jawaban..." });
 

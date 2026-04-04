@@ -2207,6 +2207,8 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                 yield make_event("message_end", role="assistant")
 
             yield make_event("plan", status=PlanStatus.CREATED.value, plan=safe_plan_dict(self.plan))
+            yield make_event("notify", text="Rencana selesai dibuat. Saya akan mulai mengeksekusi langkah-langkah berikutnya.")
+            yield make_event("thinking", thinking="Menganalisis rencana untuk mengeksekusi langkah selanjutnya...")
 
             if not self.plan.steps:
                 yield make_event("message_start", role="assistant")
@@ -2299,7 +2301,10 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     return
 
                 if step.status == ExecutionStatus.COMPLETED:
-                    yield make_event("notify", text=f"✓ {step.description}")
+                    yield make_event("notify", text=f"Saya telah menyelesaikan: {step.description}")
+                    next_step = self.plan.get_next_step()
+                    if next_step:
+                        yield make_event("notify", text=f"Selanjutnya, saya akan {next_step.description}")
                     # Persist step completion as a cross-session memory fact (best-effort)
                     if self.session_id and step.result:
                         try:

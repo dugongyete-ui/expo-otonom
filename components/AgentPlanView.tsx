@@ -446,6 +446,191 @@ const narrativeStyles = StyleSheet.create({
   },
 });
 
+function StepStatusIcon({ status }: { status?: string }) {
+  if (status === "calling" || status === "running") {
+    return <SpinnerIcon />;
+  }
+  if (status === "called" || status === "completed") {
+    return (
+      <View style={statusStyles.checkCircle}>
+        <Text style={statusStyles.checkMark}>✓</Text>
+      </View>
+    );
+  }
+  if (status === "error" || status === "failed") {
+    return (
+      <View style={statusStyles.errorCircle}>
+        <Text style={statusStyles.errorMark}>✕</Text>
+      </View>
+    );
+  }
+  return <View style={statusStyles.pendingDot} />;
+}
+
+interface StepCardProps {
+  step: AgentPlanStep;
+  isLast: boolean;
+  stepNotifyMessages?: string[];
+  onToolPress?: (tool: SelectedToolInfo) => void;
+}
+
+function StepCard({ step, isLast, stepNotifyMessages = [], onToolPress }: StepCardProps) {
+  const [expanded, setExpanded] = useState(step.status === "running");
+  const tools: StepToolEntry[] = (step as any).tools || [];
+
+  const status = step.status || "pending";
+  const isRunning = status === "running";
+  const isCompleted = status === "completed";
+  const isFailed = status === "failed";
+
+  useEffect(() => {
+    if (isRunning) setExpanded(true);
+  }, [isRunning]);
+
+  return (
+    <View style={stepStyles.stepWrapper}>
+      <View style={stepStyles.stepConnector}>
+        <View style={stepStyles.stepIconCol}>
+          <StepStatusIcon status={status} />
+          {!isLast && <View style={[stepStyles.connectorLine, isCompleted && stepStyles.connectorLineDone]} />}
+        </View>
+        <View style={stepStyles.stepBody}>
+          <TouchableOpacity
+            style={stepStyles.stepHeader}
+            onPress={() => setExpanded((prev) => !prev)}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={[
+                stepStyles.stepDescription,
+                isCompleted && stepStyles.stepDescriptionDone,
+                isFailed && stepStyles.stepDescriptionError,
+                !isCompleted && !isFailed && stepStyles.stepDescriptionPending,
+              ]}
+              numberOfLines={2}
+            >
+              {step.description}
+            </Text>
+            <Text style={stepStyles.expandIcon}>{expanded ? "⌃" : "⌄"}</Text>
+          </TouchableOpacity>
+
+          {expanded && (
+            <View style={stepStyles.stepExpandedContent}>
+              {step.result ? (
+                <Text style={stepStyles.stepResultText} numberOfLines={5}>
+                  {cleanText(step.result)}
+                </Text>
+              ) : null}
+
+              {stepNotifyMessages.map((text, idx) => (
+                <NarrativeText key={`step-notify-${step.id}-${idx}`} message={text} />
+              ))}
+
+              {tools.length > 0 ? (
+                <View style={stepStyles.toolList}>
+                  {tools.map((tool, idx) => {
+                    const fnName = tool.function_name || tool.name || "";
+                    const displayInfo = getToolDisplayInfo(fnName);
+                    const handlePress = onToolPress ? () => {
+                      onToolPress({
+                        functionName: fnName,
+                        functionArgs: tool.function_args || tool.input || {},
+                        status: tool.status || "called",
+                        toolContent: tool.tool_content,
+                        functionResult: tool.function_result || tool.output,
+                        label: displayInfo.label,
+                        icon: displayInfo.icon,
+                        iconColor: displayInfo.color,
+                      });
+                    } : undefined;
+                    return (
+                      <ManusToolStepRow
+                        key={`tool-${step.id}-${tool.tool_call_id || idx}`}
+                        tool={tool}
+                        onPress={handlePress}
+                      />
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const stepStyles = StyleSheet.create({
+  stepWrapper: {
+    paddingVertical: 8,
+    paddingRight: 8,
+  },
+  stepConnector: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  stepIconCol: {
+    width: 26,
+    alignItems: "center",
+  },
+  connectorLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: "#333333",
+    marginTop: 4,
+  },
+  connectorLineDone: {
+    backgroundColor: "#4CAF50",
+  },
+  stepBody: {
+    flex: 1,
+  },
+  stepHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  stepDescription: {
+    flex: 1,
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    color: "#d0d0d0",
+    lineHeight: 20,
+  },
+  stepDescriptionDone: {
+    color: "#9ecb9c",
+  },
+  stepDescriptionError: {
+    color: "#f2a1a1",
+  },
+  stepDescriptionPending: {
+    color: "#c8c8c8",
+  },
+  expandIcon: {
+    fontSize: 12,
+    color: "#8a8a8a",
+  },
+  stepExpandedContent: {
+    marginTop: 8,
+    paddingLeft: 6,
+    gap: 6,
+  },
+  stepResultText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#b8b8b8",
+    lineHeight: 19,
+  },
+  toolList: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+  },
+});
+
 export function AgentGoalMessage({ message }: { message: string }) {
   return (
     <Text style={goalMessageStyles.text}>{cleanText(message)}</Text>
@@ -474,66 +659,29 @@ export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onTool
 
   const isAllDone = plan.status === "completed" || (steps.length > 0 && steps.every(s => s.status === "completed" || s.status === "failed"));
   const isRunning = plan.status === "running" || steps.some(s => s.status === "running");
+  const goalText = plan.goal ? cleanText(plan.goal) : null;
+  const completedCount = steps.filter(s => s.status === "completed" || s.status === "failed").length;
+  const totalCount = steps.length;
 
-  // Collect all tool steps and narrative messages in order
-  const allVisibleSteps = steps.filter(
-    s => s.status === "running" || s.status === "completed" || s.status === "failed"
-  );
-
-  // Build interleaved content: tools from steps + notify messages
   const buildContent = () => {
-    const items: React.ReactNode[] = [];
-    let key = 0;
-
-    for (const step of allVisibleSteps) {
-      const rawTools: StepToolEntry[] = (step as AgentPlanStep & { tools?: StepToolEntry[] }).tools || [];
+    return steps.map((step, index) => {
       const stepTexts = (stepNotifyMessages || [])
-        .filter(n => n.stepId === step.id)
-        .map(n => n.text);
-
-      for (const tool of rawTools) {
-        const fnName = tool.function_name || tool.name || "";
-        const displayInfo = getToolDisplayInfo(fnName);
-        const handlePress = onToolPress ? () => {
-          onToolPress({
-            functionName: fnName,
-            functionArgs: tool.function_args || tool.input || {},
-            status: tool.status || "called",
-            toolContent: tool.tool_content,
-            functionResult: tool.function_result || tool.output,
-            label: displayInfo.label,
-            icon: displayInfo.icon,
-            iconColor: displayInfo.color,
-          });
-        } : undefined;
-        items.push(
-          <ManusToolStepRow
-            key={`tool-${key++}`}
-            tool={tool}
-            onPress={handlePress}
-          />
-        );
-      }
-
-      // Step-level notify messages (narrative text between tools)
-      for (const text of stepTexts) {
-        items.push(<NarrativeText key={`notify-${key++}`} message={text} />);
-      }
-    }
-
-    // Plan-level notify messages
-    if (notifyMessages && notifyMessages.length > 0) {
-      for (const msg of notifyMessages) {
-        items.push(<NarrativeText key={`plan-notify-${key++}`} message={msg} />);
-      }
-    }
-
-    return items;
+        .filter((n) => n.stepId === step.id)
+        .map((n) => n.text);
+      return (
+        <StepCard
+          key={step.id || `step-${index}`}
+          step={step}
+          isLast={index === steps.length - 1}
+          stepNotifyMessages={stepTexts}
+          onToolPress={onToolPress}
+        />
+      );
+    });
   };
 
   return (
     <View style={styles.container}>
-      {/* Task header row */}
       <TouchableOpacity
         style={styles.taskHeader}
         onPress={() => setExpanded(v => !v)}
@@ -547,22 +695,38 @@ export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onTool
           {isAllDone && <CheckCircleIcon size={18} color="#4CAF50" />}
           {isRunning && !isAllDone && <SpinnerIcon />}
         </View>
-        <Text style={[
-          styles.taskTitle,
-          isAllDone && styles.taskTitleDone,
-        ]} numberOfLines={2}>
-          {plan.title || "Tugas"}
-        </Text>
+        <View style={styles.taskHeaderText}>
+          <Text style={[
+            styles.taskTitle,
+            isAllDone && styles.taskTitleDone,
+          ]} numberOfLines={2}>
+            {plan.title || "Tugas"}
+          </Text>
+          {goalText ? (
+            <Text style={styles.taskSubtitle} numberOfLines={2}>
+              {goalText}
+            </Text>
+          ) : null}
+          <Text style={styles.taskCount}>
+            {completedCount}/{totalCount} langkah selesai
+          </Text>
+        </View>
         {expanded
           ? <ChevronUpIcon size={16} color="#666666" />
           : <ChevronDownIcon size={16} color="#666666" />
         }
       </TouchableOpacity>
 
-      {/* Expanded content: tool steps + narrative */}
       {expanded && (
         <View style={styles.taskContent}>
           {buildContent()}
+          {notifyMessages && notifyMessages.length > 0 ? (
+            <View style={styles.planNotifyContainer}>
+              {notifyMessages.map((msg, idx) => (
+                <NarrativeText key={`plan-notify-${idx}`} message={msg} />
+              ))}
+            </View>
+          ) : null}
         </View>
       )}
     </View>
@@ -594,6 +758,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
+  taskHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  taskSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#999999",
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  taskCount: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#777777",
+    marginTop: 2,
+  },
   taskCircleRunning: {
     borderColor: "#4a7cf0",
     borderWidth: 0,
@@ -618,5 +799,11 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
     paddingBottom: 4,
     gap: 1,
+  },
+  planNotifyContainer: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+    paddingTop: 8,
   },
 });
