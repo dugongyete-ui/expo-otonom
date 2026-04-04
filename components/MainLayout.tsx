@@ -14,11 +14,13 @@ import { ChatPage } from "./ChatPage";
 import { ToolPanel } from "./ToolPanel";
 import { BrowserPanel } from "./BrowserPanel";
 import { FilePanel } from "./FilePanel";
+import { PlanPanel } from "./PlanPanel";
 import { TakeOverView } from "./TakeOverView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CloseIcon } from "@/components/icons/SvgIcon";
 import { getToolCategory } from "@/lib/tool-constants";
 import type { VncSessionInfo } from "./ChatPage";
+import type { AgentPlan } from "@/lib/chat";
 
 interface ToolItem {
   tool_call_id: string;
@@ -45,8 +47,13 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [isAgentMode, setIsAgentMode] = useState(isAgentModeProp);
   const [tools, setTools] = useState<ToolItem[]>([]);
   const [isToolPanelVisible, setIsToolPanelVisible] = useState(true);
-  const [rightPanelMode, setRightPanelMode] = useState<"tools" | "browser" | "files">("tools");
+  const [rightPanelMode, setRightPanelMode] = useState<"tools" | "browser" | "files" | "plan">("tools");
   const [showTakeOver, setShowTakeOver] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<AgentPlan | null>(null);
+  const [planStepNotifyMessages, setPlanStepNotifyMessages] = useState<{ stepId: string; text: string }[]>([]);
+  const [planNotifyMessages, setPlanNotifyMessages] = useState<string[]>([]);
+  const [isPlanRunning, setIsPlanRunning] = useState(false);
+  const hasPlanAutoSwitchedRef = useRef(false);
   const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
   const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string; ts: number } | null>(null);
@@ -92,6 +99,28 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
         setRightPanelMode("browser");
         setIsToolPanelVisible(true);
       }
+    }
+  }, []);
+
+  const handlePlanChange = useCallback((
+    plan: AgentPlan | null,
+    stepNotifyMsgs: { stepId: string; text: string }[],
+    notifyMsgs: string[],
+    running: boolean,
+  ) => {
+    setCurrentPlan(plan);
+    setPlanStepNotifyMessages(stepNotifyMsgs);
+    setPlanNotifyMessages(notifyMsgs);
+    setIsPlanRunning(running);
+    // Auto-switch to Plan tab the first time a plan arrives (not on browser events)
+    if (plan && !hasPlanAutoSwitchedRef.current && !isNarrowScreenRef.current) {
+      hasPlanAutoSwitchedRef.current = true;
+      setRightPanelMode("plan");
+      setIsToolPanelVisible(true);
+    }
+    // Reset auto-switch flag when plan is gone (new task will auto-switch again)
+    if (!plan) {
+      hasPlanAutoSwitchedRef.current = false;
     }
   }, []);
 
@@ -244,6 +273,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
             onOpenTools={isNarrowScreen ? handleOpenTools : undefined}
             toolsCount={totalToolsCount}
             activeToolsCount={activeToolsCount}
+            onPlanChange={handlePlanChange}
           />
         </View>
 
@@ -268,6 +298,13 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 agentVncSession={vncSession}
                 vncViewerActive={Platform.OS !== "web" && !!vncSession}
               />
+            ) : rightPanelMode === "plan" && currentPlan ? (
+              <PlanPanel
+                plan={currentPlan}
+                stepNotifyMessages={planStepNotifyMessages}
+                notifyMessages={planNotifyMessages}
+                isRunning={isPlanRunning}
+              />
             ) : (
               <FilePanel
                 sessionId={sessionId}
@@ -290,6 +327,24 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                     rightPanelMode === "tools" && styles.switchTabTextActive,
                   ]}>Tools</Text>
                 </TouchableOpacity>
+                {currentPlan && (
+                  <TouchableOpacity
+                    style={[
+                      styles.switchTab,
+                      rightPanelMode === "plan" && styles.switchTabActive,
+                    ]}
+                    onPress={() => setRightPanelMode("plan")}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.switchTabInner}>
+                      <Text style={[
+                        styles.switchTabText,
+                        rightPanelMode === "plan" && styles.switchTabTextActive,
+                      ]}>Plan</Text>
+                      {isPlanRunning && <View style={styles.liveIndicator} />}
+                    </View>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[
                     styles.switchTab,
@@ -345,6 +400,20 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                     Tools{totalToolsCount > 0 ? ` (${totalToolsCount})` : ""}
                   </Text>
                 </TouchableOpacity>
+                {currentPlan && (
+                  <TouchableOpacity
+                    style={[styles.modalTab, rightPanelMode === "plan" && styles.modalTabActive]}
+                    onPress={() => setRightPanelMode("plan")}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.switchTabInner}>
+                      <Text style={[styles.modalTabText, rightPanelMode === "plan" && styles.modalTabTextActive]}>
+                        Plan
+                      </Text>
+                      {isPlanRunning && <View style={styles.liveIndicator} />}
+                    </View>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[styles.modalTab, rightPanelMode === "browser" && styles.modalTabActive]}
                   onPress={() => setRightPanelMode("browser")}
@@ -382,6 +451,13 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                   onSwitchToBrowser={() => {
                     setRightPanelMode("browser");
                   }}
+                />
+              ) : rightPanelMode === "plan" && currentPlan ? (
+                <PlanPanel
+                  plan={currentPlan}
+                  stepNotifyMessages={planStepNotifyMessages}
+                  notifyMessages={planNotifyMessages}
+                  isRunning={isPlanRunning}
                 />
               ) : rightPanelMode === "browser" ? (
                 <BrowserPanel
@@ -510,5 +586,16 @@ const styles = StyleSheet.create({
   },
   toolsModalContent: {
     flex: 1,
+  },
+  switchTabInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  liveIndicator: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#4a7cf0",
   },
 });

@@ -420,6 +420,12 @@ interface ChatPageProps {
   onOpenTools?: () => void;
   toolsCount?: number;
   activeToolsCount?: number;
+  onPlanChange?: (
+    plan: import("@/lib/chat").AgentPlan | null,
+    stepNotifyMessages: { stepId: string; text: string }[],
+    notifyMessages: string[],
+    isRunning: boolean,
+  ) => void;
 }
 
 export function ChatPage({
@@ -435,6 +441,7 @@ export function ChatPage({
   onOpenTools,
   toolsCount = 0,
   activeToolsCount = 0,
+  onPlanChange,
 }: ChatPageProps = {}) {
   const { mode } = useLocalSearchParams<{ mode: string }>();
   const isAgentMode = agentModeProp ?? mode === "agent";
@@ -796,6 +803,22 @@ export function ChatPage({
   useEffect(() => {
     onBrowserEventChange?.(lastBrowserEvent);
   }, [lastBrowserEvent, onBrowserEventChange]);
+
+  // Propagate active plan data to parent layout (for PlanPanel)
+  useEffect(() => {
+    if (!onPlanChange) return;
+    if (!planMsgIdRef.current) {
+      return;
+    }
+    const planMsg = messages.find(m => m.id === planMsgIdRef.current);
+    if (!planMsg?.plan) return;
+    onPlanChange(
+      planMsg.plan,
+      planMsg.stepNotifyMessages || [],
+      planMsg.notifyMessages || [],
+      isLoading,
+    );
+  }, [messages, isLoading, onPlanChange]);
 
   const handleEvent = useCallback((event: AgentEvent) => {
     const ev = processAgentEvent(event);
