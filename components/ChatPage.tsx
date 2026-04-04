@@ -1948,6 +1948,18 @@ export function ChatPage({
             }
           }
 
+          // Suppress streaming assistant messages while the plan is still running
+          // The final answer should only appear AFTER all tasks are complete
+          if (item.role === "assistant" && !item.plan && !item.files && !item.error && item.isStreaming) {
+            const hasRunningPlan = messages.some(m =>
+              m.plan && (
+                m.plan.status === "running" ||
+                m.plan.steps.some(s => s.status === "running")
+              )
+            );
+            if (hasRunningPlan) return null;
+          }
+
           // Plan message — Manus-style: agent header (dzeck + Agent badge) + text + collapsible task
           if (item.plan) {
             const isPlanRunning = item.plan.status === "running" || item.plan.steps.some(s => s.status === "running");
@@ -2045,6 +2057,31 @@ export function ChatPage({
                 )}
               </View>
             );
+          }
+
+          // In agent mode: if this assistant message follows a plan message, give it the agent header
+          if (
+            isAgentMode &&
+            item.role === "assistant" &&
+            !item.plan &&
+            !item.files &&
+            !item.error &&
+            item.content
+          ) {
+            const hasPlanBefore = messages.slice(0, index).some(m => m.plan);
+            if (hasPlanBefore) {
+              return (
+                <View style={styles.agentTurnBlock}>
+                  <View style={styles.agentTurnHeader}>
+                    <Text style={styles.agentTurnName}>dzeck</Text>
+                    <View style={styles.agentTurnModeBadge}>
+                      <Text style={styles.agentTurnModeBadgeText}>Agent</Text>
+                    </View>
+                  </View>
+                  <MessageComponent message={item} />
+                </View>
+              );
+            }
           }
 
           return (

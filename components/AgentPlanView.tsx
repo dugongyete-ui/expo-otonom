@@ -7,10 +7,8 @@ import {
   TouchableOpacity,
   Easing,
 } from "react-native";
-import { CheckCircleIcon, ChevronUpIcon, ChevronDownIcon } from "@/components/icons/SvgIcon";
-import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
 import type { AgentPlan, AgentPlanStep, AgentEvent, ToolContent } from "@/lib/chat";
-import { getToolDisplayInfo, getToolCategory } from "@/lib/tool-constants";
+import { getToolCategory } from "@/lib/tool-constants";
 import { cleanText } from "@/lib/text-utils";
 
 export interface SelectedToolInfo {
@@ -46,9 +44,8 @@ interface StepToolEntry {
   tool_content?: ToolContent;
 }
 
-// Build a concise label like Manus shows for each tool step
-function buildStepToolLabel(fnName: string, args: Record<string, unknown>): string {
-  // Browser-specific richer labels
+// Manus-style label for each tool call
+function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
   if (fnName === "browser_navigate" || fnName === "web_browse") {
     const url = String(args.url || args.page || "");
     if (url) {
@@ -63,15 +60,7 @@ function buildStepToolLabel(fnName: string, args: Record<string, unknown>): stri
   }
   if (fnName === "browser_scroll") {
     const dir = String(args.direction || "").toLowerCase();
-    const page = String(args.page || args.url || "");
-    const dirLabel = dir === "up" ? "ke atas" : dir === "down" ? "ke bawah" : dir ? `ke ${dir}` : "";
-    if (page) {
-      try {
-        const domain = new URL(page.startsWith("http") ? page : `https://${page}`).hostname.replace(/^www\./, "");
-        return `Scroll ${dirLabel} di ${domain}`.trim();
-      } catch {}
-    }
-    return dirLabel ? `Scroll ${dirLabel}` : "Scroll halaman";
+    return dir === "up" ? "Scroll ke atas" : dir === "down" ? "Scroll ke bawah" : "Scroll halaman";
   }
   if (fnName === "browser_click") {
     const sel = String(args.selector || args.element || args.label || args.text || "");
@@ -80,8 +69,6 @@ function buildStepToolLabel(fnName: string, args: Record<string, unknown>): stri
   }
   if (fnName === "browser_type" || fnName === "browser_input") {
     const text = String(args.text || args.value || args.input || "");
-    const field = String(args.selector || args.field || "");
-    if (text && field) return `Mengetik '${text.slice(0, 30)}' di ${field.slice(0, 25)}`;
     if (text) return `Mengetik: '${text.slice(0, 40)}'`;
     return "Mengetik teks";
   }
@@ -105,25 +92,17 @@ function buildStepToolLabel(fnName: string, args: Record<string, unknown>): stri
     }
     return "Buka tab baru";
   }
-
-  // Search tools
   if (fnName === "web_search" || fnName === "info_search_web") {
     const q = String(args.query || args.q || "");
-    if (q) return `Mencari '${q.slice(0, 45)}'`;
+    if (q) return `Mencari informasi terbaru tentang ${q.slice(0, 50)}`;
     return "Mencari informasi";
   }
-
-  // Shell tools
   if (fnName === "shell_exec") {
     const cmd = String(args.command || args.cmd || "");
     if (cmd) return `Jalankan: ${cmd.slice(0, 45)}`;
     return "Jalankan perintah";
   }
-  if (fnName === "shell_view") {
-    return "Lihat output terminal";
-  }
-
-  // File tools
+  if (fnName === "shell_view") return "Lihat output terminal";
   if (fnName === "file_read") {
     const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
     if (file) return `Membaca ${file.slice(0, 45)}`;
@@ -131,7 +110,7 @@ function buildStepToolLabel(fnName: string, args: Record<string, unknown>): stri
   }
   if (fnName === "file_write") {
     const file = String(args.file || args.path || "").replace(/^\/home\/ubuntu\//, "~/");
-    if (file) return `Menulis ${file.slice(0, 45)}`;
+    if (file) return `Mengedit file ${file.slice(0, 45)}`;
     return "Menulis file";
   }
   if (fnName === "file_str_replace") {
@@ -139,91 +118,58 @@ function buildStepToolLabel(fnName: string, args: Record<string, unknown>): stri
     if (file) return `Mengedit ${file.slice(0, 45)}`;
     return "Mengedit file";
   }
-  if (fnName === "file_find_by_name") {
-    const name = String(args.name || args.pattern || "");
-    if (name) return `Cari file: ${name.slice(0, 40)}`;
-    return "Cari file berdasarkan nama";
-  }
-  if (fnName === "file_find_in_content") {
-    const q = String(args.query || args.pattern || "");
-    if (q) return `Cari dalam file: '${q.slice(0, 35)}'`;
-    return "Cari dalam konten file";
-  }
-
-  // Message tools
   if (fnName === "message_notify_user") {
     const text = String(args.text || args.message || "");
-    if (text) return `Notifikasi: ${text.slice(0, 40)}`;
+    if (text) return text.slice(0, 60);
     return "Notifikasi";
   }
   if (fnName === "message_ask_user") {
     const text = String(args.text || args.question || "");
     if (text) return `Tanya: ${text.slice(0, 40)}`;
-    return "Pertanyaan ke pengguna";
+    return "Pertanyaan";
   }
-
   // Generic fallback
-  const primaryArgMap: Record<string, string> = {
-    browser_navigate: "url", browser_view: "page", browser_tab_new: "url", web_browse: "url",
-    shell_exec: "command",
-    file_read: "file", file_write: "file", file_str_replace: "file",
-    file_find_by_name: "path", file_find_in_content: "file",
-  };
-  const actionMap: Record<string, string> = {
-    browser_navigate: "Membuka", browser_view: "Melihat", browser_tab_new: "Tab baru", web_browse: "Membuka",
-    shell_exec: "Jalankan", shell_view: "Lihat output",
-    file_read: "Membaca", file_write: "Menulis", file_str_replace: "Edit",
-    file_find_by_name: "Cari file", file_find_in_content: "Cari dalam",
-    message_notify_user: "Notifikasi", message_ask_user: "Tanya",
-  };
-  const argKey = primaryArgMap[fnName];
-  let argVal = argKey && args[argKey] ? String(args[argKey]) : "";
-  if (!argVal) {
-    const first = Object.keys(args).find(k => k !== "sudo" && k !== "attachments");
-    argVal = first ? String(args[first] || "") : "";
-  }
+  const first = Object.keys(args).find(k => k !== "sudo" && k !== "attachments");
+  let argVal = first ? String(args[first] || "") : "";
   argVal = argVal.replace(/^\/home\/ubuntu\//, "~/");
   if (argVal.length > 55) argVal = argVal.slice(0, 55) + "…";
-  const action = actionMap[fnName];
-  if (action && argVal) return `${action} ${argVal}`;
-  if (action) return action;
-  return fnName;
+  if (argVal) return `${fnName.replace(/_/g, " ")}: ${argVal}`;
+  return fnName.replace(/_/g, " ");
 }
 
-function getToolIcon(fnName: string, color: string = "#888888"): React.ReactNode {
+// Map tool function name to a small icon character
+function getToolIconChar(fnName: string): string {
   const category = getToolCategory(fnName);
-  const size = 12;
   switch (category) {
     case "browser":
     case "desktop":
-      return <BrowserIcon size={size} color={color} />;
+      return "🌐";
     case "file":
     case "image":
     case "multimedia":
-      return <EditIcon size={size} color={color} />;
+      return "📄";
     case "search":
     case "info":
-      return <SearchIcon size={size} color={color} />;
+      return "🔍";
     case "message":
     case "todo":
     case "task":
     case "email":
-      return <MessageIcon size={size} color={color} />;
+      return "💬";
     case "shell":
     default:
-      return <ShellIcon size={size} color={color} />;
+      return "⚡";
   }
 }
 
-// Animated spinner that rotates continuously
-function SpinnerIcon() {
+// Animated spinner
+function SpinnerIcon({ size = 12 }: { size?: number }) {
   const rotateAnim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     const anim = Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1,
-        duration: 800,
+        duration: 900,
         easing: Easing.linear,
         useNativeDriver: true,
       })
@@ -231,627 +177,456 @@ function SpinnerIcon() {
     anim.start();
     return () => anim.stop();
   }, []);
-
-  const rotate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
+  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   return (
     <Animated.View style={{ transform: [{ rotate }] }}>
-      <View style={spinnerStyles.ring} />
+      <View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: 1.5,
+          borderColor: "#5b8def",
+          borderTopColor: "transparent",
+        }}
+      />
     </Animated.View>
   );
 }
 
-const spinnerStyles = StyleSheet.create({
-  ring: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: "#4a7cf0",
-    borderTopColor: "transparent",
-  },
-});
-
-// Status indicator: spinner (calling), checkmark (called/success), X (error)
-function ToolStatusIcon({ status }: { status?: string }) {
-  const scaleAnim = useRef(new Animated.Value(0.6)).current;
-
+// Fade+slide in for new rows appearing
+function FadeSlideIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(6)).current;
   useEffect(() => {
-    if (status === "called" || status === "error") {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 200,
-        friction: 10,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [status]);
-
-  if (status === "calling") {
-    return <SpinnerIcon />;
-  }
-
-  if (status === "called") {
-    return (
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View style={statusStyles.checkCircle}>
-          <Text style={statusStyles.checkMark}>✓</Text>
-        </View>
-      </Animated.View>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View style={statusStyles.errorCircle}>
-          <Text style={statusStyles.errorMark}>✕</Text>
-        </View>
-      </Animated.View>
-    );
-  }
-
-  // pending / unknown
-  return <View style={statusStyles.pendingDot} />;
+    Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: 250, delay, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 250, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity: fade, transform: [{ translateY: slide }] }}>
+      {children}
+    </Animated.View>
+  );
 }
 
-const statusStyles = StyleSheet.create({
-  checkCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkMark: {
-    fontSize: 11,
-    color: "#4CAF50",
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  errorCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  errorMark: {
-    fontSize: 10,
-    color: "#e05c5c",
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  pendingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#444444",
-    margin: 4,
-  },
-});
+// A single tool-call row (Manus.im style)
+// Shows: [icon circle] [label text...] [status]
+interface ToolRowProps {
+  tool: StepToolEntry;
+  onPress?: () => void;
+}
 
-// Manus-style inline tool step row (icon + label + animated status)
-function ManusToolStepRow({ tool, onPress }: { tool: StepToolEntry; onPress?: () => void }) {
+function ToolRow({ tool, onPress }: ToolRowProps) {
   const fnName = tool.function_name || tool.name || "";
   const args = tool.function_args || tool.input || {};
-  const label = buildStepToolLabel(fnName, args);
+  const label = buildToolLabel(fnName, args);
   const status = tool.status;
-
   const isRunning = status === "calling";
   const isDone = status === "called";
   const isError = status === "error";
-
-  const iconColor = isRunning ? "#4a7cf0" : isDone ? "#4CAF50" : isError ? "#e05c5c" : "#666666";
-  const icon = getToolIcon(fnName, iconColor);
+  const iconChar = getToolIconChar(fnName);
 
   return (
     <TouchableOpacity
-      style={mtsStyles.row}
+      style={trStyles.row}
       onPress={onPress}
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
-      <View style={[mtsStyles.iconWrap, isRunning && mtsStyles.iconWrapRunning, isDone && mtsStyles.iconWrapDone, isError && mtsStyles.iconWrapError]}>
-        {icon}
+      {/* Small icon circle */}
+      <View style={[
+        trStyles.iconCircle,
+        isRunning && trStyles.iconCircleRunning,
+        isDone && trStyles.iconCircleDone,
+        isError && trStyles.iconCircleError,
+      ]}>
+        <Text style={trStyles.iconChar}>{iconChar}</Text>
       </View>
+
+      {/* Label */}
       <Text
         style={[
-          mtsStyles.label,
-          isRunning && mtsStyles.labelRunning,
-          isDone && mtsStyles.labelDone,
-          isError && mtsStyles.labelError,
+          trStyles.label,
+          isRunning && trStyles.labelRunning,
+          isDone && trStyles.labelDone,
+          isError && trStyles.labelError,
         ]}
-        numberOfLines={1}
+        numberOfLines={2}
       >
         {label}
       </Text>
-      <View style={mtsStyles.statusWrap}>
-        <ToolStatusIcon status={status} />
+
+      {/* Status indicator */}
+      <View style={trStyles.statusWrap}>
+        {isRunning && <SpinnerIcon size={11} />}
+        {isDone && <Text style={trStyles.checkmark}>✓</Text>}
+        {isError && <Text style={trStyles.errormark}>✕</Text>}
       </View>
     </TouchableOpacity>
   );
 }
 
-const mtsStyles = StyleSheet.create({
+const trStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    gap: 10,
+    paddingVertical: 6,
   },
-  iconWrap: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    backgroundColor: "#1a1a1a",
+  iconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#1e1e1e",
+    borderWidth: 1,
+    borderColor: "#2d2d2d",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  iconWrapRunning: {
-    backgroundColor: "rgba(74, 124, 240, 0.1)",
+  iconCircleRunning: {
+    borderColor: "#3a5fc0",
+    backgroundColor: "rgba(74, 124, 240, 0.08)",
   },
-  iconWrapDone: {
-    backgroundColor: "rgba(76, 175, 80, 0.08)",
+  iconCircleDone: {
+    borderColor: "#2a4a2a",
+    backgroundColor: "rgba(76, 175, 80, 0.06)",
   },
-  iconWrapError: {
-    backgroundColor: "rgba(224, 92, 92, 0.08)",
+  iconCircleError: {
+    borderColor: "#4a2a2a",
+    backgroundColor: "rgba(220, 80, 80, 0.06)",
+  },
+  iconChar: {
+    fontSize: 12,
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#666666",
+    color: "#888888",
     flex: 1,
+    lineHeight: 19,
   },
   labelRunning: {
-    color: "#a0b4e8",
+    color: "#b8c8f0",
   },
   labelDone: {
-    color: "#888888",
+    color: "#606060",
   },
   labelError: {
-    color: "#c07070",
+    color: "#a06060",
   },
   statusWrap: {
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
+  checkmark: {
+    fontSize: 12,
+    color: "#5a9e60",
+    fontWeight: "700",
+  },
+  errormark: {
+    fontSize: 11,
+    color: "#b05050",
+    fontWeight: "700",
+  },
 });
 
-// Narrative text shown between tool steps (Manus shows progress updates inline)
-function NarrativeText({ message }: { message: string }) {
+// A narrative line shown between tool calls (from notify messages)
+function NarrativeLine({ text }: { text: string }) {
   return (
-    <Text style={narrativeStyles.text}>{cleanText(message)}</Text>
+    <Text style={narStyles.text} numberOfLines={4}>
+      {cleanText(text)}
+    </Text>
   );
 }
 
-const narrativeStyles = StyleSheet.create({
+const narStyles = StyleSheet.create({
   text: {
     fontFamily: "Inter_400Regular",
     fontStyle: "italic",
-    fontSize: 13,
-    color: "#888888",
-    lineHeight: 19,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-});
-
-// Manus-style thought stream: shows current thinking/action status
-function ThoughtStream({ thoughts }: { thoughts: string[] }) {
-  if (!thoughts || thoughts.length === 0) return null;
-  return (
-    <View style={thoughtStyles.container}>
-      {thoughts.map((thought, idx) => (
-        <View key={`thought-${idx}`} style={thoughtStyles.thoughtRow}>
-          <View style={thoughtStyles.thoughtDot} />
-          <Text style={thoughtStyles.thoughtText} numberOfLines={2}>
-            {cleanText(thought)}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-const thoughtStyles = StyleSheet.create({
-  container: {
-    marginTop: 8,
-    paddingHorizontal: 8,
-  },
-  thoughtRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-  },
-  thoughtDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4a7cf0",
-  },
-  thoughtText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#a0b4e8",
-    flex: 1,
+    fontSize: 12.5,
+    color: "#909090",
     lineHeight: 18,
+    paddingVertical: 3,
+    paddingLeft: 34,
   },
 });
 
-function StepStatusIcon({ status }: { status?: string }) {
-  if (status === "calling" || status === "running") {
-    return <SpinnerIcon />;
-  }
-  if (status === "called" || status === "completed") {
-    return (
-      <View style={statusStyles.checkCircle}>
-        <Text style={statusStyles.checkMark}>✓</Text>
-      </View>
-    );
-  }
-  if (status === "error" || status === "failed") {
-    return (
-      <View style={statusStyles.errorCircle}>
-        <Text style={statusStyles.errorMark}>✕</Text>
-      </View>
-    );
-  }
-  return <View style={statusStyles.pendingDot} />;
+// Build a flat list of items: tool calls + narrative inserts, ordered by step
+interface FlatItem {
+  kind: "tool";
+  tool: StepToolEntry;
+  stepId: string;
+  key: string;
+  onPress?: () => void;
 }
 
-interface StepCardProps {
-  step: AgentPlanStep;
-  isLast: boolean;
-  stepNotifyMessages?: string[];
-  onToolPress?: (tool: SelectedToolInfo) => void;
+interface NarrativeItem {
+  kind: "narrative";
+  text: string;
+  key: string;
 }
 
-function StepCard({ step, isLast, stepNotifyMessages = [], onToolPress }: StepCardProps) {
-  const [expanded, setExpanded] = useState(step.status === "running");
-  const tools: StepToolEntry[] = (step as any).tools || [];
-
-  const status = step.status || "pending";
-  const isRunning = status === "running";
-  const isCompleted = status === "completed";
-  const isFailed = status === "failed";
-
-  useEffect(() => {
-    if (isRunning) setExpanded(true);
-  }, [isRunning]);
-
-  return (
-    <View style={stepStyles.stepWrapper}>
-      <View style={stepStyles.stepConnector}>
-        <View style={stepStyles.stepIconCol}>
-          <StepStatusIcon status={status} />
-          {!isLast && <View style={[stepStyles.connectorLine, isCompleted && stepStyles.connectorLineDone]} />}
-        </View>
-        <View style={stepStyles.stepBody}>
-          <TouchableOpacity
-            style={stepStyles.stepHeader}
-            onPress={() => setExpanded((prev) => !prev)}
-            activeOpacity={0.75}
-          >
-            <Text
-              style={[
-                stepStyles.stepDescription,
-                isCompleted && stepStyles.stepDescriptionDone,
-                isFailed && stepStyles.stepDescriptionError,
-                !isCompleted && !isFailed && stepStyles.stepDescriptionPending,
-              ]}
-              numberOfLines={2}
-            >
-              {step.description}
-            </Text>
-            <Text style={stepStyles.expandIcon}>{expanded ? "⌃" : "⌄"}</Text>
-          </TouchableOpacity>
-
-          {expanded && (
-            <View style={stepStyles.stepExpandedContent}>
-              {step.result ? (
-                <Text style={stepStyles.stepResultText} numberOfLines={5}>
-                  {cleanText(step.result)}
-                </Text>
-              ) : null}
-
-              {stepNotifyMessages.map((text, idx) => (
-                <NarrativeText key={`step-notify-${step.id}-${idx}`} message={text} />
-              ))}
-
-              {tools.length > 0 ? (
-                <View style={stepStyles.toolList}>
-                  {tools.map((tool, idx) => {
-                    const fnName = tool.function_name || tool.name || "";
-                    const displayInfo = getToolDisplayInfo(fnName);
-                    const handlePress = onToolPress ? () => {
-                      onToolPress({
-                        functionName: fnName,
-                        functionArgs: tool.function_args || tool.input || {},
-                        status: tool.status || "called",
-                        toolContent: tool.tool_content,
-                        functionResult: tool.function_result || tool.output,
-                        label: displayInfo.label,
-                        icon: displayInfo.icon,
-                        iconColor: displayInfo.color,
-                      });
-                    } : undefined;
-                    return (
-                      <ManusToolStepRow
-                        key={`tool-${step.id}-${tool.tool_call_id || idx}`}
-                        tool={tool}
-                        onPress={handlePress}
-                      />
-                    );
-                  })}
-                </View>
-              ) : null}
-            </View>
-          )}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-const stepStyles = StyleSheet.create({
-  stepWrapper: {
-    paddingVertical: 8,
-    paddingRight: 8,
-  },
-  stepConnector: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  stepIconCol: {
-    width: 26,
-    alignItems: "center",
-  },
-  connectorLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: "#333333",
-    marginTop: 4,
-  },
-  connectorLineDone: {
-    backgroundColor: "#4CAF50",
-  },
-  stepBody: {
-    flex: 1,
-  },
-  stepHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  stepDescription: {
-    flex: 1,
-    fontFamily: "Inter_500Medium",
-    fontSize: 14,
-    color: "#d0d0d0",
-    lineHeight: 20,
-  },
-  stepDescriptionDone: {
-    color: "#9ecb9c",
-  },
-  stepDescriptionError: {
-    color: "#f2a1a1",
-  },
-  stepDescriptionPending: {
-    color: "#c8c8c8",
-  },
-  expandIcon: {
-    fontSize: 12,
-    color: "#8a8a8a",
-  },
-  stepExpandedContent: {
-    marginTop: 8,
-    paddingLeft: 6,
-    gap: 6,
-  },
-  stepResultText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#b8b8b8",
-    lineHeight: 19,
-  },
-  toolList: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
-  },
-});
+type DisplayItem = FlatItem | NarrativeItem;
 
 export function AgentGoalMessage({ message }: { message: string }) {
-  return (
-    <Text style={goalMessageStyles.text}>{cleanText(message)}</Text>
-  );
+  return <Text style={goalStyles.text}>{cleanText(message)}</Text>;
 }
 
-const goalMessageStyles = StyleSheet.create({
+const goalStyles = StyleSheet.create({
   text: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
-    color: "#c8c8c8",
+    color: "#c0c0c0",
     lineHeight: 21,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
 });
 
 /**
- * Manus-style AgentPlanView: A single collapsible task block.
- * Shows task title with circle indicator, steps inside with icons,
- * and inline narrative text between steps.
+ * Manus-style AgentPlanView
+ *
+ * Renders a single collapsible task block.
+ * Inside, tool calls from all active steps appear ONE BY ONE as they execute.
+ * Narrative/notify text appears inline between them.
+ * Pending steps (not yet started) produce no visible rows.
  */
-export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, thoughtStream, onToolPress }: AgentPlanViewProps) {
-  const steps = plan.steps || [];
-  // Collapsed by default - Manus style: minimal plan preview, expand on demand
-  const [expanded, setExpanded] = useState(false);
+export function AgentPlanView({
+  plan,
+  notifyMessages,
+  stepNotifyMessages,
+  thoughtStream,
+  onToolPress,
+}: AgentPlanViewProps) {
+  const allSteps = plan.steps || [];
 
-  const isAllDone = plan.status === "completed" || (steps.length > 0 && steps.every(s => s.status === "completed" || s.status === "failed"));
-  const isRunning = plan.status === "running" || steps.some(s => s.status === "running");
-  const goalText = plan.goal ? cleanText(plan.goal) : null;
-  const completedCount = steps.filter(s => s.status === "completed" || s.status === "failed").length;
-  const totalCount = steps.length;
+  // Only process steps that have been started
+  const activeSteps = allSteps.filter(
+    s => s.status === "running" || s.status === "completed" || s.status === "failed"
+  );
 
-  const buildContent = () => {
-    return steps.map((step, index) => {
-      const stepTexts = (stepNotifyMessages || [])
-        .filter((n) => n.stepId === step.id)
-        .map((n) => n.text);
-      return (
-        <StepCard
-          key={step.id || `step-${index}`}
-          step={step}
-          isLast={index === steps.length - 1}
-          stepNotifyMessages={stepTexts}
-          onToolPress={onToolPress}
-        />
-      );
+  const isAllDone =
+    plan.status === "completed" ||
+    (allSteps.length > 0 && allSteps.every(s => s.status === "completed" || s.status === "failed"));
+  const isRunning =
+    plan.status === "running" || allSteps.some(s => s.status === "running");
+
+  const completedCount = allSteps.filter(s => s.status === "completed" || s.status === "failed").length;
+  const totalCount = allSteps.length;
+
+  // Collapse on done, expand while running
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    if (isRunning) setExpanded(true);
+  }, [isRunning]);
+
+  // Build flat display list: tools + narratives interleaved by step
+  const displayItems: DisplayItem[] = [];
+  for (const step of activeSteps) {
+    const tools: StepToolEntry[] = (step as any).tools || [];
+    const narratives = (stepNotifyMessages || [])
+      .filter(n => n.stepId === step.id)
+      .map(n => n.text);
+
+    // Add tool call rows for this step
+    tools.forEach((tool, idx) => {
+      const fnName = tool.function_name || tool.name || "";
+      displayItems.push({
+        kind: "tool",
+        tool,
+        stepId: step.id,
+        key: `${step.id}-tool-${tool.tool_call_id || idx}`,
+        onPress: onToolPress
+          ? () => {
+              onToolPress({
+                functionName: fnName,
+                functionArgs: tool.function_args || tool.input || {},
+                status: tool.status || "called",
+                toolContent: tool.tool_content,
+                functionResult: tool.function_result || tool.output,
+                label: fnName,
+                icon: "search",
+                iconColor: "#4a7cf0",
+              });
+            }
+          : undefined,
+      });
     });
-  };
+
+    // Add narrative rows after this step's tools
+    narratives.forEach((text, i) => {
+      displayItems.push({
+        kind: "narrative",
+        text,
+        key: `${step.id}-nar-${i}`,
+      });
+    });
+  }
+
+  // Plan-level notify messages appear at the bottom
+  const planNarratives = notifyMessages || [];
 
   return (
-    <View style={styles.container}>
+    <View style={planStyles.container}>
+      {/* Phase header — Manus-style: circle icon + task title + progress + chevron */}
       <TouchableOpacity
-        style={styles.taskHeader}
+        style={planStyles.header}
         onPress={() => setExpanded(v => !v)}
-        activeOpacity={0.7}
+        activeOpacity={0.75}
       >
-        <View style={[
-          styles.taskCircle,
-          isRunning && styles.taskCircleRunning,
-          isAllDone && styles.taskCircleDone,
-        ]}>
-          {isAllDone && <CheckCircleIcon size={18} color="#4CAF50" />}
-          {isRunning && !isAllDone && <SpinnerIcon />}
-        </View>
-        <View style={styles.taskHeaderText}>
-          <Text style={[
-            styles.taskTitle,
-            isAllDone && styles.taskTitleDone,
-          ]} numberOfLines={2}>
-            {plan.title || "Tugas"}
-          </Text>
-          {goalText ? (
-            <Text style={styles.taskSubtitle} numberOfLines={2}>
-              {goalText}
-            </Text>
+        {/* Phase status circle */}
+        <View
+          style={[
+            planStyles.phaseCircle,
+            isAllDone && planStyles.phaseCircleDone,
+            isRunning && !isAllDone && planStyles.phaseCircleRunning,
+          ]}
+        >
+          {isAllDone ? (
+            <Text style={planStyles.phaseCircleCheck}>✓</Text>
+          ) : isRunning ? (
+            <SpinnerIcon size={10} />
           ) : null}
-          <Text style={styles.taskCount}>
-            {completedCount}/{totalCount} langkah selesai
-          </Text>
         </View>
-        {expanded
-          ? <ChevronUpIcon size={16} color="#666666" />
-          : <ChevronDownIcon size={16} color="#666666" />
-        }
+
+        <Text
+          style={[
+            planStyles.phaseTitle,
+            isAllDone && planStyles.phaseTitleDone,
+          ]}
+          numberOfLines={2}
+        >
+          {plan.title || "Mengerjakan tugas"}
+        </Text>
+
+        <View style={planStyles.headerRight}>
+          {totalCount > 0 && (
+            <Text style={planStyles.counter}>
+              {completedCount}/{totalCount}
+            </Text>
+          )}
+          <Text style={planStyles.chevron}>{expanded ? "⌃" : "⌄"}</Text>
+        </View>
       </TouchableOpacity>
 
-      {expanded && (
-        <View style={styles.taskContent}>
-          {thoughtStream && thoughtStream.length > 0 && (
-            <ThoughtStream thoughts={thoughtStream} />
-          )}
-          {buildContent()}
-          {notifyMessages && notifyMessages.length > 0 ? (
-            <View style={styles.planNotifyContainer}>
-              {notifyMessages.map((msg, idx) => (
-                <NarrativeText key={`plan-notify-${idx}`} message={msg} />
-              ))}
-            </View>
-          ) : null}
+      {/* Content — flat list of tool rows + narrative lines */}
+      {expanded && displayItems.length > 0 && (
+        <View style={planStyles.content}>
+          {displayItems.map(item => (
+            <FadeSlideIn key={item.key}>
+              {item.kind === "tool" ? (
+                <ToolRow
+                  tool={(item as FlatItem).tool}
+                  onPress={(item as FlatItem).onPress}
+                />
+              ) : (
+                <NarrativeLine text={(item as NarrativeItem).text} />
+              )}
+            </FadeSlideIn>
+          ))}
+
+          {/* Plan-level narratives */}
+          {planNarratives.map((text, i) => (
+            <FadeSlideIn key={`plan-nar-${i}`}>
+              <NarrativeLine text={text} />
+            </FadeSlideIn>
+          ))}
+        </View>
+      )}
+
+      {/* Empty state while loading first step */}
+      {expanded && displayItems.length === 0 && isRunning && (
+        <View style={planStyles.loadingRow}>
+          <SpinnerIcon size={10} />
+          <Text style={planStyles.loadingText}>Mempersiapkan...</Text>
         </View>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const planStyles = StyleSheet.create({
   container: {
-    borderLeftWidth: 2,
-    borderLeftColor: "#2a2a2a",
-    marginLeft: 4,
-    marginTop: 4,
+    marginVertical: 4,
   },
-  taskHeader: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingRight: 2,
   },
-  taskCircle: {
+  phaseCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
+    backgroundColor: "#1e1e1e",
     borderWidth: 1.5,
-    borderColor: "#444444",
-    backgroundColor: "transparent",
+    borderColor: "#383838",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  taskHeaderText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  taskSubtitle: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#999999",
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  taskCount: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#777777",
-    marginTop: 2,
-  },
-  taskCircleRunning: {
+  phaseCircleRunning: {
     borderColor: "#4a7cf0",
-    borderWidth: 0,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(74, 124, 240, 0.1)",
   },
-  taskCircleDone: {
+  phaseCircleDone: {
     borderColor: "#4CAF50",
-    backgroundColor: "transparent",
-    borderWidth: 0,
+    backgroundColor: "rgba(76, 175, 80, 0.1)",
   },
-  taskTitle: {
-    flex: 1,
+  phaseCircleCheck: {
+    fontSize: 10,
+    color: "#5CAF5C",
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  phaseTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
     color: "#d0d0d0",
     lineHeight: 20,
+    flex: 1,
   },
-  taskTitleDone: {
-    color: "#c8c8c8",
+  phaseTitleDone: {
+    color: "#808080",
   },
-  taskContent: {
-    paddingLeft: 4,
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  counter: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#505050",
+  },
+  chevron: {
+    fontSize: 11,
+    color: "#505050",
+  },
+  content: {
+    paddingLeft: 30,
+    paddingTop: 2,
     paddingBottom: 4,
-    gap: 1,
   },
-  planNotifyContainer: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
-    paddingTop: 8,
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 30,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
+  loadingText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#606060",
   },
 });
