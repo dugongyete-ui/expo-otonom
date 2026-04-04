@@ -320,7 +320,7 @@ async function restartBrowserOnly(
 
   // Kill any zombie browser/chrome processes first
   try {
-    await sandbox.commands.run("pkill -f 'chrome|chromium' 2>/dev/null; sleep 1", { timeout: 5000 });
+    await sandbox.commands.run("pkill -f 'chrome|chromium' 2>/dev/null; sleep 1", { timeoutMs: 5000 });
   } catch {
     // ignore — processes may already be gone
   }
