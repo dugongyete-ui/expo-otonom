@@ -20,12 +20,14 @@ export const AGENT_EVENT_TYPES = {
   MESSAGE: "message",
   MESSAGE_CORRECT: "message_correct",
   WAITING_FOR_USER: "waiting_for_user",
+  WAIT: "wait",
   ASK: "ask",
   NOTIFY: "notify",
   FILES: "files",
   TITLE: "title",
   THINKING: "thinking",
   VNC_STREAM_URL: "vnc_stream_url",
+  SCREENSHOT: "screenshot",
   BROWSER_SCREENSHOT: "browser_screenshot",
   DESKTOP_SCREENSHOT: "desktop_screenshot",
   ERROR: "error",
@@ -601,6 +603,7 @@ export function processAgentEvent(event: AgentEvent): NormalizedEvent {
       };
 
     case AGENT_EVENT_TYPES.WAITING_FOR_USER:
+    case AGENT_EVENT_TYPES.WAIT:
     case AGENT_EVENT_TYPES.ASK:
       return { kind: "waiting_for_user" };
 
@@ -669,15 +672,18 @@ export function processAgentEvent(event: AgentEvent): NormalizedEvent {
         e2bSessionId: event.e2b_session_id || "",
       };
 
+    case AGENT_EVENT_TYPES.SCREENSHOT:
     case AGENT_EVENT_TYPES.BROWSER_SCREENSHOT:
     case AGENT_EVENT_TYPES.DESKTOP_SCREENSHOT: {
       const raw = event.screenshot_b64 || "";
       const normalized = raw && !raw.startsWith("data:")
         ? `data:image/png;base64,${raw}`
         : raw;
+      const source: "browser" | "desktop" =
+        type === AGENT_EVENT_TYPES.DESKTOP_SCREENSHOT ? "desktop" : "browser";
       return {
         kind: "screenshot",
-        source: type === AGENT_EVENT_TYPES.BROWSER_SCREENSHOT ? "browser" : "desktop",
+        source,
         screenshotB64: normalized,
         callId: event.tool_call_id,
         url: event.url || "",

@@ -14,7 +14,7 @@ import {
 } from "@/components/icons/SvgIcon";
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
 import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl, DEFAULT_MODEL_FALLBACK } from "../lib/api-service";
-import { processAgentEvent } from "../lib/agent-event-processor";
+import { processAgentEvent, AgentPhase } from "../lib/agent-event-processor";
 import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
 import { randomUUID } from "expo-crypto";
 import { useI18n, t as translate } from "@/lib/i18n";
@@ -29,7 +29,7 @@ import type { ToolContent } from "@/lib/chat";
 interface AgentPlanStep {
   id: string;
   description: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "started" | "completed" | "failed";
   result?: string;
   error?: string;
 }
@@ -37,7 +37,7 @@ interface AgentPlanStep {
 interface AgentPlan {
   title: string;
   steps: AgentPlanStep[];
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "created" | "updated" | "completed" | "failed";
 }
 
 interface CreatedFile {
@@ -454,6 +454,7 @@ export function ChatPage({
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isWaitingForUser, setIsWaitingForUser] = useState(false);
+  const [agentPhase, setAgentPhase] = useState<AgentPhase>("IDLE");
   const [thinking, setThinking] = useState({ active: false, label: "", stepLabel: "" as string | undefined });
   const [tools, setTools] = useState<any[]>([]);
   const [stepHistory, setStepHistory] = useState<string[]>([]);
@@ -745,6 +746,7 @@ export function ChatPage({
       filesShownViaNotifyRef.current = false;
       setStreamingContent('');
       setThinking({ active: false, label: '', stepLabel: undefined });
+      setAgentPhase("IDLE");
       setIsLoading(false);
       setIsWaitingForUser(false);
       isWaitingRef.current = false;
@@ -841,6 +843,14 @@ export function ChatPage({
         const planData = ev.plan as AgentPlan | undefined;
         const planStatus = ev.status as string | undefined;
 
+        if (planStatus === "created") {
+          setAgentPhase("PLANNING");
+        } else if (planStatus === "updated") {
+          setAgentPhase("UPDATING");
+        } else if (planStatus === "completed") {
+          setAgentPhase("IDLE");
+        }
+
         if (planData && !planMsgIdRef.current) {
           const planMsgId = `plan_${Date.now()}_${msgCounterRef.current++}`;
           planMsgIdRef.current = planMsgId;
@@ -853,7 +863,7 @@ export function ChatPage({
             plan: planData,
           };
           setMessages(prev => [...prev, planMsg]);
-          setThinking({ active: true, label: planData.title || "Membuat rencana...", stepLabel: planData.title });
+          setThinking({ active: true, label: "Merencanakan...", stepLabel: planData.title });
           if (planData.title) setActivePlanTitle(planData.title);
           setPlanHistory(prev => {
             const exists = prev.some(p => p.id === planData.id);
@@ -868,11 +878,13 @@ export function ChatPage({
             m.id === planMsgIdRef.current ? { ...m, plan: planData } : m
           ));
           setPlanHistory(prev => prev.map(p => p.id === planData.id ? planData : p));
-          if (planStatus === "completed") {
+          if (planStatus === "updated") {
+            setThinking({ active: true, label: "Memperbarui rencana..." });
+          } else if (planStatus === "completed") {
             setThinking({ active: false, label: "" });
           }
         } else if (!planData) {
-          setThinking({ active: true, label: "Membuat rencana...", stepLabel: (ev.plan as any)?.title });
+          setThinking({ active: true, label: "Merencanakan...", stepLabel: (ev.plan as any)?.title });
         }
         return;
       }
@@ -892,7 +904,8 @@ export function ChatPage({
           ));
         }
 
-        if (status === "running" && step?.description) {
+        if ((status === "running" || status === "started") && step?.description) {
+          setAgentPhase("EXECUTING");
           lastStepIdRef.current = null;
           currentRunningStepIdRef.current = step.id;
           setStepHistory(prev => {
@@ -1288,6 +1301,7 @@ export function ChatPage({
           streamingMsgIdRef.current = null;
           setStreamingContent("");
         }
+        setAgentPhase("IDLE");
         setThinking({ active: false, label: "", stepLabel: undefined });
         currentRunningStepIdRef.current = null;
         lastStepIdRef.current = null;
@@ -1478,7 +1492,10 @@ export function ChatPage({
       }
 
       case "error": {
+        setAgentPhase("IDLE");
         setThinking({ active: false, label: "" });
+        currentRunningStepIdRef.current = null;
+        lastStepIdRef.current = null;
         const errMsg: ChatMessage = {
           id: `msg_${Date.now()}_${msgCounterRef.current++}_err`,
           role: "assistant",
@@ -1491,7 +1508,17 @@ export function ChatPage({
         return;
       }
 
+      case "waiting_for_user": {
+        setAgentPhase("IDLE");
+        setThinking({ active: false, label: "" });
+        setIsWaitingForUser(true);
+        isWaitingRef.current = true;
+        setIsLoading(false);
+        return;
+      }
+
       case "summarize": {
+        setAgentPhase("SUMMARIZING");
         setThinking({ active: true, label: "Menyimpulkan..." });
         if (ev.text) {
           const summaryMsg: ChatMessage = {
@@ -1609,7 +1636,8 @@ export function ChatPage({
       currentRunningStepIdRef.current = null;
       lastStepIdRef.current = null;
     }
-    setThinking({ active: true, label: isAgentMode ? "Dzeck sedang berpikir..." : "Memikirkan jawaban..." });
+    setAgentPhase("PLANNING");
+    setThinking({ active: true, label: isAgentMode ? "Merencanakan..." : "Memikirkan jawaban..." });
 
     try {
       if (isAgentMode) {
@@ -1723,6 +1751,7 @@ export function ChatPage({
       cancelRef.current = null;
     }
     setIsLoading(false);
+    setAgentPhase("IDLE");
     setThinking({ active: false, label: "" });
 
     if (!sid) return;
@@ -2233,7 +2262,15 @@ export function ChatPage({
         ListFooterComponent={
           thinking.active ? (
             <View>
-              <ManusThinkingIndicator label={thinking.label} />
+              <ManusThinkingIndicator
+                label={
+                  agentPhase === "SUMMARIZING" ? "Menyimpulkan..." :
+                  agentPhase === "UPDATING" ? (thinking.label || "Memperbarui rencana...") :
+                  agentPhase === "PLANNING" ? (thinking.label || "Merencanakan...") :
+                  agentPhase === "EXECUTING" ? (thinking.label || "Mengerjakan...") :
+                  thinking.label || "Sedang berpikir..."
+                }
+              />
             </View>
           ) : taskCompleted ? (
             <View style={styles.taskCompletedWrap}>

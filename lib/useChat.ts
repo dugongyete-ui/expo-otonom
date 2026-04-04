@@ -137,8 +137,10 @@ export function useChat(
     [messages, setMessages]
   );
 
-  // Build the callbacks for the shared reducer once, stable via useCallback
-  const reducerCallbacks = useCallback((): FlatChatReducerCallbacks => ({
+  // Stable callbacks ref — updated on every render so callbacks always close over fresh state setters.
+  // Using a ref avoids stale closures while keeping applyEventToFlatMessages call stable (no dep array churn).
+  const reducerCallbacksRef = useRef<FlatChatReducerCallbacks>({});
+  reducerCallbacksRef.current = {
     onSessionId: (id) => { sessionIdRef.current = id; setSessionId(id); },
     onWaitingForUser: () => { setIsWaitingForUser(true); setIsLoading(false); },
     onPlan: (plan, status) => {
@@ -199,14 +201,15 @@ export function useChat(
     onSummarize: () => {
       setAgentPhase("SUMMARIZING");
     },
-  }), [onVncUrl, onBrowserEvent]);
+  };
 
-  // Dispatch one agent event through the shared flat-message reducer
+  // Dispatch one agent event through the shared flat-message reducer.
+  // Uses reducerCallbacksRef so it always reads the latest callbacks without re-creating handleNormalizedEvent.
   const handleNormalizedEvent = useCallback(
     (ev: ReturnType<typeof processAgentEvent>) => {
-      setMessages((prev) => applyEventToFlatMessages(prev, ev, streamingMsgIdRef, getToolActionVerb, reducerCallbacks(), currentStepIdRef));
+      setMessages((prev) => applyEventToFlatMessages(prev, ev, streamingMsgIdRef, getToolActionVerb, reducerCallbacksRef.current, currentStepIdRef));
     },
-    [reducerCallbacks]
+    [] // stable — reducerCallbacksRef always points to current callbacks
   );
 
   const handleAgentChat = useCallback(
