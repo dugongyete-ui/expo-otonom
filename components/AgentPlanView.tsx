@@ -8,7 +8,6 @@ import {
   Easing,
 } from "react-native";
 import type { AgentPlan, ToolContent } from "@/lib/chat";
-import { getToolCategory } from "@/lib/tool-constants";
 import { cleanText } from "@/lib/text-utils";
 
 export interface SelectedToolInfo {
@@ -44,7 +43,7 @@ interface StepToolEntry {
   tool_content?: ToolContent;
 }
 
-// ─── Tool label builder ──────────────────────────────────────────────────────
+// ─── Tool label ──────────────────────────────────────────────────────────────
 
 function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
   if (fnName === "browser_navigate" || fnName === "web_browse") {
@@ -137,66 +136,35 @@ function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
   return fnName.replace(/_/g, " ");
 }
 
-// ─── Tool icon (minimal, no emoji) ──────────────────────────────────────────
-
-type ToolIconStyle = {
-  bg: string;
-  border: string;
-  dot: string;
-  letter: string;
-};
-
-function getToolIconStyle(fnName: string): ToolIconStyle {
-  const cat = getToolCategory(fnName);
-  switch (cat) {
-    case "search":
-    case "info":
-      return { bg: "#141e30", border: "#1e3050", dot: "#3a6abf", letter: "S" };
-    case "browser":
-    case "desktop":
-      return { bg: "#141e14", border: "#1e3020", dot: "#3a8a3a", letter: "W" };
-    case "file":
-    case "image":
-    case "multimedia":
-      return { bg: "#1e1814", border: "#302818", dot: "#8a6a30", letter: "F" };
-    case "shell":
-      return { bg: "#1e1428", border: "#30204a", dot: "#6a40a0", letter: ">" };
-    case "message":
-    case "todo":
-    case "task":
-    case "email":
-      return { bg: "#1a1e14", border: "#283018", dot: "#5a8030", letter: "M" };
-    default:
-      return { bg: "#181818", border: "#282828", dot: "#505050", letter: "•" };
-  }
-}
-
 // ─── Animated helpers ────────────────────────────────────────────────────────
 
-function SpinnerIcon({ size = 12 }: { size?: number }) {
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+function SpinnerIcon({ size = 11 }: { size?: number }) {
+  const rotAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const anim = Animated.loop(
-      Animated.timing(rotateAnim, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(rotAnim, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
     );
     anim.start();
     return () => anim.stop();
   }, []);
-  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  const rotate = rotAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   return (
     <Animated.View style={{ transform: [{ rotate }] }}>
-      <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 1.5, borderColor: "#5b8def", borderTopColor: "transparent" }} />
+      <View style={{
+        width: size, height: size, borderRadius: size / 2,
+        borderWidth: 1.5, borderColor: "#7090c8", borderTopColor: "transparent",
+      }} />
     </Animated.View>
   );
 }
 
 function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const fade = useRef(new Animated.Value(0)).current;
-  const slide = useRef(new Animated.Value(7)).current;
+  const slide = useRef(new Animated.Value(6)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 230, delay, useNativeDriver: true }),
-      Animated.timing(slide, { toValue: 0, duration: 230, delay, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 220, delay, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 220, delay, useNativeDriver: true }),
     ]).start();
   }, []);
   return (
@@ -207,7 +175,8 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
 }
 
 // ─── Tool Pill ───────────────────────────────────────────────────────────────
-// Manus.im style: no emoji, minimal colored letter-dot icon on left, label text
+// Shows ALL tools — calling (with spinner), called (with check), error (with ✕)
+// Consistent gray color scheme throughout (no colorful dots)
 
 interface ToolPillProps {
   tool: StepToolEntry;
@@ -219,28 +188,44 @@ function ToolPill({ tool, animDelay = 0, onPress }: ToolPillProps) {
   const fnName = tool.function_name || tool.name || "";
   const args = tool.function_args || tool.input || {};
   const label = buildToolLabel(fnName, args);
+  const isCalling = tool.status === "calling";
+  const isCalled = tool.status === "called";
   const isError = tool.status === "error";
-  const iconStyle = getToolIconStyle(fnName);
 
   return (
     <FadeIn delay={animDelay}>
       <TouchableOpacity
-        style={[pillStyles.pill, isError && pillStyles.pillError]}
+        style={[
+          pillStyles.pill,
+          isCalling && pillStyles.pillCalling,
+          isError && pillStyles.pillError,
+        ]}
         onPress={onPress}
         activeOpacity={onPress ? 0.7 : 1}
         disabled={!onPress}
       >
-        {/* Minimal icon: small colored dot in a circle (no emoji) */}
+        {/* Status indicator on left — always gray scheme */}
         <View style={[
-          pillStyles.iconWrap,
-          { backgroundColor: isError ? "#1a1515" : iconStyle.bg, borderColor: isError ? "#3a1f1f" : iconStyle.border }
+          pillStyles.statusDot,
+          isCalling && pillStyles.statusDotCalling,
+          isError && pillStyles.statusDotError,
         ]}>
-          <View style={[pillStyles.iconDot, { backgroundColor: isError ? "#804040" : iconStyle.dot }]} />
+          {isCalling ? (
+            <SpinnerIcon size={9} />
+          ) : isCalled ? (
+            <Text style={pillStyles.checkChar}>✓</Text>
+          ) : isError ? (
+            <Text style={pillStyles.errorChar}>✕</Text>
+          ) : null}
         </View>
 
         {/* Label */}
         <Text
-          style={[pillStyles.label, isError && pillStyles.labelError]}
+          style={[
+            pillStyles.label,
+            isCalling && pillStyles.labelCalling,
+            isError && pillStyles.labelError,
+          ]}
           numberOfLines={1}
           ellipsizeMode="tail"
         >
@@ -257,47 +242,75 @@ const pillStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#181818",
     borderWidth: 1,
-    borderColor: "#252525",
+    borderColor: "#242424",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 7,
     marginBottom: 5,
     gap: 9,
   },
-  pillError: {
-    borderColor: "#3a1f1f",
-    backgroundColor: "#181212",
+  pillCalling: {
+    borderColor: "#2a3a58",
+    backgroundColor: "#141820",
   },
-  iconWrap: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  pillError: {
+    borderColor: "#382020",
+    backgroundColor: "#160f0f",
+  },
+
+  // Left status indicator circle
+  statusDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#222222",
     borderWidth: 1,
+    borderColor: "#303030",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  iconDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  statusDotCalling: {
+    borderColor: "#3a5890",
+    backgroundColor: "#111828",
   },
+  statusDotError: {
+    borderColor: "#502828",
+    backgroundColor: "#1a0f0f",
+  },
+
+  checkChar: {
+    fontSize: 9,
+    color: "#606060",
+    fontWeight: "700",
+    lineHeight: 11,
+  },
+  errorChar: {
+    fontSize: 9,
+    color: "#906060",
+    fontWeight: "700",
+    lineHeight: 11,
+  },
+
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#808080",
+    color: "#686868",
     flex: 1,
     lineHeight: 18,
   },
+  labelCalling: {
+    color: "#8090b8",
+  },
   labelError: {
-    color: "#8a5050",
+    color: "#906868",
   },
 });
 
-// ─── Narrative filter ────────────────────────────────────────────────────────
-// Keeps ONLY clean goal-summary text. Strips verbose patterns the agent outputs.
+// ─── Narrative filter ─────────────────────────────────────────────────────────
+// Only show short, clean goal summaries — filter out verbose AI step results
 
-const VERBOSE_PREFIXES = [
+const VERBOSE_PREFIXES_LC = [
   "saya telah menyelesaikan:",
   "berikut adalah",
   "berikut ini",
@@ -311,33 +324,35 @@ const VERBOSE_PREFIXES = [
   "laporan ringkas",
   "laporan terbaru",
   "laporan komprehensif",
+  "laporan tentang",
   "laporan ini",
+  "informasi tentang timnas",
+  "tim nasional indonesia saat ini",
+  "1. **",
+  "**pembaruan",
+  "peringkat fifa:",
+  "berikut ringkasan",
 ];
 
-function isVerboseText(text: string): boolean {
-  const lower = text.toLowerCase().trim();
-  if (lower.length > 280) return true;
-  for (const prefix of VERBOSE_PREFIXES) {
-    if (lower.startsWith(prefix)) return true;
+function isVerbose(text: string): boolean {
+  const lc = text.toLowerCase().trim();
+  if (lc.length > 260) return true;
+  for (const p of VERBOSE_PREFIXES_LC) {
+    if (lc.startsWith(p)) return true;
   }
   return false;
 }
 
-/**
- * Pick the best narrative for a step's notify messages.
- * Returns the LAST clean (non-verbose) message, or null if none pass.
- */
 function pickBestNarrative(messages: string[]): string | null {
   const clean = messages.filter(t => {
     const c = cleanText(t) || "";
-    return c.trim().length > 10 && !isVerboseText(c);
+    return c.trim().length > 10 && !isVerbose(c);
   });
   if (clean.length === 0) return null;
-  // Return the last clean message
   return clean[clean.length - 1];
 }
 
-// ─── Narrative line ──────────────────────────────────────────────────────────
+// ─── Narrative line ───────────────────────────────────────────────────────────
 
 function NarrativeLine({ text, animDelay = 0 }: { text: string; animDelay?: number }) {
   const MAX_CHARS = 220;
@@ -361,7 +376,29 @@ const narStyles = StyleSheet.create({
   },
 });
 
-// ─── Thinking row (initial loading state inside block) ───────────────────────
+// ─── Phase circle spinner ─────────────────────────────────────────────────────
+
+function PhaseSpinner() {
+  const rotAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(rotAnim, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  const rotate = rotAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  return (
+    <Animated.View style={{ transform: [{ rotate }] }}>
+      <View style={{
+        width: 10, height: 10, borderRadius: 5,
+        borderWidth: 1.5, borderColor: "#5b8def", borderTopColor: "transparent",
+      }} />
+    </Animated.View>
+  );
+}
+
+// ─── Initial thinking row ─────────────────────────────────────────────────────
 
 function ThinkingRow() {
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
@@ -376,20 +413,19 @@ function ThinkingRow() {
     return () => anim.stop();
   }, []);
   return (
-    <View style={thinkStyles.row}>
-      <Animated.View style={[thinkStyles.dot, { opacity: pulseAnim }]} />
-      <Text style={thinkStyles.label}>Sedang berpikir</Text>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 }}>
+      <Animated.View style={{
+        width: 7, height: 7, borderRadius: 3.5,
+        backgroundColor: "#4a7cf0", opacity: pulseAnim,
+      }} />
+      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#5a78b8" }}>
+        Sedang berpikir
+      </Text>
     </View>
   );
 }
 
-const thinkStyles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
-  dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#4a7cf0" },
-  label: { fontFamily: "Inter_400Regular", fontSize: 13, color: "#5a78b8" },
-});
-
-// ─── AgentGoalMessage ────────────────────────────────────────────────────────
+// ─── AgentGoalMessage ─────────────────────────────────────────────────────────
 
 export function AgentGoalMessage({ message }: { message: string }) {
   return <Text style={goalStyles.text}>{cleanText(message)}</Text>;
@@ -399,23 +435,14 @@ const goalStyles = StyleSheet.create({
   text: { fontFamily: "Inter_400Regular", fontSize: 14, color: "#c0c0c0", lineHeight: 21, paddingVertical: 4 },
 });
 
-// ─── Main component ──────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 
 /**
  * AgentPlanView — Manus.im-style task block
  *
- * Visual structure:
- *   ○/✓  Task title                                     2/2  ⌃
- *   │  [pill: Mencari informasi terbaru timnas...]
- *   │  [pill: Navigasi ke pssi.org]
- *   │  Saya menemukan ranking FIFA terbaru Indonesia…    ← clean goal narrative only
- *   │  [pill: Menyimpan temuan awal tentang Timnas...]
- *   │  ● Sedang berpikir  ← only when no content yet
- *
- * Rules:
- * - Only COMPLETED (status "called"/"error") tools show as pills
- * - Running tool handled by ChatPage's ManusThinkingIndicator (external, below)
- * - Narrative: show only the LAST clean notify message per step (skip verbose text)
+ * Shows ALL tools (calling=spinner, called=✓, error=✕) so pills never disappear.
+ * Narrative: only the last clean short summary per step (verbose text filtered out).
+ * Consistent gray color scheme throughout.
  */
 export function AgentPlanView({
   plan,
@@ -439,7 +466,7 @@ export function AgentPlanView({
     if (isRunning) setExpanded(true);
   }, [isRunning]);
 
-  // Build display items: completed tool pills + one clean narrative per step
+  // All steps that have started (running, completed, or failed)
   const activeSteps = allSteps.filter(
     s => s.status === "running" || s.status === "completed" || s.status === "failed"
   );
@@ -459,32 +486,26 @@ export function AgentPlanView({
       .filter(n => n.stepId === step.id)
       .map(n => n.text);
 
-    // Add COMPLETED tool pills only
+    // Show ALL tools regardless of status (calling, called, error)
     tools.forEach((tool, tIdx) => {
-      if (tool.status === "called" || tool.status === "error") {
-        displayItems.push({
-          kind: "pill",
-          key: `${step.id}-tool-${tool.tool_call_id || tIdx}`,
-          tool,
-        });
-      }
+      displayItems.push({
+        kind: "pill",
+        key: `${step.id}-tool-${tool.tool_call_id || tIdx}`,
+        tool,
+      });
     });
 
-    // Add only 1 clean narrative per step (last valid one)
+    // One clean narrative per step
     const best = pickBestNarrative(stepMsgs);
     if (best) {
-      displayItems.push({
-        kind: "narrative",
-        key: `${step.id}-nar`,
-        text: best,
-      });
+      displayItems.push({ kind: "narrative", key: `${step.id}-nar`, text: best });
     }
   }
 
-  // Plan-level narratives (fallback)
+  // Plan-level narratives
   const planNarratives = (notifyMessages || []).filter(t => {
     const c = cleanText(t) || "";
-    return c.trim().length > 10 && !isVerboseText(c);
+    return c.trim().length > 10 && !isVerbose(c);
   });
 
   const hasContent = displayItems.length > 0 || planNarratives.length > 0;
@@ -505,7 +526,7 @@ export function AgentPlanView({
           {isAllDone ? (
             <Text style={planStyles.phaseCheck}>✓</Text>
           ) : isRunning ? (
-            <SpinnerIcon size={10} />
+            <PhaseSpinner />
           ) : null}
         </View>
 
@@ -536,7 +557,7 @@ export function AgentPlanView({
                     <ToolPill
                       key={item.key}
                       tool={item.tool}
-                      animDelay={i * 45}
+                      animDelay={i * 40}
                       onPress={onToolPress ? () => {
                         const fnName = item.tool!.function_name || item.tool!.name || "";
                         onToolPress({
@@ -555,7 +576,7 @@ export function AgentPlanView({
                     <NarrativeLine
                       key={item.key}
                       text={item.text || ""}
-                      animDelay={i * 45}
+                      animDelay={i * 40}
                     />
                   )
                 )}
@@ -563,7 +584,7 @@ export function AgentPlanView({
                   <NarrativeLine
                     key={`plan-nar-${i}`}
                     text={text}
-                    animDelay={(displayItems.length + i) * 45}
+                    animDelay={(displayItems.length + i) * 40}
                   />
                 ))}
               </>
@@ -594,18 +615,18 @@ const planStyles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#1a1a1a",
     borderWidth: 1.5,
-    borderColor: "#343434",
+    borderColor: "#333333",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   phaseCircleRunning: {
     borderColor: "#4a7cf0",
-    backgroundColor: "rgba(74,124,240,0.10)",
+    backgroundColor: "rgba(74,124,240,0.09)",
   },
   phaseCircleDone: {
     borderColor: "#4CAF50",
-    backgroundColor: "rgba(76,175,80,0.10)",
+    backgroundColor: "rgba(76,175,80,0.09)",
   },
   phaseCheck: {
     fontSize: 10,
@@ -616,7 +637,7 @@ const planStyles = StyleSheet.create({
   phaseTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
-    color: "#d8d8d8",
+    color: "#d5d5d5",
     lineHeight: 20,
     flex: 1,
   },

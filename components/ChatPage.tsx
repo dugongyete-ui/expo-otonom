@@ -967,7 +967,9 @@ export function ChatPage({
         // Helper: update a tool entry inside the currently-running plan step
         const upsertToolInCurrentStep = (updater: (prev: any[]) => any[]) => {
           if (!currentPlanRef.current || !planMsgIdRef.current) return;
-          const stepId = currentRunningStepIdRef.current;
+          // Fall back to lastStepIdRef so tool "called" events arriving AFTER the step
+          // completes (race condition) still update the correct step's tools array.
+          const stepId = currentRunningStepIdRef.current || lastStepIdRef.current;
           if (!stepId) return;
           const updatedSteps = currentPlanRef.current.steps.map(s => {
             if (s.id !== stepId) return s;
