@@ -44,6 +44,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [planStepNotifyMessages, setPlanStepNotifyMessages] = useState<{ stepId: string; text: string }[]>([]);
   const [planNotifyMessages, setPlanNotifyMessages] = useState<string[]>([]);
   const [isPlanRunning, setIsPlanRunning] = useState(false);
+  const [isPlanPanelExpanded, setIsPlanPanelExpanded] = useState(true);
   const hasPlanAutoSwitchedRef = useRef(false);
   const [takeOverE2bSessionId, setTakeOverE2bSessionId] = useState<string | undefined>(undefined);
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
@@ -109,6 +110,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
       hasPlanAutoSwitchedRef.current = true;
       setRightPanelMode("plan");
       setIsToolPanelVisible(true);
+      setIsPlanPanelExpanded(true);
     }
     // Reset auto-switch flag when plan is gone (new task will auto-switch again)
     if (!plan) {
@@ -316,6 +318,8 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 stepNotifyMessages={planStepNotifyMessages}
                 notifyMessages={planNotifyMessages}
                 isRunning={isPlanRunning}
+                isVisible={isPlanPanelExpanded}
+                onToggleVisible={() => setIsPlanPanelExpanded(v => !v)}
               />
             ) : (
               <FilePanel
@@ -345,7 +349,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                       styles.switchTab,
                       rightPanelMode === "plan" && styles.switchTabActive,
                     ]}
-                    onPress={() => setRightPanelMode("plan")}
+                    onPress={() => { setRightPanelMode("plan"); setIsPlanPanelExpanded(true); }}
                     activeOpacity={0.7}
                   >
                     <View style={styles.switchTabInner}>
@@ -415,7 +419,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 {currentPlan && (
                   <TouchableOpacity
                     style={[styles.modalTab, rightPanelMode === "plan" && styles.modalTabActive]}
-                    onPress={() => setRightPanelMode("plan")}
+                    onPress={() => { setRightPanelMode("plan"); setIsPlanPanelExpanded(true); }}
                     activeOpacity={0.7}
                   >
                     <View style={styles.switchTabInner}>
@@ -473,6 +477,8 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                   stepNotifyMessages={planStepNotifyMessages}
                   notifyMessages={planNotifyMessages}
                   isRunning={isPlanRunning}
+                  isVisible={isPlanPanelExpanded}
+                  onToggleVisible={() => setIsPlanPanelExpanded(v => !v)}
                 />
               ) : rightPanelMode === "browser" ? (
                 <BrowserPanel

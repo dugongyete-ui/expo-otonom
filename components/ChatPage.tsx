@@ -2282,6 +2282,9 @@ export function ChatPage({
         const steps = plan?.steps || [];
         const completedCount = steps.filter(s => s.status === "completed").length;
         const totalCount = steps.length;
+        const allDone = totalCount > 0 && steps.every(s => s.status === "completed" || s.status === "failed");
+        const runningStep = steps.find(s => s.status === "running");
+        const currentStepDesc = runningStep?.description || (allDone ? "Task selesai" : activePlanTitle);
         return (
           <View style={styles.floatingPlanBarWrapper}>
             {planBarExpanded && plan && steps.length > 0 ? (
@@ -2292,16 +2295,29 @@ export function ChatPage({
                   const isFailed = step.status === "failed";
                   return (
                     <View key={step.id || i} style={styles.floatingPlanStep}>
-                      <View style={[
-                        styles.floatingPlanStepDot,
-                        isRunning && { backgroundColor: "#4a7cf0" },
-                        isDone && { backgroundColor: "#4CAF50" },
-                        isFailed && { backgroundColor: "#e05c5c" },
-                      ]} />
+                      <View style={styles.floatingPlanStepIcon}>
+                        {isRunning ? (
+                          <View style={styles.floatingPlanStepSpinnerWrap}>
+                            <AnimatedPlanDot />
+                          </View>
+                        ) : isDone ? (
+                          <View style={styles.floatingPlanStepDone}>
+                            <Text style={styles.floatingPlanStepCheck}>✓</Text>
+                          </View>
+                        ) : isFailed ? (
+                          <View style={styles.floatingPlanStepFailed}>
+                            <Text style={styles.floatingPlanStepX}>✕</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.floatingPlanStepClock}>
+                            <View style={styles.floatingPlanStepClockInner} />
+                          </View>
+                        )}
+                      </View>
                       <Text style={[
                         styles.floatingPlanStepText,
-                        isRunning && { color: "#d0d0d0" },
-                        isDone && { color: "#555555" },
+                        isRunning && { color: "#c8c8c8" },
+                        isDone && { color: "#505050" },
                         isFailed && { color: "#c07070" },
                       ]} numberOfLines={2}>{step.description}</Text>
                     </View>
@@ -2319,8 +2335,14 @@ export function ChatPage({
               activeOpacity={0.8}
             >
               <View style={styles.floatingPlanBarLeft}>
-                <AnimatedPlanDot />
-                <Text style={styles.floatingPlanTitle} numberOfLines={1}>{activePlanTitle}</Text>
+                {allDone ? (
+                  <View style={styles.floatingPlanDoneIcon}>
+                    <Text style={styles.floatingPlanDoneCheck}>✓</Text>
+                  </View>
+                ) : (
+                  <AnimatedPlanDot />
+                )}
+                <Text style={styles.floatingPlanTitle} numberOfLines={1}>{currentStepDesc}</Text>
               </View>
               {totalCount > 0 ? (
                 <Text style={styles.floatingPlanCounter}>{completedCount} / {totalCount}</Text>
@@ -2726,16 +2748,87 @@ const styles = StyleSheet.create({
   },
   floatingPlanStep: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
-  floatingPlanStepDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: "#333333",
+  floatingPlanStepIcon: {
+    width: 14,
+    height: 14,
+    marginTop: 2,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
+  },
+  floatingPlanStepSpinnerWrap: {
+    width: 8,
+    height: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingPlanStepDone: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(76,175,80,0.12)",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingPlanStepCheck: {
+    fontSize: 8,
+    color: "#4CAF50",
+    fontWeight: "700",
+    lineHeight: 10,
+  },
+  floatingPlanStepFailed: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(224,92,92,0.1)",
+    borderWidth: 1,
+    borderColor: "#e05c5c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingPlanStepX: {
+    fontSize: 8,
+    color: "#e05c5c",
+    fontWeight: "700",
+    lineHeight: 10,
+  },
+  floatingPlanStepClock: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#555555",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingPlanStepClockInner: {
+    width: 1,
+    height: 4,
+    backgroundColor: "#555555",
+    borderRadius: 1,
+    marginBottom: 1,
+  },
+  floatingPlanDoneIcon: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "rgba(76,175,80,0.15)",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingPlanDoneCheck: {
+    fontSize: 6,
+    color: "#4CAF50",
+    fontWeight: "700",
+    lineHeight: 8,
   },
   floatingPlanStepText: {
     flex: 1,

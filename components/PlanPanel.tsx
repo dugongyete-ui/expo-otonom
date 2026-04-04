@@ -1,7 +1,9 @@
 /**
- * PlanPanel — ai-manus style real-time plan visualization.
- * Shows plan steps with animated status indicators, inline tool execution pills,
- * and intermediate goal narratives — connected to live SSE data.
+ * PlanPanel — ai-manus style plan visualization.
+ * Two states:
+ *  - Collapsed: floating bar at bottom with progress "X/Y", status icon, current step description
+ *  - Expanded: full vertical panel showing all steps with per-step status icons
+ * Smooth expand/collapse animation.
  */
 import React, { useEffect, useRef } from "react";
 import {
@@ -145,99 +147,100 @@ function Spinner({ size = 10, color = "#4a7cf0" }: { size?: number; color?: stri
   );
 }
 
-// ─── Pulse dot ────────────────────────────────────────────────────────────────
+// ─── Clock icon (svg-style using View) ────────────────────────────────────────
 
-function PulseDot({ color = "#4a7cf0", size = 6 }: { color?: string; size?: number }) {
-  const pulseAnim = useRef(new Animated.Value(0.4)).current;
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
+function ClockIcon({ size = 14, color = "#888888" }: { size?: number; color?: string }) {
   return (
-    <Animated.View style={{
+    <View style={{
       width: size,
       height: size,
       borderRadius: size / 2,
-      backgroundColor: color,
-      opacity: pulseAnim,
-    }} />
-  );
-}
-
-// ─── Step status circle ───────────────────────────────────────────────────────
-
-function StepCircle({ index, status }: { index: number; status: string }) {
-  const isRunning = status === "running";
-  const isDone = status === "completed";
-  const isFailed = status === "failed";
-
-  return (
-    <View style={[
-      circleStyles.circle,
-      isRunning && circleStyles.circleRunning,
-      isDone && circleStyles.circleDone,
-      isFailed && circleStyles.circleFailed,
-    ]}>
-      {isRunning ? (
-        <Spinner size={10} color="#4a7cf0" />
-      ) : isDone ? (
-        <Text style={circleStyles.check}>✓</Text>
-      ) : isFailed ? (
-        <Text style={circleStyles.cross}>✕</Text>
-      ) : (
-        <Text style={circleStyles.num}>{index + 1}</Text>
-      )}
+      borderWidth: 1.5,
+      borderColor: color,
+      alignItems: "center",
+      justifyContent: "center",
+    }}>
+      <View style={{
+        width: size * 0.06,
+        height: size * 0.35,
+        backgroundColor: color,
+        position: "absolute",
+        bottom: size * 0.3,
+        left: size * 0.44,
+        borderRadius: 1,
+      }} />
+      <View style={{
+        width: size * 0.25,
+        height: size * 0.06,
+        backgroundColor: color,
+        position: "absolute",
+        bottom: size * 0.4,
+        left: size * 0.44,
+        borderRadius: 1,
+      }} />
     </View>
   );
 }
 
-const circleStyles = StyleSheet.create({
-  circle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#1e1e1e",
-    borderWidth: 1.5,
-    borderColor: "#333333",
+// ─── Step status icon ─────────────────────────────────────────────────────────
+
+function StepStatusIcon({ status }: { status: string }) {
+  const isRunning = status === "running";
+  const isDone = status === "completed";
+  const isFailed = status === "failed";
+
+  if (isRunning) {
+    return <Spinner size={14} color="#4a7cf0" />;
+  }
+  if (isDone) {
+    return (
+      <View style={iconStyles.successCircle}>
+        <Text style={iconStyles.successCheck}>✓</Text>
+      </View>
+    );
+  }
+  if (isFailed) {
+    return (
+      <View style={iconStyles.failedCircle}>
+        <Text style={iconStyles.failedX}>✕</Text>
+      </View>
+    );
+  }
+  return <ClockIcon size={14} color="#666666" />;
+}
+
+const iconStyles = StyleSheet.create({
+  successCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(76,175,80,0.15)",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
   },
-  circleRunning: {
-    borderColor: "#4a7cf0",
-    backgroundColor: "rgba(74,124,240,0.1)",
-  },
-  circleDone: {
-    borderColor: "#4CAF50",
-    backgroundColor: "rgba(76,175,80,0.1)",
-  },
-  circleFailed: {
-    borderColor: "#e05c5c",
-    backgroundColor: "rgba(224,92,92,0.1)",
-  },
-  num: {
-    fontSize: 10,
-    color: "#555555",
-    fontWeight: "600",
-    lineHeight: 13,
-  },
-  check: {
-    fontSize: 11,
+  successCheck: {
+    fontSize: 8,
     color: "#4CAF50",
     fontWeight: "700",
-    lineHeight: 13,
+    lineHeight: 10,
   },
-  cross: {
-    fontSize: 10,
+  failedCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(224,92,92,0.1)",
+    borderWidth: 1,
+    borderColor: "#e05c5c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  failedX: {
+    fontSize: 8,
     color: "#e05c5c",
     fontWeight: "700",
-    lineHeight: 13,
+    lineHeight: 10,
   },
 });
 
@@ -272,7 +275,7 @@ function ToolPill({ tool }: { tool: StepToolEntry }) {
         style={[
           pillStyles.label,
           isCalling && pillStyles.labelCalling,
-          isDone(tool) && pillStyles.labelDone,
+          isCalled && pillStyles.labelDone,
           isError && pillStyles.labelError,
         ]}
         numberOfLines={1}
@@ -284,18 +287,14 @@ function ToolPill({ tool }: { tool: StepToolEntry }) {
   );
 }
 
-function isDone(tool: StepToolEntry) {
-  return tool.status === "called";
-}
-
 const pillStyles = StyleSheet.create({
   pill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    backgroundColor: "#181818",
+    paddingVertical: 4,
+    backgroundColor: "#141414",
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#242424",
@@ -334,7 +333,7 @@ const pillStyles = StyleSheet.create({
   },
   label: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
+    fontSize: 11,
     color: "#666666",
     flex: 1,
     lineHeight: 16,
@@ -382,10 +381,10 @@ function NarrativeText({ text }: { text: string }) {
 const narrativeStyles = StyleSheet.create({
   text: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12.5,
-    color: "#909090",
-    lineHeight: 18,
-    paddingVertical: 5,
+    fontSize: 11.5,
+    color: "#808080",
+    lineHeight: 17,
+    paddingVertical: 3,
     paddingHorizontal: 2,
   },
 });
@@ -396,10 +395,12 @@ function StepRow({
   step,
   index,
   narratives,
+  isLast,
 }: {
   step: any;
   index: number;
   narratives: string[];
+  isLast: boolean;
 }) {
   const isRunning = step.status === "running";
   const isDoneStep = step.status === "completed";
@@ -414,46 +415,33 @@ function StepRow({
 
   return (
     <View style={stepStyles.row}>
-      {/* Left: circle + connector line */}
       <View style={stepStyles.leftCol}>
-        <StepCircle index={index} status={step.status} />
-        <View style={[
-          stepStyles.connector,
-          isDoneStep && stepStyles.connectorDone,
-          isRunning && stepStyles.connectorRunning,
-        ]} />
+        <View style={stepStyles.iconWrap}>
+          <StepStatusIcon status={step.status} />
+        </View>
+        {!isLast && (
+          <View style={[
+            stepStyles.connector,
+            isDoneStep && stepStyles.connectorDone,
+            isRunning && stepStyles.connectorRunning,
+          ]} />
+        )}
       </View>
 
-      {/* Right: content */}
-      <View style={stepStyles.rightCol}>
-        <View style={stepStyles.descRow}>
-          <Text
-            style={[
-              stepStyles.desc,
-              isPending && stepStyles.descPending,
-              isDoneStep && stepStyles.descDone,
-              isFailed && stepStyles.descFailed,
-              isRunning && stepStyles.descRunning,
-            ]}
-            numberOfLines={2}
-          >
-            {step.description}
-          </Text>
-          {isRunning && (
-            <View style={stepStyles.runningBadge}>
-              <PulseDot color="#4a7cf0" size={5} />
-              <Text style={stepStyles.runningLabel}>berjalan</Text>
-            </View>
-          )}
-          {isDoneStep && (
-            <Text style={stepStyles.doneBadge}>selesai</Text>
-          )}
-          {isFailed && (
-            <Text style={stepStyles.failedBadge}>gagal</Text>
-          )}
-        </View>
+      <View style={[stepStyles.rightCol, isLast && stepStyles.rightColLast]}>
+        <Text
+          style={[
+            stepStyles.desc,
+            isPending && stepStyles.descPending,
+            isDoneStep && stepStyles.descDone,
+            isFailed && stepStyles.descFailed,
+            isRunning && stepStyles.descRunning,
+          ]}
+          numberOfLines={2}
+        >
+          {step.description}
+        </Text>
 
-        {/* Tools + narratives for active steps */}
         {hasActivity && (
           <View style={stepStyles.activity}>
             {tools.map((tool, tIdx) => (
@@ -472,51 +460,55 @@ function StepRow({
 const stepStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 0,
+    gap: 10,
   },
   leftCol: {
     alignItems: "center",
-    width: 24,
+    width: 18,
+    flexShrink: 0,
+    paddingTop: 2,
+  },
+  iconWrap: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   connector: {
-    width: 1.5,
+    width: 1,
     flex: 1,
-    minHeight: 12,
+    minHeight: 8,
     backgroundColor: "#252525",
     borderRadius: 1,
-    marginTop: 3,
+    marginTop: 4,
     marginBottom: 0,
   },
   connectorDone: {
-    backgroundColor: "rgba(76,175,80,0.3)",
+    backgroundColor: "rgba(76,175,80,0.2)",
   },
   connectorRunning: {
-    backgroundColor: "rgba(74,124,240,0.4)",
+    backgroundColor: "rgba(74,124,240,0.3)",
   },
   rightCol: {
     flex: 1,
-    paddingBottom: 14,
+    paddingBottom: 16,
+    paddingTop: 1,
   },
-  descRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingTop: 3,
+  rightColLast: {
+    paddingBottom: 8,
   },
   desc: {
     fontFamily: "Inter_500Medium",
-    fontSize: 13.5,
-    color: "#d0d0d0",
-    lineHeight: 20,
-    flex: 1,
+    fontSize: 13,
+    color: "#c8c8c8",
+    lineHeight: 19,
   },
   descPending: {
-    color: "#555555",
+    color: "#505050",
   },
   descDone: {
-    color: "#606060",
+    color: "#585858",
   },
   descFailed: {
     color: "#a07070",
@@ -524,96 +516,9 @@ const stepStyles = StyleSheet.create({
   descRunning: {
     color: "#c0c8e8",
   },
-  runningBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(74,124,240,0.12)",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  runningLabel: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 10,
-    color: "#6080c0",
-  },
-  doneBadge: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 10,
-    color: "#4a7a4a",
-    flexShrink: 0,
-    marginTop: 3,
-  },
-  failedBadge: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 10,
-    color: "#a06060",
-    flexShrink: 0,
-    marginTop: 3,
-  },
   activity: {
-    marginTop: 6,
+    marginTop: 5,
     gap: 1,
-  },
-});
-
-// ─── Progress bar ─────────────────────────────────────────────────────────────
-
-function ProgressBar({ completed, total }: { completed: number; total: number }) {
-  const pct = total > 0 ? completed / total : 0;
-  const widthAnim = useRef(new Animated.Value(pct)).current;
-
-  useEffect(() => {
-    Animated.timing(widthAnim, {
-      toValue: pct,
-      duration: 400,
-      useNativeDriver: false,
-    }).start();
-  }, [pct]);
-
-  return (
-    <View style={progressStyles.container}>
-      <View style={progressStyles.track}>
-        <Animated.View
-          style={[
-            progressStyles.fill,
-            { width: widthAnim.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) },
-          ]}
-        />
-      </View>
-      <Text style={progressStyles.label}>
-        {completed}/{total} langkah selesai
-      </Text>
-    </View>
-  );
-}
-
-const progressStyles = StyleSheet.create({
-  container: {
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#1e1e1e",
-  },
-  track: {
-    height: 3,
-    backgroundColor: "#222222",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    backgroundColor: "#4a7cf0",
-    borderRadius: 2,
-  },
-  label: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#505050",
   },
 });
 
@@ -628,152 +533,242 @@ export function PlanPanel({
   onToggleVisible,
 }: PlanPanelProps) {
   const steps = plan.steps || [];
-  const completedCount = steps.filter(s => s.status === "completed" || s.status === "failed").length;
+  const completedCount = steps.filter(s => s.status === "completed").length;
   const totalCount = steps.length;
-  const allDone = plan.status === "completed" || (totalCount > 0 && completedCount === totalCount);
+  const allDone = plan.status === "completed" || (totalCount > 0 && steps.every(s => s.status === "completed" || s.status === "failed"));
   const planRunning = isRunning || plan.status === "running" || steps.some(s => s.status === "running");
 
-  if (!isVisible) {
-    return (
-      <View style={styles.collapsedContainer}>
-        <TouchableOpacity
-          style={styles.collapsedBar}
-          onPress={onToggleVisible}
-          activeOpacity={0.7}
-        >
-          <View style={styles.collapsedLeft}>
-            {planRunning ? <Spinner size={9} color="#4a7cf0" /> : (
-              allDone ? (
-                <Text style={{ fontSize: 10, color: "#4CAF50", fontWeight: "700" }}>✓</Text>
-              ) : (
-                <View style={{ width: 9, height: 9, borderRadius: 4.5, borderWidth: 1.5, borderColor: "#444444" }} />
-              )
-            )}
-            <Text style={styles.collapsedTitle} numberOfLines={1}>{plan.title || "Rencana"}</Text>
-          </View>
-          <Text style={styles.collapsedCounter}>{completedCount}/{totalCount}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const currentStep = steps.find(s => s.status === "running" || s.status === "pending") || null;
+  const currentStepDesc = currentStep?.description || (allDone ? "Task selesai" : plan.title || "Rencana");
+
+  // Animated expand/collapse: 1 = expanded (full panel), 0 = collapsed (bar only)
+  const expandAnim = useRef(new Animated.Value(isVisible ? 1 : 0)).current;
+  const prevVisible = useRef(isVisible);
+
+  useEffect(() => {
+    if (prevVisible.current === isVisible) return;
+    prevVisible.current = isVisible;
+    Animated.timing(expandAnim, {
+      toValue: isVisible ? 1 : 0,
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: false,
+    }).start();
+  }, [isVisible]);
+
+  // Animate body opacity and scale
+  const bodyOpacity = expandAnim.interpolate({
+    inputRange: [0, 0.4, 1],
+    outputRange: [0, 0, 1],
+  });
+  const bodyTranslateY = expandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-8, 0],
+  });
+
+  // Collapsed bar opacity (opposite of expanded)
+  const barOpacity = expandAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 0, 0],
+  });
+
+  const chevronRotate = expandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"],
+  });
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <TouchableOpacity
-        style={styles.header}
-        onPress={onToggleVisible}
-        activeOpacity={0.8}
+      {/* Collapsed bar — fades out when expanding */}
+      <Animated.View
+        style={[collapsedStyles.barAnimated, { opacity: barOpacity }]}
+        pointerEvents={isVisible ? "none" : "auto"}
       >
-        <View style={styles.headerLeft}>
-          {planRunning ? (
-            <Spinner size={11} color="#4a7cf0" />
-          ) : allDone ? (
-            <View style={styles.doneCircle}>
-              <Text style={styles.doneCheck}>✓</Text>
+        <TouchableOpacity
+          style={collapsedStyles.bar}
+          onPress={onToggleVisible}
+          activeOpacity={0.8}
+        >
+          <View style={collapsedStyles.leftSection}>
+            <View style={collapsedStyles.iconWrap}>
+              {planRunning ? (
+                <Spinner size={13} color="#4a7cf0" />
+              ) : allDone ? (
+                <View style={collapsedStyles.doneCircle}>
+                  <Text style={collapsedStyles.doneCheck}>✓</Text>
+                </View>
+              ) : (
+                <ClockIcon size={13} color="#888888" />
+              )}
             </View>
-          ) : (
-            <View style={styles.pendingCircle} />
-          )}
-          <Text style={styles.headerTitle} numberOfLines={1}>{plan.title || "Rencana"}</Text>
-        </View>
-        <View style={styles.headerRight}>
-          {totalCount > 0 && (
-            <Text style={styles.headerCounter}>{completedCount}/{totalCount}</Text>
-          )}
-          {planRunning && (
-            <View style={styles.liveChip}>
-              <PulseDot color="#4a7cf0" size={5} />
-              <Text style={styles.liveLabel}>live</Text>
-            </View>
-          )}
-          {onToggleVisible && (
-            <Text style={styles.chevron}>⌄</Text>
-          )}
-        </View>
-      </TouchableOpacity>
+            <Text style={collapsedStyles.stepDesc} numberOfLines={1}>{currentStepDesc}</Text>
+          </View>
+          <View style={collapsedStyles.rightSection}>
+            {totalCount > 0 && (
+              <Text style={collapsedStyles.progress}>{completedCount}/{totalCount}</Text>
+            )}
+            <Animated.Text style={[collapsedStyles.chevron, { transform: [{ rotate: chevronRotate }] }]}>↑</Animated.Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
 
-      {/* Steps list */}
-      <ScrollView
-        style={styles.scrollArea}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      {/* Expanded panel — fades in when visible */}
+      <Animated.View
+        style={[
+          styles.expandedPanel,
+          {
+            opacity: bodyOpacity,
+            transform: [{ translateY: bodyTranslateY }],
+          },
+        ]}
+        pointerEvents={isVisible ? "auto" : "none"}
       >
-        {steps.map((step, index) => {
-          const stepNarratives = stepNotifyMessages
-            .filter(n => n.stepId === step.id)
-            .map(n => n.text);
-          return (
-            <StepRow
-              key={step.id || index}
-              step={step}
-              index={index}
-              narratives={stepNarratives}
-            />
-          );
-        })}
-
-        {/* Plan-level narratives */}
-        {notifyMessages.filter(t => {
-          const c = cleanText(t) || "";
-          return c.trim().length > 10 && !isVerbose(c);
-        }).map((text, i) => (
-          <View key={`pnar-${i}`} style={styles.planNarrativeWrap}>
-            <NarrativeText text={text} />
+        {/* Header — tap to collapse */}
+        <TouchableOpacity
+          style={styles.header}
+          onPress={onToggleVisible}
+          activeOpacity={0.8}
+        >
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{plan.title || "Task Progress"}</Text>
           </View>
-        ))}
-
-        {/* Thinking state when no steps yet */}
-        {planRunning && steps.length === 0 && (
-          <View style={styles.thinkingRow}>
-            <PulseDot color="#4a7cf0" size={6} />
-            <Text style={styles.thinkingLabel}>Sedang berpikir...</Text>
+          <View style={styles.headerRight}>
+            {totalCount > 0 && (
+              <Text style={styles.headerCounter}>{completedCount}/{totalCount}</Text>
+            )}
+            {onToggleVisible && (
+              <Text style={styles.chevron}>↓</Text>
+            )}
           </View>
-        )}
-      </ScrollView>
+        </TouchableOpacity>
 
-      {/* Progress bar */}
-      {totalCount > 0 && (
-        <ProgressBar completed={completedCount} total={totalCount} />
-      )}
+        {/* Steps list */}
+        <ScrollView
+          style={styles.scrollArea}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {steps.map((step, index) => {
+            const stepNarratives = stepNotifyMessages
+              .filter(n => n.stepId === step.id)
+              .map(n => n.text);
+            return (
+              <StepRow
+                key={step.id || index}
+                step={step}
+                index={index}
+                narratives={stepNarratives}
+                isLast={index === steps.length - 1}
+              />
+            );
+          })}
+
+          {notifyMessages.filter(t => {
+            const c = cleanText(t) || "";
+            return c.trim().length > 10 && !isVerbose(c);
+          }).map((text, i) => (
+            <View key={`pnar-${i}`} style={styles.planNarrativeWrap}>
+              <NarrativeText text={text} />
+            </View>
+          ))}
+
+          {planRunning && steps.length === 0 && (
+            <View style={styles.thinkingRow}>
+              <Spinner size={12} color="#4a7cf0" />
+              <Text style={styles.thinkingLabel}>Sedang berpikir...</Text>
+            </View>
+          )}
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0d0d0d",
+// ─── Collapsed bar styles ─────────────────────────────────────────────────────
+
+const collapsedStyles = StyleSheet.create({
+  barAnimated: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
   },
-  collapsedContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e1e1e",
-  },
-  collapsedBar: {
+  bar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#1e1e1e",
+    backgroundColor: "#0d0d0d",
+    gap: 10,
   },
-  collapsedLeft: {
+  leftSection: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flex: 1,
+    minWidth: 0,
   },
-  collapsedTitle: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    color: "#888888",
+  iconWrap: {
+    width: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  doneCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(76,175,80,0.15)",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneCheck: {
+    fontSize: 8,
+    color: "#4CAF50",
+    fontWeight: "700",
+    lineHeight: 10,
+  },
+  stepDesc: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#909090",
     flex: 1,
   },
-  collapsedCounter: {
+  rightSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  progress: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#505050",
-    flexShrink: 0,
+    color: "#606060",
+  },
+  chevron: {
+    fontSize: 12,
+    color: "#444444",
+  },
+});
+
+// ─── Expanded panel styles ────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0d0d0d",
+    position: "relative",
+  },
+  expandedPanel: {
+    flex: 1,
+    flexDirection: "column",
   },
   header: {
     flexDirection: "row",
@@ -786,42 +781,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
     flex: 1,
     minWidth: 0,
   },
-  doneCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "rgba(76,175,80,0.12)",
-    borderWidth: 1.5,
-    borderColor: "#4CAF50",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  doneCheck: {
-    fontSize: 9,
-    color: "#4CAF50",
-    fontWeight: "700",
-    lineHeight: 12,
-  },
-  pendingCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: "#333333",
-    flexShrink: 0,
-  },
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 13.5,
+    fontSize: 14,
     color: "#d0d0d0",
-    flex: 1,
     lineHeight: 20,
   },
   headerRight: {
@@ -833,23 +799,7 @@ const styles = StyleSheet.create({
   headerCounter: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#505050",
-  },
-  liveChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(74,124,240,0.1)",
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: "rgba(74,124,240,0.2)",
-  },
-  liveLabel: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 10,
-    color: "#5878c0",
+    color: "#555555",
   },
   chevron: {
     fontSize: 12,
@@ -860,18 +810,18 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 8,
+    paddingBottom: 12,
   },
   planNarrativeWrap: {
-    paddingLeft: 36,
-    paddingBottom: 8,
+    paddingLeft: 28,
+    paddingBottom: 6,
   },
   thinkingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 8,
-    paddingLeft: 36,
+    paddingLeft: 28,
   },
   thinkingLabel: {
     fontFamily: "Inter_400Regular",

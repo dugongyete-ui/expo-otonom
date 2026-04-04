@@ -241,15 +241,15 @@ function ToolMessageCard({
       activeOpacity={onPress ? 0.7 : 1}
     >
       <View style={toolCardStyles.iconBox}>
-        <Ionicons name={icon} size={14} color="#888888" />
+        <Ionicons name={icon} size={13} color="#888888" />
       </View>
       <View style={toolCardStyles.info}>
         <Text style={toolCardStyles.name} numberOfLines={1}>{name}</Text>
-        {toolContent?.type && (
-          <Text style={toolCardStyles.type}>{category}</Text>
+        {category && (
+          <Text style={toolCardStyles.category}>{category}</Text>
         )}
       </View>
-      <Ionicons name="chevron-forward" size={14} color="#636366" />
+      {onPress && <Ionicons name="chevron-forward" size={12} color="#505050" />}
     </TouchableOpacity>
   );
 }
@@ -259,35 +259,37 @@ const toolCardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: "rgba(255,255,255,0.02)",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#2a2a2a",
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginVertical: 3,
+    paddingVertical: 7,
   },
   iconBox: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   info: {
     flex: 1,
     gap: 1,
+    minWidth: 0,
   },
   name: {
     fontFamily: "monospace",
-    fontSize: 12,
-    color: "#d1d5db",
+    fontSize: 11,
+    color: "#c8c8c8",
     fontWeight: "500",
   },
-  type: {
+  category: {
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#606060",
+    textTransform: "capitalize",
   },
 });
 
@@ -308,45 +310,72 @@ function StepMessage({
   step: AgentPlanStep;
   onToolPress?: (tool: StepTool) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const isDone = step.status === "completed";
+  const isRunning = step.status === "running";
   const isFailed = step.status === "failed";
   const tools: StepTool[] = (step.tools as unknown as StepTool[]) || [];
+  const hasTool = tools.length > 0;
 
   return (
     <View style={stepMsgStyles.container}>
-      <TouchableOpacity
-        style={stepMsgStyles.header}
-        onPress={() => setExpanded(e => !e)}
-        activeOpacity={0.7}
-      >
-        <View style={isDone ? stepMsgStyles.doneCircle : stepMsgStyles.pendingCircle}>
-          {isDone && <Ionicons name="checkmark" size={8} color="#888888" />}
+      <View style={stepMsgStyles.row}>
+        <View style={stepMsgStyles.leftCol}>
+          <TouchableOpacity
+            style={[
+              stepMsgStyles.statusCircle,
+              isDone && stepMsgStyles.statusCircleDone,
+              isRunning && stepMsgStyles.statusCircleRunning,
+              isFailed && stepMsgStyles.statusCircleFailed,
+            ]}
+            onPress={hasTool ? () => setExpanded(e => !e) : undefined}
+            activeOpacity={hasTool ? 0.7 : 1}
+          >
+            {isDone && <Ionicons name="checkmark" size={8} color="rgba(255,255,255,0.6)" />}
+            {isFailed && <Text style={stepMsgStyles.xChar}>✕</Text>}
+          </TouchableOpacity>
+          {hasTool && expanded && (
+            <View style={stepMsgStyles.dashedLine} />
+          )}
         </View>
-        <Text style={[stepMsgStyles.desc, isFailed && stepMsgStyles.descFailed]} numberOfLines={2}>
-          {step.description}
-        </Text>
-        <Ionicons
-          name={expanded ? "chevron-up" : "chevron-down"}
-          size={14}
-          color="#636366"
-        />
-      </TouchableOpacity>
-      {expanded && tools.length > 0 && (
-        <View style={stepMsgStyles.toolsRow}>
-          <View style={stepMsgStyles.dashedBorder} />
-          <View style={stepMsgStyles.toolsList}>
-            {tools.map((tool, i) => (
-              <ToolMessageCard
-                key={tool.tool_call_id || i}
-                functionName={tool.function_name || tool.name}
-                toolContent={tool.tool_content}
-                onPress={onToolPress ? () => onToolPress(tool) : undefined}
+        <View style={stepMsgStyles.rightCol}>
+          <TouchableOpacity
+            style={stepMsgStyles.headerRow}
+            onPress={hasTool ? () => setExpanded(e => !e) : undefined}
+            activeOpacity={hasTool ? 0.7 : 1}
+          >
+            <Text style={[
+              stepMsgStyles.desc,
+              isDone && stepMsgStyles.descDone,
+              isRunning && stepMsgStyles.descRunning,
+              isFailed && stepMsgStyles.descFailed,
+            ]} numberOfLines={3}>
+              {step.description}
+            </Text>
+            {hasTool && (
+              <Ionicons
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={13}
+                color="#555555"
+                style={stepMsgStyles.chevron}
               />
-            ))}
-          </View>
+            )}
+          </TouchableOpacity>
+
+          {expanded && hasTool && (
+            <View style={stepMsgStyles.toolsList}>
+              {tools.map((tool, i) => (
+                <ToolMessageCard
+                  key={tool.tool_call_id || i}
+                  functionName={tool.function_name || tool.name}
+                  toolContent={tool.tool_content}
+                  onPress={onToolPress ? () => onToolPress(tool) : undefined}
+                />
+              ))}
+            </View>
+          )}
         </View>
-      )}
+      </View>
     </View>
   );
 }
@@ -354,59 +383,88 @@ function StepMessage({
 const stepMsgStyles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
-  header: {
+  row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
-  pendingCircle: {
+  leftCol: {
+    alignItems: "center",
+    width: 16,
+    flexShrink: 0,
+    paddingTop: 1,
+  },
+  statusCircle: {
     width: 16,
     height: 16,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#3a3a3a",
     flexShrink: 0,
-  },
-  doneCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
+  },
+  statusCircleDone: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "#505050",
+  },
+  statusCircleRunning: {
+    borderColor: "#4a7cf0",
+    backgroundColor: "rgba(74,124,240,0.1)",
+  },
+  statusCircleFailed: {
+    borderColor: "#e05c5c",
+    backgroundColor: "rgba(224,92,92,0.08)",
+  },
+  xChar: {
+    fontSize: 8,
+    color: "#e05c5c",
+    fontWeight: "700",
+    lineHeight: 10,
+  },
+  dashedLine: {
+    width: 1,
+    flex: 1,
+    minHeight: 8,
+    backgroundColor: "transparent",
+    borderLeftWidth: 1,
+    borderLeftColor: "#3a3a3a",
+    borderStyle: "dashed",
+    marginTop: 4,
+  },
+  rightCol: {
+    flex: 1,
+    paddingBottom: 4,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 4,
   },
   desc: {
     flex: 1,
     fontSize: 13,
     color: "#d1d5db",
     fontWeight: "500",
-    lineHeight: 18,
+    lineHeight: 19,
+  },
+  descDone: {
+    color: "#7a7a7a",
+  },
+  descRunning: {
+    color: "#dce4f8",
   },
   descFailed: {
     color: "#e05c5c",
   },
-  toolsRow: {
-    flexDirection: "row",
-    marginLeft: 6,
-    marginTop: 4,
-  },
-  dashedBorder: {
-    width: 1,
-    backgroundColor: "transparent",
-    borderLeftWidth: 1,
-    borderLeftColor: "#3a3a3a",
-    borderStyle: "dashed",
-    marginLeft: 7,
-    marginRight: 12,
-    alignSelf: "stretch",
+  chevron: {
+    marginTop: 3,
+    flexShrink: 0,
   },
   toolsList: {
-    flex: 1,
+    marginTop: 6,
     gap: 3,
-    paddingTop: 4,
     paddingBottom: 4,
   },
 });
