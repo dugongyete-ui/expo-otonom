@@ -2066,13 +2066,6 @@ export function ChatPage({
           thinking.active ? (
             <View>
               <ManusThinkingIndicator label={thinking.label} />
-              {isAgentMode && !planMsgIdRef.current && tools.length > 0 && (
-                <View style={styles.inlineToolsBlock}>
-                  {tools.slice(-3).map((tool, i) => (
-                    <ManusInlineToolStep key={tool.tool_call_id || i} tool={tool} />
-                  ))}
-                </View>
-              )}
             </View>
           ) : taskCompleted ? (
             <View style={styles.taskCompletedWrap}>
@@ -2097,6 +2090,26 @@ export function ChatPage({
                         </Text>
                       </View>
                     ))}
+                  </View>
+                )}
+                {/* Show tool summary if any tools were executed */}
+                {tools.length > 0 && (
+                  <View style={styles.taskCompletedTools}>
+                    <Text style={styles.taskCompletedToolsTitle}>Tools yang digunakan:</Text>
+                    {tools.map((tool, i) => {
+                      const fnName = tool.function_name || tool.name || "tool";
+                      const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
+                      const label = buildInlineLabel(fnName, args);
+                      const isError = tool.status === "error";
+                      return (
+                        <View key={tool.tool_call_id || i} style={styles.taskCompletedToolRow}>
+                          <CheckCircleIcon size={14} color={isError ? "#e05c5c" : "#4CAF50"} />
+                          <Text style={[styles.taskCompletedToolText, isError && { color: "#c07070" }]} numberOfLines={2}>
+                            {label}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
                 {/* Star rating row like Manus */}
@@ -2675,6 +2688,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   taskCompletedStepText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#b0b0b0",
+    flex: 1,
+    lineHeight: 19,
+  },
+  taskCompletedTools: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  taskCompletedToolsTitle: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: "#888888",
+    marginBottom: 4,
+  },
+  taskCompletedToolRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  taskCompletedToolText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
     color: "#b0b0b0",

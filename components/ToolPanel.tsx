@@ -61,17 +61,19 @@ export function ToolPanel({
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
   const selectedToolIdRef = useRef<string | null>(null);
 
-  const selectedTool = tools.find(t => t.tool_call_id === selectedToolId) || null;
+  // Filter to only show completed tools (not calling)
+  const completedTools = tools.filter(t => t.status !== "calling");
 
-  // Auto-select the latest "calling" tool so user sees live progress.
-  // Uses a ref to avoid stale closure when multiple tools fire in quick succession.
+  const selectedTool = completedTools.find(t => t.tool_call_id === selectedToolId) || null;
+
+  // Auto-select the latest completed tool
   useEffect(() => {
-    const callingTool = [...tools].reverse().find(t => t.status === "calling");
-    if (callingTool && callingTool.tool_call_id !== selectedToolIdRef.current) {
-      selectedToolIdRef.current = callingTool.tool_call_id;
-      setSelectedToolId(callingTool.tool_call_id);
+    const latestCompletedTool = [...completedTools].reverse().find(t => t.status === "called" || t.status === "error");
+    if (latestCompletedTool && latestCompletedTool.tool_call_id !== selectedToolIdRef.current) {
+      selectedToolIdRef.current = latestCompletedTool.tool_call_id;
+      setSelectedToolId(latestCompletedTool.tool_call_id);
     }
-  }, [tools]);
+  }, [completedTools]);
 
   if (!isVisible) {
     return (
@@ -92,9 +94,9 @@ export function ToolPanel({
         <View style={styles.headerLeft}>
           <NativeIcon name="terminal-outline" size={14} color="#888888" />
           <Text style={styles.headerTitle}>Tools</Text>
-          {tools.length > 0 && (
+          {completedTools.length > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{tools.length}</Text>
+              <Text style={styles.badgeText}>{completedTools.length}</Text>
             </View>
           )}
         </View>
@@ -113,7 +115,7 @@ export function ToolPanel({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.toolsListContent}
       >
-        {tools.length === 0 ? (
+        {completedTools.length === 0 ? (
           <View style={styles.emptyState}>
             <NativeIcon name="terminal-outline" size={28} color="#2A2A32" />
             <Text style={styles.emptyStateTitle}>Belum ada tools</Text>
@@ -122,7 +124,7 @@ export function ToolPanel({
             </Text>
           </View>
         ) : (
-          tools.map((tool) => {
+          completedTools.map((tool) => {
             const fnName = tool.function_name || tool.name;
             return (
               <TouchableOpacity
