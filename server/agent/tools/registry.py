@@ -228,6 +228,16 @@ def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> ToolResult:
             )
         return ToolResult(success=True, message=str(result))
     except TypeError as e:
-        return ToolResult(success=False, message="Invalid args for '{}': {}".format(tool_name, e))
+        import traceback as _tb
+        return ToolResult(
+            success=False,
+            message="Invalid args for '{}': {}".format(tool_name, e),
+            error_stack=_tb.format_exc(),
+        )
     except Exception as e:
-        return ToolResult(success=False, message="Tool '{}' failed: {}".format(tool_name, e))
+        import traceback as _tb
+        return ToolResult(
+            success=False,
+            message="Tool '{}' failed: {}".format(tool_name, e),
+            error_stack=_tb.format_exc(),
+        )

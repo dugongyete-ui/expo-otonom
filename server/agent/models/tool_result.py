@@ -14,6 +14,7 @@ class ToolResult(BaseModel):
     success: bool = True
     message: Optional[str] = None
     data: Optional[dict] = None
+    error_stack: Optional[str] = None
 
     def __str__(self) -> str:
         if self.message:

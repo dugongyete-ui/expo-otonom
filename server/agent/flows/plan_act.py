@@ -60,7 +60,9 @@ from server.agent.domain.cohere import (
     _extract_cerebras_response,
     _TOOLS_SUPPORTED,
 )
-from server.agent.domain.events import make_event, build_tool_content, _make_e2b_proxy_url
+from server.agent.domain.events import (
+    make_event, build_tool_content, build_tool_lifecycle_events, _make_e2b_proxy_url,
+)
 from server.agent.services import memory_service as _memory_service
 
 
@@ -834,6 +836,7 @@ class DzeckAgent:
             return
 
         if resolved == "message_notify_user":
+            toolkit_name_msg = get_toolkit_name(resolved)
             text = fn_args.get("text", "") or fn_args.get("message", "")
             raw_attachments = fn_args.get("attachments") or []
             attachment_urls = []
@@ -866,17 +869,46 @@ class DzeckAgent:
                             })
                 except Exception:
                     pass
+            _msg_result = ToolResult(
+                success=True,
+                message=text or "Notification sent",
+                data={"command": "", "stdout": text or "", "stderr": "", "return_code": 0},
+            )
+            _lifecycle_evts = build_tool_lifecycle_events(
+                toolkit_name_msg, resolved, fn_args, tool_call_id, _msg_result,
+                function_result=text or "Notification sent",
+            )
+            yield _lifecycle_evts[0]
             if text or attachment_urls:
                 yield make_event("notify", text=text, attachments=attachment_urls if attachment_urls else None)
             _res = resolved
             _args = dict(fn_args)
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, lambda: execute_tool(_res, _args))
+            _msg_exec_result = await loop.run_in_executor(None, lambda: execute_tool(_res, _args))
+            if _msg_exec_result is not None and not _msg_exec_result.success:
+                _, _terminal_ev = build_tool_lifecycle_events(
+                    toolkit_name_msg, resolved, fn_args, tool_call_id, _msg_exec_result,
+                    function_result=_msg_exec_result.message or "Notification failed",
+                )
+                yield _terminal_ev
+            else:
+                yield _lifecycle_evts[1]
             yield {"type": "__result__", "value": text or "Done"}
             return
 
         if resolved == "message_ask_user":
+            toolkit_name_ask = get_toolkit_name(resolved)
             text = fn_args.get("text", "") or fn_args.get("message", "")
+            _ask_result = ToolResult(
+                success=True,
+                message="Waiting for user reply",
+                data={"command": "", "stdout": text or "", "stderr": "", "return_code": 0},
+            )
+            _ask_evts = build_tool_lifecycle_events(
+                toolkit_name_ask, resolved, fn_args, tool_call_id, _ask_result,
+                function_result="Waiting for user reply",
+            )
+            yield _ask_evts[0]
             if text:
                 yield make_event("message_start", role="ask")
                 chunk_size = 10
@@ -889,6 +921,7 @@ class DzeckAgent:
             step.result = "Menunggu jawaban user: " + (text[:200] if text else "")
             # Transition state machine to WAITING so callers can check self.state
             self.state = FlowState.WAITING
+            yield _ask_evts[1]
             yield make_event("step", status=StepStatus.PENDING.value, step=step.to_dict())
             yield make_event("waiting_for_user", text=text or "Menunggu balasan Anda...")
             yield {"type": "__step_done__"}
@@ -896,14 +929,12 @@ class DzeckAgent:
 
         toolkit_name = get_toolkit_name(resolved)
 
-        yield make_event(
-            "tool",
-            status=ToolStatus.CALLING.value,
-            tool_name=toolkit_name,
-            function_name=resolved,
-            function_args=fn_args,
-            tool_call_id=tool_call_id,
+        # Emit calling event — shared helper builds consistent calling event structure
+        _pre_result = ToolResult(success=True, message="", data={})
+        _calling_ev, _ = build_tool_lifecycle_events(
+            toolkit_name, resolved, fn_args, tool_call_id, _pre_result
         )
+        yield _calling_ev
 
         loop = asyncio.get_running_loop()
         _res = resolved
@@ -939,6 +970,8 @@ class DzeckAgent:
                 if batch:
                     chunk = "\n".join(("[stderr] " if t == "stderr" else "") + l for t, l in batch)
                     yield make_event("tool_stream", tool_call_id=tool_call_id, chunk=chunk)
+                    yield make_event("shell_output", tool_call_id=tool_call_id, output=chunk, chunk=chunk,
+                                     lines=[{"type": t, "line": l} for t, l in batch])
 
             try:
                 while True:
@@ -1022,11 +1055,13 @@ class DzeckAgent:
                               "return_code": result.exit_code, "command": cmd, "backend": "E2B"},
                     )
                 except Exception as e:
+                    import traceback as _e2b_tb
                     e2b_q.put(None)
                     return _TR(
                         success=False,
                         message=f"E2B error: {e}",
                         data={"stdout": "", "stderr": str(e), "return_code": -1, "command": cmd, "backend": "E2B"},
+                        error_stack=_e2b_tb.format_exc(),
                     )
 
             future = loop.run_in_executor(None, _run_e2b_streaming)
@@ -1045,7 +1080,7 @@ class DzeckAgent:
                 if batch:
                     chunk = "\n".join(("[stderr] " if t == "stderr" else "") + l for t, l in batch)
                     yield make_event("tool_stream", tool_call_id=tool_call_id, chunk=chunk)
-                    yield make_event("shell_output", tool_call_id=tool_call_id, chunk=chunk,
+                    yield make_event("shell_output", tool_call_id=tool_call_id, output=chunk, chunk=chunk,
                                      lines=[{"type": t, "line": l} for t, l in batch])
 
             final_batch = []
@@ -1060,7 +1095,7 @@ class DzeckAgent:
             if final_batch:
                 chunk = "\n".join(("[stderr] " if t == "stderr" else "") + l for t, l in final_batch)
                 yield make_event("tool_stream", tool_call_id=tool_call_id, chunk=chunk)
-                yield make_event("shell_output", tool_call_id=tool_call_id, chunk=chunk,
+                yield make_event("shell_output", tool_call_id=tool_call_id, output=chunk, chunk=chunk,
                                  lines=[{"type": t, "line": l} for t, l in final_batch])
 
             tool_result = await future
@@ -1142,29 +1177,45 @@ class DzeckAgent:
                 pass
 
         _tool_data = tool_result.data or {}
-        # Fix #9: browser screenshot streaming — emit browser_screenshot SSE event
-        # whenever a browser tool returns screenshot_b64. browser.py._take_screenshot()
-        # populates this field for all browser actions. Frontend handles it in
-        # agent-event-processor.ts BROWSER_SCREENSHOT → ChatPage.tsx / MainLayout.tsx.
-        if resolved in ("browser_navigate", "browser_click", "browser_type", "browser_scroll",
-                        "browser_view", "browser_screenshot", "browser_fill", "browser_select",
-                        "browser_hover", "browser_back", "browser_forward", "browser_refresh"):
-            _scr = _tool_data.get("screenshot_b64", "")
-            if _scr:
-                yield make_event("browser_screenshot",
-                                 screenshot_b64=_scr,
-                                 url=_tool_data.get("url", ""),
-                                 title=_tool_data.get("title", ""),
-                                 tool_call_id=tool_call_id)
+        # Emit browser_screenshot SSE event whenever a browser tool returns screenshot_b64.
+        # Also normalize the data URI prefix here so clients always receive a valid data URI.
+        _BROWSER_SCREENSHOT_TOOLS = {
+            "web_browse", "browser_navigate", "browser_view",
+            "browser_click", "browser_input", "browser_move_mouse",
+            "browser_press_key", "browser_select_option",
+            "browser_scroll_up", "browser_scroll_down",
+            "browser_console_exec", "browser_console_view",
+            "browser_save_image", "browser_restart", "browser_screenshot",
+            "browser_tab_list", "browser_tab_new", "browser_tab_close", "browser_tab_switch",
+            "browser_drag", "browser_file_upload",
+        }
+        if resolved in _BROWSER_SCREENSHOT_TOOLS:
+            _scr_raw = _tool_data.get("screenshot_b64", "")
+            if _scr_raw:
+                from server.agent.domain.events import _normalize_screenshot_b64 as _norm_scr
+                _scr = _norm_scr(_scr_raw)
+                if _scr:
+                    yield make_event("browser_screenshot",
+                                     screenshot_b64=_scr,
+                                     url=_tool_data.get("url", ""),
+                                     title=_tool_data.get("title", ""),
+                                     tool_call_id=tool_call_id)
 
-        if resolved in ("desktop_screenshot", "desktop_click", "desktop_type", "desktop_move",
-                        "desktop_scroll", "desktop_key", "desktop_drag", "desktop_open_app",
-                        "computer_use", "computer_screenshot"):
-            _scr = _tool_data.get("screenshot_b64", "")
-            if _scr:
-                yield make_event("desktop_screenshot",
-                                 screenshot_b64=_scr,
-                                 tool_call_id=tool_call_id)
+        _DESKTOP_SCREENSHOT_TOOLS = {
+            "desktop_open_app", "desktop_app_type", "desktop_app_screenshot",
+            "desktop_screenshot", "desktop_click", "desktop_type", "desktop_move",
+            "desktop_scroll", "desktop_key", "desktop_drag",
+            "computer_use", "computer_screenshot",
+        }
+        if resolved in _DESKTOP_SCREENSHOT_TOOLS:
+            _scr_raw = _tool_data.get("screenshot_b64", "")
+            if _scr_raw:
+                from server.agent.domain.events import _normalize_screenshot_b64 as _norm_scr2
+                _scr = _norm_scr2(_scr_raw)
+                if _scr:
+                    yield make_event("desktop_screenshot",
+                                     screenshot_b64=_scr,
+                                     tool_call_id=tool_call_id)
 
         if resolved in ("web_search", "search", "search_web", "info_search_web"):
             _results = _tool_data.get("results", [])
@@ -1182,7 +1233,7 @@ class DzeckAgent:
                                  action=resolved,
                                  data=_tool_data)
 
-        if resolved in ("task_create", "task_complete", "task_list"):
+        if resolved in ("task_create", "task_complete", "task_list", "task_done", "task_update"):
             _task_session = os.environ.get("DZECK_SESSION_ID", "")
             if _task_session:
                 yield make_event("task_update",
@@ -1190,16 +1241,14 @@ class DzeckAgent:
                                  action=resolved,
                                  data=_tool_data)
 
-        yield make_event(
-            "tool",
-            status=result_status.value,
-            tool_name=toolkit_name,
-            function_name=resolved,
-            function_args=fn_args,
-            tool_call_id=tool_call_id,
-            function_result=fn_result,
-            tool_content=tool_content,
+        # Emit terminal (called/error) event via shared helper, then override tool_content
+        # with the (possibly modified) version computed above (e.g. file download_url stripped).
+        _, _terminal_ev_base = build_tool_lifecycle_events(
+            toolkit_name, resolved, fn_args, tool_call_id, tool_result, function_result=fn_result
         )
+        _terminal_ev_base["tool_content"] = tool_content
+        _terminal_ev_base["function_result"] = fn_result
+        yield _terminal_ev_base
 
         result_summary = tool_result.message or "No result"
         if len(result_summary) > 4000:
