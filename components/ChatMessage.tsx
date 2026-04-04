@@ -12,7 +12,7 @@ import { HelpIcon, AlertCircleIcon, CheckIcon, CopyOutlineIcon } from "@/compone
 import { CodeBlock } from "@/components/CodeBlock";
 import type { ChatMessage as ChatMessageType } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
-import { cleanAgentText } from "@/lib/text-utils";
+import { cleanText } from "@/lib/text-utils";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -21,11 +21,6 @@ interface ChatMessageProps {
 type Segment =
   | { type: "text"; content: string }
   | { type: "code"; content: string; language: string };
-
-function cleanText(raw: string): string {
-  return cleanAgentText(raw)
-    .replace(/<\/?[a-zA-Z][^>]*>/g, "");
-}
 
 function parseContent(text: string): Segment[] {
   text = cleanText(text);
@@ -65,7 +60,7 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
         result.push(<Text key={`br-${lineIndex}`}>{"\n"}</Text>);
       }
 
-      const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
+      const headingMatch = line.match(/^(#{1,3})\s*(.+)/);
       if (headingMatch) {
         const level = headingMatch[1].length;
         const sizes = [22, 19, 17];
@@ -85,7 +80,7 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
         return;
       }
 
-      const listMatch = line.match(/^[\s]*[-*]\s+(.+)/);
+      const listMatch = line.match(/^[\s]*[-*+]\s+(.+)/);
       if (listMatch) {
         result.push(
           <Text key={`li-${lineIndex}`} style={{ color: textColor }}>
@@ -129,7 +124,7 @@ function FormattedText({ text, isUser }: { text: string; isUser: boolean }) {
 
 function renderInline(text: string, color: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
-  const regex = /(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(.+?)\*)/g;
+  const regex = /(\*\*\*(.+?)\*\*\*)|(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(.+?)\*)/g;
   let lastIdx = 0;
   let match;
   let key = 0;
@@ -146,14 +141,22 @@ function renderInline(text: string, color: string): React.ReactNode[] {
     if (match[2]) {
       nodes.push(
         <Text
-          key={`bold-${key++}`}
-          style={{ fontFamily: "Inter_700Bold", color }}
+          key={`bolditalic-${key++}`}
+          style={{ fontFamily: "Inter_700Bold", fontStyle: "italic", color }}
         >
           {match[2]}
         </Text>,
       );
     } else if (match[4]) {
-      const isBg = color === COLORS.textUser || color === COLORS.textAi;
+      nodes.push(
+        <Text
+          key={`bold-${key++}`}
+          style={{ fontFamily: "Inter_700Bold", color }}
+        >
+          {match[4]}
+        </Text>,
+      );
+    } else if (match[6]) {
       nodes.push(
         <Text
           key={`icode-${key++}`}
@@ -166,16 +169,16 @@ function renderInline(text: string, color: string): React.ReactNode[] {
             borderRadius: 4,
           }}
         >
-          {` ${match[4]} `}
+          {` ${match[6]} `}
         </Text>,
       );
-    } else if (match[6]) {
+    } else if (match[8]) {
       nodes.push(
         <Text
           key={`italic-${key++}`}
           style={{ fontStyle: "italic", color }}
         >
-          {match[6]}
+          {match[8]}
         </Text>,
       );
     }
@@ -344,6 +347,7 @@ const styles = StyleSheet.create({
   askBadgeText: {
     fontSize: 12,
     color: "#888888",
+    lineHeight: 20,
   },
   messageText: {
     fontFamily: "Inter_400Regular",

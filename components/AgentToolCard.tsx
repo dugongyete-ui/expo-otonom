@@ -19,6 +19,7 @@ import {
 } from "@/components/icons/SvgIcon";
 import type { AgentEvent, ToolContent } from "@/lib/chat";
 import { getToolDisplayInfo, getToolActionVerb, getToolPrimaryArg, getToolCategory, getToolCategoryColor } from "@/lib/tool-constants";
+import { stripAnsi, truncateSafe } from "@/lib/text-utils";
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon, McpIcon, SpinningIcon, SuccessIcon, ErrorIcon } from "./icons/ToolIcons";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -60,7 +61,7 @@ function ShellContent({ content, command }: { content?: string; command?: string
       ) : null}
       {content ? (
         <ScrollView style={styles.shellOutput} showsVerticalScrollIndicator={false}>
-          <Text style={styles.shellOutputText} selectable>{content.slice(0, 1500)}</Text>
+          <Text style={styles.shellOutputText} selectable>{truncateSafe(stripAnsi(content), 1500)}</Text>
         </ScrollView>
       ) : null}
     </View>
@@ -131,7 +132,7 @@ function BrowserContent({ url, title, content, screenshotB64 }: { url?: string; 
         </TouchableOpacity>
       ) : content ? (
         <ScrollView style={styles.browserContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.browserContentText} numberOfLines={10}>{content.slice(0, 1200)}</Text>
+          <Text style={styles.browserContentText} numberOfLines={10}>{truncateSafe(content, 1200)}</Text>
         </ScrollView>
       ) : validScreenshot && imgError ? (
         <View style={[styles.screenshotWrapper, { alignItems: "center", justifyContent: "center", height: 60 }]}>
@@ -156,7 +157,7 @@ function FileContent({ file, content, operation }: { file?: string; content?: st
       ) : null}
       {content ? (
         <ScrollView style={styles.fileContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.fileContentText} selectable numberOfLines={10}>{content.slice(0, 1000)}</Text>
+          <Text style={styles.fileContentText} selectable numberOfLines={10}>{truncateSafe(content, 1000)}</Text>
         </ScrollView>
       ) : null}
     </View>
@@ -216,7 +217,7 @@ function McpContent({ tool, args, result }: { tool?: string; args?: string; resu
       ) : null}
       {result ? (
         <ScrollView style={styles.mcpResult} showsVerticalScrollIndicator={false}>
-          <Text style={styles.mcpResultText} selectable numberOfLines={10}>{result.slice(0, 1200)}</Text>
+          <Text style={styles.mcpResultText} selectable numberOfLines={10}>{truncateSafe(result, 1200)}</Text>
         </ScrollView>
       ) : null}
     </View>
@@ -305,7 +306,7 @@ function ToolBody({ functionName, functionArgs, toolContent, functionResult, sta
         />
       );
     }
-    return <ShellContent content={functionResult.slice(0, 1200)} />;
+    return <ShellContent content={truncateSafe(stripAnsi(functionResult), 1200)} />;
   }
 
   return null;
@@ -411,17 +412,18 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
       }
       if (tc.type === "browser" && tc.title) return tc.title;
       if (tc.type === "shell" && tc.console) {
-        const lines = tc.console.split("\n").filter((l: string) => l.trim());
-        return lines.slice(-2).join(" ").slice(0, 120) || null;
+        const clean = stripAnsi(tc.console);
+        const lines = clean.split("\n").filter((l: string) => l.trim());
+        return truncateSafe(lines.slice(-2).join(" "), 120) || null;
       }
       if (tc.type === "file" && tc.content) {
-        return tc.content.slice(0, 100).replace(/\n/g, " ") || null;
+        return truncateSafe(tc.content.replace(/\n/g, " "), 100) || null;
       }
     }
     if (event.function_result && !isError) {
-      const r = event.function_result.trim();
+      const r = stripAnsi(event.function_result.trim());
       if (r.length > 10) {
-        return r.replace(/\n/g, " ").slice(0, 120);
+        return truncateSafe(r.replace(/\n/g, " "), 120);
       }
     }
     return null;
@@ -482,7 +484,7 @@ export function AgentToolCard({ event, onHeaderPress }: AgentToolCardProps) {
             <View style={styles.errorBody}>
               <AlertCircleIcon size={13} color="#888888" />
               <Text style={styles.errorText} numberOfLines={3}>
-                {event.function_result}
+                {truncateSafe(stripAnsi(event.function_result), 400)}
               </Text>
             </View>
           ) : null}

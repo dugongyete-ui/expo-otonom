@@ -11,6 +11,7 @@ import { CheckCircleIcon, ChevronUpIcon, ChevronDownIcon } from "@/components/ic
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
 import type { AgentPlan, AgentPlanStep, AgentEvent, ToolContent } from "@/lib/chat";
 import { getToolDisplayInfo, getToolCategory } from "@/lib/tool-constants";
+import { cleanText } from "@/lib/text-utils";
 
 export interface SelectedToolInfo {
   functionName: string;
@@ -42,12 +43,6 @@ interface StepToolEntry {
   function_result?: string;
   error?: string;
   tool_content?: ToolContent;
-}
-
-function cleanCitations(raw: string): string {
-  return raw
-    .replace(/<co>([\s\S]*?)<\/co:[^>]*>/g, "$1")
-    .replace(/<\/?co[^>]*>/g, "");
 }
 
 // Build a concise label like Manus shows for each tool step
@@ -435,7 +430,7 @@ const mtsStyles = StyleSheet.create({
 // Narrative text shown between tool steps (Manus shows progress updates inline)
 function NarrativeText({ message }: { message: string }) {
   return (
-    <Text style={narrativeStyles.text}>{cleanCitations(message)}</Text>
+    <Text style={narrativeStyles.text}>{cleanText(message)}</Text>
   );
 }
 
@@ -453,7 +448,7 @@ const narrativeStyles = StyleSheet.create({
 
 export function AgentGoalMessage({ message }: { message: string }) {
   return (
-    <Text style={goalMessageStyles.text}>{cleanCitations(message)}</Text>
+    <Text style={goalMessageStyles.text}>{cleanText(message)}</Text>
   );
 }
 

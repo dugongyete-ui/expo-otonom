@@ -8,6 +8,7 @@
 import React, { useMemo, useState } from "react";
 import { Text, View, StyleSheet, Image, TouchableOpacity, Linking } from "react-native";
 import { CodeBlock } from "@/components/CodeBlock";
+import { cleanText } from "@/lib/text-utils";
 
 interface MarkdownTextProps {
   text: string;
@@ -21,7 +22,7 @@ function renderInline(
   baseSize: number,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
-  const regex = /(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(.+?)\*)/g;
+  const regex = /(\*\*\*(.+?)\*\*\*)|(\*\*(.+?)\*\*)|(`([^`]+?)`)|(\*(.+?)\*)/g;
   let lastIdx = 0;
   let match;
   let key = 0;
@@ -37,8 +38,8 @@ function renderInline(
     if (match[2]) {
       nodes.push(
         <Text
-          key={`b-${key++}`}
-          style={{ fontFamily: "Inter_700Bold", color, fontSize: baseSize }}
+          key={`bi-${key++}`}
+          style={{ fontFamily: "Inter_700Bold", fontStyle: "italic", color, fontSize: baseSize }}
         >
           {match[2]}
         </Text>,
@@ -46,19 +47,28 @@ function renderInline(
     } else if (match[4]) {
       nodes.push(
         <Text
-          key={`ic-${key++}`}
-          style={[styles.inlineCode, { fontSize: baseSize - 1 }]}
+          key={`b-${key++}`}
+          style={{ fontFamily: "Inter_700Bold", color, fontSize: baseSize }}
         >
-          {` ${match[4]} `}
+          {match[4]}
         </Text>,
       );
     } else if (match[6]) {
       nodes.push(
         <Text
+          key={`ic-${key++}`}
+          style={[styles.inlineCode, { fontSize: baseSize - 1 }]}
+        >
+          {` ${match[6]} `}
+        </Text>,
+      );
+    } else if (match[8]) {
+      nodes.push(
+        <Text
           key={`i-${key++}`}
           style={{ fontStyle: "italic", color, fontSize: baseSize }}
         >
-          {match[6]}
+          {match[8]}
         </Text>,
       );
     }
@@ -137,12 +147,6 @@ function renderInlineWithLinks(
   return nodes;
 }
 
-function cleanCitations(raw: string): string {
-  return raw
-    .replace(/<co>([\s\S]*?)<\/co:[^>]*>/g, "$1")
-    .replace(/<\/?co[^>]*>/g, "");
-}
-
 export function MarkdownText({
   text,
   color = "#1a1916",
@@ -150,7 +154,7 @@ export function MarkdownText({
 }: MarkdownTextProps) {
   const blocks = useMemo(() => {
     const result: React.ReactNode[] = [];
-    const lines = cleanCitations(text).split("\n");
+    const lines = cleanText(text).split("\n");
     let idx = 0;
 
     while (idx < lines.length) {
@@ -183,7 +187,7 @@ export function MarkdownText({
       }
 
       // Headings
-      const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
+      const headingMatch = line.match(/^(#{1,3})\s*(.+)/);
       if (headingMatch) {
         const level = headingMatch[1].length;
         const sizes = [fontSize + 7, fontSize + 4, fontSize + 2];
@@ -229,7 +233,7 @@ export function MarkdownText({
       }
 
       // Bullet list
-      const bulletMatch = line.match(/^[\s]*[-*]\s+(.+)/);
+      const bulletMatch = line.match(/^[\s]*[-*+]\s+(.+)/);
       if (bulletMatch) {
         result.push(
           <Text key={`li-${idx}`} style={[styles.listItem, { color, fontSize }]} selectable>
