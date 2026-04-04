@@ -699,7 +699,8 @@ const goalMessageStyles = StyleSheet.create({
  */
 export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, thoughtStream, onToolPress }: AgentPlanViewProps) {
   const steps = plan.steps || [];
-  const [expanded, setExpanded] = useState(true);
+  // Collapsed by default - Manus style: minimal plan preview, expand on demand
+  const [expanded, setExpanded] = useState(false);
 
   const isAllDone = plan.status === "completed" || (steps.length > 0 && steps.every(s => s.status === "completed" || s.status === "failed"));
   const isRunning = plan.status === "running" || steps.some(s => s.status === "running");

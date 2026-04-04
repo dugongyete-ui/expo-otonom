@@ -2069,75 +2069,39 @@ export function ChatPage({
             </View>
           ) : taskCompleted ? (
             <View style={styles.taskCompletedWrap}>
-              {/* Manus-style: checkmark + task title + "Tugas telah selesai" */}
-              <View style={styles.taskCompletedCard}>
-                <View style={styles.taskCompletedCardHeader}>
-                  <CheckCircleIcon size={18} color="#4CAF50" />
-                  <Text style={styles.taskCompletedTitle}>Tugas telah selesai</Text>
-                </View>
-                {taskFinalNarrative ? (
-                  <View style={styles.taskCompletedNarrative}>
-                    <Text style={styles.taskCompletedNarrativeText}>{taskFinalNarrative}</Text>
-                  </View>
-                ) : null}
-                {completedSteps.length > 0 && (
-                  <View style={styles.taskCompletedSteps}>
-                    {completedSteps.map((step, i) => (
-                      <View key={step.id || i} style={styles.taskCompletedStepRow}>
-                        <CheckCircleIcon size={14} color="#4CAF50" />
-                        <Text style={styles.taskCompletedStepText} numberOfLines={2}>
-                          {step.description}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-                {/* Show tool summary if any tools were executed */}
-                {tools.length > 0 && (
-                  <View style={styles.taskCompletedTools}>
-                    <Text style={styles.taskCompletedToolsTitle}>Tools yang digunakan:</Text>
-                    {tools.map((tool, i) => {
-                      const fnName = tool.function_name || tool.name || "tool";
-                      const args = (tool.function_args || tool.input || {}) as Record<string, unknown>;
-                      const label = buildInlineLabel(fnName, args);
-                      const isError = tool.status === "error";
-                      return (
-                        <View key={tool.tool_call_id || i} style={styles.taskCompletedToolRow}>
-                          <CheckCircleIcon size={14} color={isError ? "#e05c5c" : "#4CAF50"} />
-                          <Text style={[styles.taskCompletedToolText, isError && { color: "#c07070" }]} numberOfLines={2}>
-                            {label}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-                {/* Star rating row like Manus */}
-                <View style={styles.starRatingRow}>
-                  <Text style={styles.starRatingLabel}>
-                    {starRating > 0 ? "Terima kasih atas penilaianmu!" : "Beri nilai hasil ini"}
-                  </Text>
-                  <View style={styles.starRatingStars}>
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <TouchableOpacity
-                        key={n}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          setStarRating(n);
-                          const sid = activeSessionIdRef.current;
-                          if (sid) {
-                            apiService.rateSession(sid, n).catch(() => {});
-                          }
-                        }}
-                      >
-                        <StarIcon
-                          size={22}
-                          color={n <= starRating ? "#f5a623" : "#444444"}
-                          filled={n <= starRating}
-                        />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+              {/* Only show goal description - clean and minimal */}
+              <View style={styles.taskCompletedHeaderSection}>
+                <CheckCircleIcon size={20} color="#4CAF50" />
+                <Text style={styles.taskCompletedHeaderText}>Tugas telah selesai</Text>
+              </View>
+              {taskFinalNarrative && (
+                <Text style={styles.taskCompletedGoalText}>{taskFinalNarrative}</Text>
+              )}
+              {/* Star rating - minimal and clean */}
+              <View style={styles.starRatingRow}>
+                <Text style={styles.starRatingLabel}>
+                  {starRating > 0 ? "Terima kasih atas rating Anda" : "Bagaimana hasil kerjanya?"}
+                </Text>
+                <View style={styles.starRatingStars}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <TouchableOpacity
+                      key={n}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setStarRating(n);
+                        const sid = activeSessionIdRef.current;
+                        if (sid) {
+                          apiService.rateSession(sid, n).catch(() => {});
+                        }
+                      }}
+                    >
+                      <StarIcon
+                        size={20}
+                        color={n <= starRating ? "#f5a623" : "#444444"}
+                        filled={n <= starRating}
+                      />
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
             </View>
@@ -2648,89 +2612,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
-  // Manus-style task completed
+  // Manus-style task completed - clean and minimal
   taskCompletedWrap: {
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginVertical: 12,
+    gap: 12,
   },
-  taskCompletedCard: {
-    backgroundColor: "#161616",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    overflow: "hidden",
-    paddingBottom: 8,
-  },
-  taskCompletedCardHeader: {
+  taskCompletedHeaderSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
+    gap: 8,
   },
-  taskCompletedTitle: {
+  taskCompletedHeaderText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
     color: "#e8e8e8",
     letterSpacing: -0.2,
   },
-  taskCompletedSteps: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 6,
-    gap: 8,
-  },
-  taskCompletedStepRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  taskCompletedStepText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#b0b0b0",
-    flex: 1,
-    lineHeight: 19,
-  },
-  taskCompletedTools: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 6,
-    gap: 6,
-  },
-  taskCompletedToolsTitle: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    color: "#888888",
-    marginBottom: 4,
-  },
-  taskCompletedToolRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  taskCompletedToolText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#b0b0b0",
-    flex: 1,
-    lineHeight: 19,
-  },
-  taskCompletedNarrative: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "#111111",
-    borderRadius: 8,
-  },
-  taskCompletedNarrativeText: {
+  taskCompletedGoalText: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     color: "#d0d0d0",
     lineHeight: 21,
+    marginTop: 4,
   },
   // Star rating like Manus
   starRatingRow: {
