@@ -18,23 +18,11 @@ import {
   Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getApiBaseUrl } from "@/lib/api-service";
-
-interface MCPServer {
-  name: string;
-  url: string;
-  has_auth_token?: boolean;
-  enabled: boolean;
-  description?: string;
-  transport?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+import { apiService, McpServer as MCPServer, McpServerInput } from "@/lib/api-service";
 
 interface MCPPanelProps {
   visible: boolean;
   onClose: () => void;
-  authToken: string;
 }
 
 const TRANSPORT_OPTIONS = ["sse", "streamable_http", "stdio"];
@@ -86,7 +74,7 @@ const fieldStyles = StyleSheet.create({
   },
 });
 
-export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
+export function MCPPanel({ visible, onClose }: MCPPanelProps) {
   const [servers, setServers] = useState<MCPServer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -102,26 +90,20 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
     transport: "sse",
     enabled: true,
   });
-  // Tracks whether user actually typed a new token during editing
   const [tokenChanged, setTokenChanged] = useState(false);
-
-  const apiBase = getApiBaseUrl();
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` };
 
   const fetchServers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiBase}/api/mcp/config`, { headers });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await apiService.getMcpConfig();
       setServers(data.servers || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, [apiBase, authToken]);
+  }, []);
 
   useEffect(() => {
     if (visible) fetchServers();
@@ -161,25 +143,21 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
     setError(null);
     try {
       const isEdit = !!editingServer;
-      const method = isEdit ? "PUT" : "POST";
-      const endpoint = isEdit
-        ? `${apiBase}/api/mcp/config/${encodeURIComponent(editingServer!.name)}`
-        : `${apiBase}/api/mcp/config`;
-
-      const body: Record<string, any> = {
+      const baseFields: Partial<McpServerInput> = {
         name: form.name.trim(),
         url: form.url.trim(),
         description: form.description,
         transport: form.transport,
         enabled: form.enabled,
       };
-      // Only send auth_token when adding new, or when editing and user explicitly typed one
       if (!isEdit || tokenChanged) {
-        body.auth_token = form.auth_token;
+        baseFields.auth_token = form.auth_token;
       }
-
-      const res = await fetch(endpoint, { method, headers, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      if (isEdit) {
+        await apiService.updateMcpConfig(editingServer!.name, baseFields);
+      } else {
+        await apiService.addMcpConfig(baseFields as McpServerInput);
+      }
       await fetchServers();
       setShowAddForm(false);
       resetForm();
@@ -204,8 +182,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
 
   const doDelete = async (name: string) => {
     try {
-      const res = await fetch(`${apiBase}/api/mcp/config/${encodeURIComponent(name)}`, { method: "DELETE", headers });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      await apiService.deleteMcpConfig(name);
       await fetchServers();
     } catch (err: any) {
       setError(err.message);
@@ -214,12 +191,7 @@ export function MCPPanel({ visible, onClose, authToken }: MCPPanelProps) {
 
   const handleToggleEnabled = async (server: MCPServer) => {
     try {
-      const res = await fetch(`${apiBase}/api/mcp/config/${encodeURIComponent(server.name)}`, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({ ...server, enabled: !server.enabled }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await apiService.updateMcpConfig(server.name, { enabled: !server.enabled });
       await fetchServers();
     } catch (err: any) {
       setError(err.message);

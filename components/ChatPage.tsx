@@ -13,7 +13,7 @@ import {
   StarIcon, NativeIcon,
 } from "@/components/icons/SvgIcon";
 import { ShellIcon, BrowserIcon, EditIcon, SearchIcon, MessageIcon } from "@/components/icons/ToolIcons";
-import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl } from "../lib/api-service";
+import { apiService, AgentEvent, ChatMessage as ApiChatMessage, getStoredToken, getApiBaseUrl, DEFAULT_MODEL_FALLBACK } from "../lib/api-service";
 import { processAgentEvent } from "../lib/agent-event-processor";
 import { saveActiveSessionId, loadActiveSessionId, clearActiveSessionId, saveActiveSessionLastId, loadActiveSessionLastId } from "../lib/storage";
 import { randomUUID } from "expo-crypto";
@@ -451,7 +451,7 @@ export function ChatPage({
   const [showSettings, setShowSettings] = useState(false);
   const [showMCPPanel, setShowMCPPanel] = useState(false);
   const [showModelSettings, setShowModelSettings] = useState(false);
-  const [activeModel, setActiveModel] = useState("qwen-3-235b-a22b-instruct-2507");
+  const [activeModel, setActiveModel] = useState(DEFAULT_MODEL_FALLBACK);
   const { locale, changeLocale } = useI18n();
   const { logout } = useAuth();
   const [attachments, setAttachments] = useState<any[]>([]);
@@ -499,6 +499,8 @@ export function ChatPage({
   const [starRating, setStarRating] = useState(0);
   const [planHistory, setPlanHistory] = useState<AgentPlan[]>([]);
   const [activePlanIndex, setActivePlanIndex] = useState(0);
+  const [reconnectError, setReconnectError] = useState<string | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -533,17 +535,16 @@ export function ChatPage({
     };
   }, [isLoading, isAgentMode]);
 
-  // Load active model: user prefs (per-user MongoDB) take priority over global config
+  // Load active model: user prefs (per-user MongoDB) take priority over global config.
+  // Falls back to DEFAULT_MODEL_FALLBACK if no preference is stored.
   useEffect(() => {
     const base = getApiBaseUrl();
-    const token = getStoredToken();
-    const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
     Promise.all([
-      fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+      apiService.getUserPrefs(),
       fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
     ]).then(([prefs, cfg]) => {
-      const m = prefs.model || cfg.modelName || cfg.G4F_MODEL;
-      if (m) setActiveModel(m);
+      const m = prefs.model || cfg.modelName || cfg.G4F_MODEL || DEFAULT_MODEL_FALLBACK;
+      setActiveModel(m);
     }).catch(() => {});
   }, []);
 
@@ -568,7 +569,7 @@ export function ChatPage({
     return () => { cancelled = true; };
   }, [isAgentMode]);
 
-  // Load share status for the initial externalSessionId (mount case)
+  // Load share status and rating for the initial externalSessionId (mount case)
   useEffect(() => {
     if (!externalSessionId) return;
     apiService.getShareStatus(externalSessionId)
@@ -576,6 +577,13 @@ export function ChatPage({
         if (activeSessionIdRef.current === externalSessionId || !activeSessionIdRef.current) {
           setIsShared(status.is_shared);
           setShareUrl(status.share_url);
+        }
+      })
+      .catch(() => {});
+    apiService.getSessionRating(externalSessionId)
+      .then(({ rating }) => {
+        if ((activeSessionIdRef.current === externalSessionId || !activeSessionIdRef.current) && rating > 0) {
+          setStarRating(rating);
         }
       })
       .catch(() => {});
@@ -593,8 +601,9 @@ export function ChatPage({
       const status = await apiService.getSessionStatus(sessionIdToRestore);
       if (cancelled) return;
 
-      if (!status.exists) {
-        if (!externalSessionId) await clearActiveSessionId();
+      if (!status.exists || status.status === "not_found" || status.status === "expired") {
+        await clearActiveSessionId();
+        setSessionEnded(true);
         return;
       }
 
@@ -625,7 +634,11 @@ export function ChatPage({
                 setMessages(restored);
               }
             }
-          } catch {}
+          } catch (err: unknown) {
+            if (!cancelled) {
+              setReconnectError(err instanceof Error ? err.message : "Failed to load session history");
+            }
+          }
         }
         return;
       }
@@ -663,11 +676,18 @@ export function ChatPage({
             clearActiveSessionId().catch(() => {});
           }
         },
-        onError: () => {
+        onError: (err?: Error) => {
           if (!cancelled) {
             setIsLoading(false);
             setThinking({ active: false, label: "" });
             clearActiveSessionId().catch(() => {});
+            const msg = err?.message || "Failed to reconnect to session stream";
+            const isNotFound = msg.includes("not found") || msg.includes("404") || msg.includes("max reconnect");
+            if (isNotFound) {
+              setSessionEnded(true);
+            } else {
+              setReconnectError(msg);
+            }
           }
         },
       }, lastId);
@@ -716,6 +736,17 @@ export function ChatPage({
       isWaitingRef.current = false;
       setIsShared(false);
       setShareUrl(null);
+      setReconnectError(null);
+      setSessionEnded(false);
+      setStarRating(0);
+
+      apiService.getSessionRating(externalSessionId)
+        .then(({ rating }) => {
+          if (activeSessionIdRef.current === externalSessionId && rating > 0) {
+            setStarRating(rating);
+          }
+        })
+        .catch(() => {});
 
       apiService.getShareStatus(externalSessionId)
         .then((status) => {
@@ -1830,10 +1861,40 @@ export function ChatPage({
         </TouchableOpacity>
       </Modal>
 
+      {reconnectError && (
+        <View style={styles.reconnectErrorBanner}>
+          <Text style={styles.reconnectErrorText} numberOfLines={2}>{reconnectError}</Text>
+          <TouchableOpacity onPress={() => setReconnectError(null)} hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}>
+            <Text style={styles.reconnectErrorDismiss}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {sessionEnded && (
+        <View style={styles.sessionEndedBanner}>
+          <Text style={styles.sessionEndedText}>Session ended — this session is no longer active.</Text>
+          <TouchableOpacity onPress={() => setSessionEnded(false)} hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}>
+            <Text style={styles.reconnectErrorDismiss}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isShared && shareUrl && (
+        <View style={styles.shareUrlBanner}>
+          <ShareIcon size={14} color="#7ab8f5" />
+          <Text style={styles.shareUrlText} numberOfLines={1} selectable>{shareUrl}</Text>
+          <TouchableOpacity
+            onPress={() => Share.share({ message: shareUrl, url: shareUrl }).catch(() => Alert.alert("Share Link", shareUrl))}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          >
+            <Text style={styles.shareUrlCopy}>Share</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <MCPPanel
         visible={showMCPPanel}
         onClose={() => setShowMCPPanel(false)}
-        authToken={getStoredToken()}
       />
 
       <SettingsPanel
@@ -1841,14 +1902,12 @@ export function ChatPage({
         onClose={() => {
           setShowModelSettings(false);
           const base = getApiBaseUrl();
-          const token = getStoredToken();
-          const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
           Promise.all([
-            fetch(`${base}/api/user/prefs`, { headers: authHdr }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+            apiService.getUserPrefs(),
             fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({})),
           ]).then(([prefs, cfg]) => {
-            const m = prefs.model || cfg.G4F_MODEL || cfg.modelName;
-            if (m) setActiveModel(m);
+            const m = prefs.model || cfg.G4F_MODEL || cfg.modelName || DEFAULT_MODEL_FALLBACK;
+            setActiveModel(m);
           }).catch(() => {});
         }}
         authToken={getStoredToken()}
@@ -2042,7 +2101,13 @@ export function ChatPage({
                       <TouchableOpacity
                         key={n}
                         activeOpacity={0.7}
-                        onPress={() => setStarRating(n)}
+                        onPress={() => {
+                          setStarRating(n);
+                          const sid = activeSessionIdRef.current;
+                          if (sid) {
+                            apiService.rateSession(sid, n).catch(() => {});
+                          }
+                        }}
                       >
                         <StarIcon
                           size={22}
@@ -2718,5 +2783,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 2,
     gap: 1,
+  },
+  reconnectErrorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(180,60,60,0.15)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(180,60,60,0.25)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  reconnectErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#e07070",
+    fontFamily: "Inter_400Regular",
+  },
+  reconnectErrorDismiss: {
+    fontSize: 14,
+    color: "#888888",
+    fontWeight: "600",
+  },
+  sessionEndedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderBottomWidth: 1,
+    borderBottomColor: "#2a2a2a",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  sessionEndedText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#888888",
+    fontFamily: "Inter_400Regular",
+  },
+  shareUrlBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(100,160,240,0.08)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(100,160,240,0.15)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  shareUrlText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#7ab8f5",
+    fontFamily: "Inter_400Regular",
+  },
+  shareUrlCopy: {
+    fontSize: 12,
+    color: "#7ab8f5",
+    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
   },
 });

@@ -2,6 +2,9 @@ import { getApiUrl } from "./query-client";
 import { getMemoryToken, setMemoryToken } from "./token-store";
 import { Platform } from "react-native";
 
+/** Safe fallback model used when no model is specified in user prefs or the request. */
+export const DEFAULT_MODEL_FALLBACK = "qwen-3-235b-a22b-instruct-2507";
+
 /**
  * Checks whether the fetch Response has a readable body stream.
  * React Native's built-in fetch does NOT expose response.body, so we must
@@ -201,6 +204,34 @@ export interface AgentCallbacks {
   onDone?: () => void;
 }
 
+export interface McpServer {
+  name: string;
+  url: string;
+  has_auth_token?: boolean;
+  enabled: boolean;
+  description?: string;
+  transport?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface McpServerInput {
+  name: string;
+  url: string;
+  auth_token?: string;
+  description?: string;
+  transport?: string;
+  enabled?: boolean;
+}
+
+export interface UserPrefs {
+  model?: string;
+  modelProvider?: string;
+  searchProvider?: string;
+  theme?: string;
+  language?: string;
+}
+
 export function setSharedMemoryToken(token: string | null) {
   setMemoryToken(token);
 }
@@ -307,68 +338,85 @@ class ApiService {
   ): () => void {
     const { onMessage, onError, onDone } = callbacks;
     const url = `${this.baseUrl}/api/agent`;
-    const bodyObj: Record<string, any> = {
-      message: request.message,
-      messages: request.messages || [],
-      model: request.model || "qwen-3-235b-a22b-instruct-2507",
-      attachments: request.attachments || [],
-      session_id: request.session_id,
-      is_continuation: request.is_continuation || false,
-    };
-    if (request.mode) bodyObj.mode = request.mode;
-    const body = JSON.stringify(bodyObj);
-    const hdrs = authHeaders();
     let isClosed = false;
-    let buffer = "";
-    let lastSeenId = "";
+    let cancelStream: (() => void) | null = null;
 
-    const processAgentLine = (line: string): boolean => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("id: ")) { lastSeenId = trimmed.slice(4).trim(); return false; }
-      if (!trimmed || !trimmed.startsWith("data: ")) return false;
-      const data = trimmed.slice(6).trim();
-      if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
-      try {
-        const event: AgentEvent = JSON.parse(data);
-        if (lastSeenId) event._streamId = lastSeenId;
-        onMessage?.(event);
-      } catch (e) {
-        console.error("Failed to parse SSE event:", e, "raw data:", data);
-      }
-      return false;
-    };
-
-    const processChunk = (chunk: string) => {
+    const startStream = (resolvedModel: string) => {
       if (isClosed) return;
-      buffer += chunk;
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (processAgentLine(line)) return;
-      }
-    };
+      const bodyObj: Record<string, unknown> = {
+        message: request.message,
+        messages: request.messages || [],
+        model: resolvedModel,
+        attachments: request.attachments || [],
+        session_id: request.session_id,
+        is_continuation: request.is_continuation || false,
+      };
+      if (request.mode) bodyObj.mode = request.mode;
+      const body = JSON.stringify(bodyObj);
+      const hdrs = authHeaders();
+      let buffer = "";
+      let lastSeenId = "";
 
-    const flushBuffer = () => {
-      if (buffer.trim()) {
-        processAgentLine(buffer);
-        buffer = "";
-      }
-    };
+      const processAgentLine = (line: string): boolean => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("id: ")) { lastSeenId = trimmed.slice(4).trim(); return false; }
+        if (!trimmed || !trimmed.startsWith("data: ")) return false;
+        const data = trimmed.slice(6).trim();
+        if (data === "[DONE]") { if (!isClosed) { isClosed = true; onDone?.(); } return true; }
+        try {
+          const event: AgentEvent = JSON.parse(data);
+          if (lastSeenId) event._streamId = lastSeenId;
+          onMessage?.(event);
+        } catch (e) {
+          console.error("Failed to parse SSE event:", e, "raw data:", data);
+        }
+        return false;
+      };
 
-    const cancel = streamWithXHR(
-      url, hdrs, body,
-      processChunk,
-      () => {
+      const processChunk = (chunk: string) => {
         if (isClosed) return;
-        flushBuffer();
-        if (!isClosed) { isClosed = true; onDone?.(); }
-      },
-      (err) => {
-        if (!isClosed) { isClosed = true; onError?.(err); }
-      }
-    );
+        buffer += chunk;
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (processAgentLine(line)) return;
+        }
+      };
 
-    return () => { isClosed = true; cancel(); };
+      const flushBuffer = () => {
+        if (buffer.trim()) {
+          processAgentLine(buffer);
+          buffer = "";
+        }
+      };
+
+      cancelStream = streamWithXHR(
+        url, hdrs, body,
+        processChunk,
+        () => {
+          if (isClosed) return;
+          flushBuffer();
+          if (!isClosed) { isClosed = true; onDone?.(); }
+        },
+        (err) => {
+          if (!isClosed) { isClosed = true; onError?.(err); }
+        }
+      );
+    };
+
+    // If caller already supplied a model, start streaming immediately.
+    // Otherwise, resolve from user prefs first, then fall back to DEFAULT_MODEL_FALLBACK.
+    if (request.model) {
+      startStream(request.model);
+    } else {
+      this.getUserPrefs().then((prefs) => {
+        startStream(prefs.model || DEFAULT_MODEL_FALLBACK);
+      }).catch(() => {
+        startStream(DEFAULT_MODEL_FALLBACK);
+      });
+    }
+
+    return () => { isClosed = true; cancelStream?.(); };
   }
 
   /**
@@ -477,7 +525,7 @@ class ApiService {
     let stopped = false;
     let lastEventId = initialLastEventId;
     let retryCount = 0;
-    const MAX_RETRIES = 10;
+    const MAX_RETRIES = 3;
     let cancelCurrent: (() => void) | null = null;
 
     const stop = () => {
@@ -608,6 +656,109 @@ class ApiService {
       return await res.json();
     } catch (err: any) {
       return { status: "error", services: { error: { status: "error", message: err.message } } };
+    }
+  }
+
+  // ─── MCP Config wrappers ─────────────────────────────────────────────────
+
+  async getMcpConfig(): Promise<{ servers: McpServer[] }> {
+    const res = await fetch(`${this.baseUrl}/api/mcp/config`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async addMcpConfig(server: McpServerInput): Promise<{ ok: boolean; server: McpServer }> {
+    const res = await fetch(`${this.baseUrl}/api/mcp/config`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(server),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async updateMcpConfig(name: string, updates: Partial<McpServerInput>): Promise<{ ok: boolean; updated: string }> {
+    const res = await fetch(`${this.baseUrl}/api/mcp/config/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async deleteMcpConfig(name: string): Promise<{ ok: boolean; deleted: string }> {
+    const res = await fetch(`${this.baseUrl}/api/mcp/config/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // ─── User preferences wrappers ───────────────────────────────────────────
+
+  async getUserPrefs(): Promise<UserPrefs> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/user/prefs`, { headers: authHeaders() });
+      if (!res.ok) return {};
+      return res.json();
+    } catch {
+      return {};
+    }
+  }
+
+  async updateUserPrefs(prefs: Partial<UserPrefs>): Promise<{ updated: Partial<UserPrefs> }> {
+    const res = await fetch(`${this.baseUrl}/api/user/prefs`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify(prefs),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // ─── Agent session pause/resume wrappers ─────────────────────────────────
+
+  async pauseAgentSession(sessionId: string): Promise<{ ok: boolean }> {
+    const res = await fetch(`${this.baseUrl}/api/agent/sessions/${encodeURIComponent(sessionId)}/pause`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async resumeAgentSession(sessionId: string): Promise<{ ok: boolean }> {
+    const res = await fetch(`${this.baseUrl}/api/agent/sessions/${encodeURIComponent(sessionId)}/resume`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // ─── Session rating wrappers ─────────────────────────────────────────────
+
+  async rateSession(sessionId: string, rating: number): Promise<{ ok: boolean; rating: number }> {
+    const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/rating`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ rating }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getSessionRating(sessionId: string): Promise<{ rating: number }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/rating`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) return { rating: 0 };
+      return res.json();
+    } catch {
+      return { rating: 0 };
     }
   }
 }

@@ -18,7 +18,7 @@ import {
   Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getApiBaseUrl } from "@/lib/api-service";
+import { apiService, getApiBaseUrl } from "@/lib/api-service";
 
 interface SelectOption {
   label: string;
@@ -174,19 +174,19 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
   const [searchOptions, setSearchOptions] = useState<SelectOption[]>(FALLBACK_SEARCH_PROVIDERS);
 
   const apiBase = getApiBaseUrl();
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` };
 
   const fetchConfig = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [configRes, prefsRes, healthRes] = await Promise.all([
-        fetch(`${apiBase}/api/config`),
-        fetch(`${apiBase}/api/user/prefs`, { headers }),
+      const [data, prefs, healthRes] = await Promise.all([
+        fetch(`${apiBase}/api/config`).then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json() as Promise<AppConfig>;
+        }),
+        apiService.getUserPrefs(),
         fetch(`${apiBase}/api/health`).catch(() => null),
       ]);
-      if (!configRes.ok) throw new Error(`HTTP ${configRes.status}`);
-      const data: AppConfig = await configRes.json();
       const health = healthRes && healthRes.ok ? await healthRes.json().catch(() => null) : null;
       const statuses: Record<string, ServiceStatus> = {};
       if (health?.services) {
@@ -220,17 +220,16 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
       if (data.available_models?.length) setModelOptions(data.available_models);
       if (data.available_providers?.length) setProviderOptions(data.available_providers);
       if (data.available_search_providers?.length) setSearchOptions(data.available_search_providers);
-      const prefs = prefsRes.ok ? await prefsRes.json().catch(() => ({})) : {};
       setAgentModel(prefs.model || data.G4F_MODEL || data.modelName || "auto");
       setChatModel(data.G4F_MODEL || "auto");
       setModelProvider(prefs.modelProvider || data.MODEL_PROVIDER || data.modelProvider || "g4f");
       setSearchProvider(prefs.searchProvider || data.SEARCH_PROVIDER || data.searchProvider || "bing_web");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load config");
     } finally {
       setIsLoading(false);
     }
-  }, [apiBase, headers]);
+  }, [apiBase]);
 
   useEffect(() => {
     if (visible) fetchConfig();
@@ -241,20 +240,11 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
     setError(null);
     setSuccessMsg(null);
     try {
-      const prefsBody: Record<string, string> = {
+      await apiService.updateUserPrefs({
         model: agentModel,
         modelProvider,
         searchProvider,
-      };
-      const prefsRes = await fetch(`${apiBase}/api/user/prefs`, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(prefsBody),
       });
-      if (!prefsRes.ok) {
-        const errJson = await prefsRes.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${prefsRes.status}`);
-      }
 
       if (googleApiKey.trim() || googleEngineId.trim()) {
         const adminBody: Record<string, string> = {};
@@ -262,7 +252,7 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
         if (googleEngineId.trim()) adminBody.GOOGLE_SEARCH_ENGINE_ID = googleEngineId.trim();
         const adminRes = await fetch(`${apiBase}/api/config`, {
           method: "PUT",
-          headers,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
           body: JSON.stringify(adminBody),
         });
         if (!adminRes.ok && adminRes.status !== 403) {
@@ -274,8 +264,8 @@ export function SettingsPanel({ visible, onClose, authToken }: SettingsPanelProp
       setSuccessMsg("Settings saved successfully");
       setTimeout(() => setSuccessMsg(null), 3000);
       await fetchConfig();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setIsSaving(false);
     }

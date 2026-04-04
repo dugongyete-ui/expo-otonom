@@ -776,6 +776,48 @@ export async function registerRoutes(app: any): Promise<Server> {
     res.json({ session_id: sessionId, is_shared: isShared, share_url: isShared ? shareUrl : null });
   });
 
+  // ─── Session rating endpoint ──────────────────────────────────────────────
+  // POST /api/sessions/:sessionId/rating — save a star rating (1-5) for a session
+  // GET  /api/sessions/:sessionId/rating — retrieve the stored rating
+  app.post("/api/sessions/:sessionId/rating", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    const ownership = await verifySessionOwnership(sessionId, requestingUserId);
+    if (ownership === "not_found") return res.status(404).json({ error: "Session not found" });
+    if (ownership === "denied") return res.status(403).json({ error: "Access denied" });
+    const rating = Number(req.body?.rating);
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "rating must be an integer between 1 and 5" });
+    }
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        await (col as any).updateOne(
+          { session_id: sessionId },
+          { $set: { star_rating: Math.round(rating), updated_at: new Date() } },
+        );
+      }
+      res.json({ ok: true, rating: Math.round(rating) });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to save rating: " + err.message });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/rating", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    const ownership = await verifySessionOwnership(sessionId, requestingUserId);
+    if (ownership === "not_found") return res.status(404).json({ error: "Session not found" });
+    if (ownership === "denied") return res.status(403).json({ error: "Access denied" });
+    try {
+      const col = await getCollection("sessions");
+      const doc = col ? await (col as any).findOne({ session_id: sessionId }, { projection: { star_rating: 1 } }) : null;
+      res.json({ rating: doc?.star_rating || 0 });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to load rating: " + err.message });
+    }
+  });
+
   app.get("/api/sessions/:sessionId/events", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
