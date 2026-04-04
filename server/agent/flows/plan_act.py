@@ -808,6 +808,7 @@ class DzeckAgent:
         tool_call_id: str,
         step: Step,
     ) -> AsyncGenerator[Dict[str, Any], None]:
+        yield make_event("thinking", text="Menjalankan tool: {}".format(fn_name))
         import queue as _queue_mod
 
         if fn_name in ("idle", "task_complete"):
@@ -2362,13 +2363,18 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     pass
 
             if self._created_files:
-                # Emit both notify (for file cards in chat) and files (for legacy consumers)
-                yield make_event(
-                    "notify",
-                    text="Berikut file yang dibuat oleh agent:",
-                    attachments=self._created_files,
-                )
-                yield make_event("files", files=self._created_files)
+                # Filter out unwanted files like auto-generated guides
+                filtered_files = [
+                    f for f in self._created_files 
+                    if not any(bad_name in f.get('filename', '').lower() for bad_name in ['refactor-guide', 'auto-refactor'])
+                ]
+                if filtered_files:
+                    yield make_event(
+                        "notify",
+                        text="Berikut file yang dibuat oleh agent:",
+                        attachments=filtered_files,
+                    )
+                    yield make_event("files", files=filtered_files)
 
             yield make_event("done", success=True, session_id=self.session_id)
 
@@ -2384,10 +2390,15 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
             yield make_event("error", error="Agent error: {}".format(e))
             traceback.print_exc(file=sys.stderr)
             if self._created_files:
-                yield make_event(
-                    "notify",
-                    text="Berikut file yang dibuat sebelum terjadi kesalahan:",
-                    attachments=self._created_files,
-                )
-                yield make_event("files", files=self._created_files)
+                filtered_files = [
+                    f for f in self._created_files 
+                    if not any(bad_name in f.get('filename', '').lower() for bad_name in ['refactor-guide', 'auto-refactor'])
+                ]
+                if filtered_files:
+                    yield make_event(
+                        "notify",
+                        text="Berikut file yang dibuat sebelum terjadi kesalahan:",
+                        attachments=filtered_files,
+                    )
+                    yield make_event("files", files=filtered_files)
             yield make_event("done", success=False, session_id=self.session_id)

@@ -502,6 +502,7 @@ export function ChatPage({
   const [activePlanIndex, setActivePlanIndex] = useState(0);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [thoughtStream, setThoughtStream] = useState<string[]>([]);
 
   useEffect(() => {
     if (flatListRef.current) {
@@ -1182,10 +1183,10 @@ export function ChatPage({
         return;
       }
 
-      case "waiting_for_user": {
-        isWaitingRef.current = true;
-        setIsWaitingForUser(true);
-        setThinking({ active: false, label: "" });
+      case "thinking": {
+        if (ev.text) {
+          setThoughtStream(prev => [...prev.slice(-4), ev.text]); // Keep last 5 thoughts
+        }
         return;
       }
 
@@ -1971,6 +1972,7 @@ export function ChatPage({
                   plan={item.plan}
                   notifyMessages={item.notifyMessages}
                   stepNotifyMessages={item.stepNotifyMessages}
+                  thoughtStream={thoughtStream}
                   onToolPress={(tool) => {
                     setSelectedTool(tool);
                   }}

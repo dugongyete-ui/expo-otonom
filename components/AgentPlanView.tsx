@@ -28,6 +28,7 @@ interface AgentPlanViewProps {
   plan: AgentPlan;
   notifyMessages?: string[];
   stepNotifyMessages?: { stepId: string; text: string }[];
+  thoughtStream?: string[];
   onToolPress?: (tool: SelectedToolInfo) => void;
 }
 
@@ -446,6 +447,49 @@ const narrativeStyles = StyleSheet.create({
   },
 });
 
+// Manus-style thought stream: shows current thinking/action status
+function ThoughtStream({ thoughts }: { thoughts: string[] }) {
+  if (!thoughts || thoughts.length === 0) return null;
+  return (
+    <View style={thoughtStyles.container}>
+      {thoughts.map((thought, idx) => (
+        <View key={`thought-${idx}`} style={thoughtStyles.thoughtRow}>
+          <View style={thoughtStyles.thoughtDot} />
+          <Text style={thoughtStyles.thoughtText} numberOfLines={2}>
+            {cleanText(thought)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const thoughtStyles = StyleSheet.create({
+  container: {
+    marginTop: 8,
+    paddingHorizontal: 8,
+  },
+  thoughtRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  thoughtDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4a7cf0",
+  },
+  thoughtText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#a0b4e8",
+    flex: 1,
+    lineHeight: 18,
+  },
+});
+
 function StepStatusIcon({ status }: { status?: string }) {
   if (status === "calling" || status === "running") {
     return <SpinnerIcon />;
@@ -653,7 +697,7 @@ const goalMessageStyles = StyleSheet.create({
  * Shows task title with circle indicator, steps inside with icons,
  * and inline narrative text between steps.
  */
-export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onToolPress }: AgentPlanViewProps) {
+export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, thoughtStream, onToolPress }: AgentPlanViewProps) {
   const steps = plan.steps || [];
   const [expanded, setExpanded] = useState(true);
 
@@ -719,6 +763,9 @@ export function AgentPlanView({ plan, notifyMessages, stepNotifyMessages, onTool
 
       {expanded && (
         <View style={styles.taskContent}>
+          {thoughtStream && thoughtStream.length > 0 && (
+            <ThoughtStream thoughts={thoughtStream} />
+          )}
           {buildContent()}
           {notifyMessages && notifyMessages.length > 0 ? (
             <View style={styles.planNotifyContainer}>
