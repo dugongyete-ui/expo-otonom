@@ -2208,7 +2208,6 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
 
             yield make_event("plan", status=PlanStatus.CREATED.value, plan=safe_plan_dict(self.plan))
             yield make_event("notify", text="Rencana selesai dibuat. Saya akan mulai mengeksekusi langkah-langkah berikutnya.")
-            yield make_event("thinking", thinking="Menganalisis rencana untuk mengeksekusi langkah selanjutnya...")
 
             if not self.plan.steps:
                 yield make_event("message_start", role="assistant")
@@ -2305,22 +2304,6 @@ ONLY respond with JSON. No explanations, no markdown, ONLY the JSON object.
                     next_step = self.plan.get_next_step()
                     if next_step:
                         yield make_event("notify", text=f"Selanjutnya, saya akan {next_step.description}")
-                    # Persist step completion as a cross-session memory fact (best-effort)
-                    if self.session_id and step.result:
-                        try:
-                            _uid = os.environ.get("DZECK_USER_ID", "") or "auto-user"
-                            await _memory_service.save_memory(
-                                content="Completed: {} — {}".format(
-                                    step.description[:120],
-                                    str(step.result)[:200],
-                                ),
-                                session_id=self.session_id,
-                                user_id=_uid,
-                                tags=["step_completed", step.agent_type or "general"],
-                                importance=2,
-                            )
-                        except Exception:
-                            pass
 
                 next_step = self.plan.get_next_step()
                 if next_step:
