@@ -118,7 +118,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#0D0D0D" }} />
+      <View style={{ flex: 1, backgroundColor: "#F0EEE6" }} />
     );
   }
 
@@ -178,7 +178,7 @@ export default function RootLayout() {
             <KeyboardProviderWrapper>
               <AuthProvider>
                 <View style={layoutStyles.root}>
-                  <StatusBar style="light" />
+                  <StatusBar style="dark" />
                   <AuthGate>
                     <RootLayoutNav />
                   </AuthGate>
@@ -195,7 +195,7 @@ export default function RootLayout() {
 const splashStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0D0D0D",
+    backgroundColor: "#F0EEE6",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -214,13 +214,13 @@ const splashStyles = StyleSheet.create({
     marginTop: 16,
     fontSize: 24,
     fontWeight: "700",
-    color: "#e0e0e0",
+    color: "#1A1A1A",
     letterSpacing: -0.5,
   },
   sub: {
     marginTop: 4,
     fontSize: 11,
-    color: "#666666",
+    color: "#9CA3AF",
     letterSpacing: 2,
   },
   dotsRow: {
@@ -232,13 +232,13 @@ const splashStyles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: "#888888",
+    backgroundColor: "#9CA3AF",
   },
 });
 
 const layoutStyles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#0D0D0D",
+    backgroundColor: "#F0EEE6",
   },
 });

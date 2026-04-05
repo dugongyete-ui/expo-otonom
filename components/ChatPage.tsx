@@ -139,13 +139,13 @@ const thinkingStyles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#4A90D9",
+    backgroundColor: "#3B82F6",
     flexShrink: 0,
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#888888",
+    color: "#9CA3AF",
     flex: 1,
   },
 });
@@ -428,6 +428,8 @@ interface ChatPageProps {
   ) => void;
   /** Called when user taps a tool card in chat; provides the tool_call_id for ToolPanel to focus */
   onSelectTool?: (toolCallId: string) => void;
+  /** Initial message to auto-send when the chat page first loads (e.g. from home page input) */
+  initialMessage?: string;
 }
 
 export function ChatPage({
@@ -445,6 +447,7 @@ export function ChatPage({
   activeToolsCount = 0,
   onPlanChange,
   onSelectTool,
+  initialMessage,
 }: ChatPageProps = {}) {
   const { mode } = useLocalSearchParams<{ mode: string }>();
   const isAgentMode = agentModeProp ?? mode === "agent";
@@ -485,6 +488,7 @@ export function ChatPage({
   const msgCounterRef = useRef(0);
   const nextMsgId = (suffix?: string) => `msg_${Date.now()}_${msgCounterRef.current++}${suffix ? `_${suffix}` : ""}`;
   const activeSessionIdRef = useRef<string>(externalSessionId || randomUUID());
+  const initialMessageSentRef = useRef(false);
   const planMsgIdRef = useRef<string | null>(null);
   const currentPlanRef = useRef<AgentPlan | null>(null);
   const currentRunningStepIdRef = useRef<string | null>(null);
@@ -798,6 +802,21 @@ export function ChatPage({
         });
     }
   }, [externalSessionId]);
+
+  // Auto-send initialMessage when component first mounts with a pre-populated message
+  // (e.g. from the home page greeting input). Pre-fills the input; auto-submit fires
+  // in the effect below once inputMessage state has been updated.
+  const pendingInitialMsgRef = useRef<string | null>(initialMessage || null);
+  const autoSubmitPendingRef = useRef(false);
+  useEffect(() => {
+    if (!pendingInitialMsgRef.current || initialMessageSentRef.current) return;
+    initialMessageSentRef.current = true;
+    const msg = pendingInitialMsgRef.current;
+    pendingInitialMsgRef.current = null;
+    autoSubmitPendingRef.current = true;
+    setInputMessage(msg);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Propagate tools changes to parent layout
   useEffect(() => {
@@ -1742,6 +1761,14 @@ export function ChatPage({
     }
   }, [inputMessage, isAgentMode, messages, attachments, isWaitingForUser, handleEvent]);
 
+  // Fire auto-submit once inputMessage has been populated from initialMessage
+  useEffect(() => {
+    if (!autoSubmitPendingRef.current || !inputMessage.trim()) return;
+    autoSubmitPendingRef.current = false;
+    handleSubmit();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputMessage]);
+
   const handleStop = useCallback(() => {
     const sid = activeSessionIdRef.current;
 
@@ -2430,14 +2457,14 @@ export function ChatPage({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0D0D0D",
+    backgroundColor: "#F0EEE6",
   },
   header: {
     paddingBottom: 10,
     paddingHorizontal: 12,
-    backgroundColor: "#0D0D0D",
+    backgroundColor: "#F0EEE6",
     borderBottomWidth: 1,
-    borderBottomColor: "#1e1e1e",
+    borderBottomColor: "#E5E3DC",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2463,7 +2490,7 @@ const styles = StyleSheet.create({
   headerBrandName: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
-    color: "#e0e0e0",
+    color: "#1A1A1A",
     letterSpacing: -0.3,
   },
   headerRight: {
@@ -2492,46 +2519,46 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#2e2e2e",
+    backgroundColor: "#E5E3DC",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
   },
   toolsBadgeActive: {
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#3B82F6",
   },
   toolsBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#888888",
+    color: "#6B7280",
   },
   toolsBadgeTextActive: {
     color: "#ffffff",
   },
   settingsOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "flex-end",
     paddingBottom: 40,
     paddingHorizontal: 16,
   },
   settingsPanel: {
-    backgroundColor: "#242424",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 20,
     gap: 16,
     borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#E5E3DC",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 10,
   },
   settingsPanelTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#e0e0e0",
+    color: "#1A1A1A",
     marginBottom: 4,
   },
   settingsSection: {
@@ -2539,7 +2566,7 @@ const styles = StyleSheet.create({
   },
   settingsSectionTitle: {
     fontSize: 13,
-    color: "#606060",
+    color: "#9CA3AF",
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -2553,21 +2580,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#E5E3DC",
     alignItems: "center",
-    backgroundColor: "#222222",
+    backgroundColor: "#F5F4EF",
   },
   langBtnActive: {
-    backgroundColor: "#3a3a3a",
-    borderColor: "#4a4a4a",
+    backgroundColor: "#1A1A1A",
+    borderColor: "#1A1A1A",
   },
   langBtnText: {
-    color: "#888888",
+    color: "#6B7280",
     fontSize: 14,
     fontWeight: "500",
   },
   langBtnTextActive: {
-    color: "#ffffff",
+    color: "#FFFFFF",
   },
   logoutBtn: {
     flexDirection: "row",
@@ -2575,10 +2602,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
+    borderTopColor: "#E5E3DC",
   },
   logoutBtnText: {
-    color: "#888888",
+    color: "#6B7280",
     fontSize: 14,
     fontWeight: "500",
   },
@@ -2592,18 +2619,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   e2bConnected: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(34,197,94,0.1)",
   },
   e2bError: {
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(239,68,68,0.08)",
   },
   e2bChecking: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
   },
   e2bBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#888888",
+    color: "#6B7280",
     letterSpacing: 0.3,
   },
   fileCardContainer: {
@@ -2619,16 +2646,16 @@ const styles = StyleSheet.create({
   fileCardTitle: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#a0a0a0",
+    color: "#9CA3AF",
   },
   fileCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#E5E3DC",
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 6,
@@ -2637,12 +2664,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-    color: "#242424",
+    color: "#374151",
   },
   fileCardAction: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "#a0a0a0",
+    color: "#9CA3AF",
     fontWeight: "600",
   },
   screenshotContainer: {
@@ -2655,9 +2682,9 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     aspectRatio: 16 / 10,
     borderRadius: 10,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
     borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#E5E3DC",
   },
   // Manus-style agent turn block
   agentTurnBlock: {
@@ -2673,27 +2700,27 @@ const styles = StyleSheet.create({
   agentTurnName: {
     fontFamily: "Inter_700Bold",
     fontSize: 15,
-    color: "#e0e0e0",
+    color: "#1A1A1A",
     letterSpacing: -0.2,
   },
   agentTurnModeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#F5F4EF",
     borderWidth: 1,
-    borderColor: "#333333",
+    borderColor: "#E5E3DC",
   },
   agentTurnModeBadgeText: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: "#888888",
+    color: "#9CA3AF",
     letterSpacing: 0.1,
   },
   agentPrecedingText: {
     fontFamily: "Inter_400Regular",
     fontSize: 15,
-    color: "#e8e8e8",
+    color: "#374151",
     lineHeight: 22,
     letterSpacing: -0.1,
     marginBottom: 4,
@@ -2707,10 +2734,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#E5E3DC",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -2718,7 +2745,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F5F4EF",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -2730,20 +2757,20 @@ const styles = StyleSheet.create({
   fileDocName: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#e0e0e0",
+    color: "#1A1A1A",
     lineHeight: 18,
   },
   fileDocType: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#888888",
+    color: "#9CA3AF",
     letterSpacing: 0.2,
   },
   fileDocDownloadBtn: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F5F4EF",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -2751,35 +2778,35 @@ const styles = StyleSheet.create({
   fileViewAllLink: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#4A90D9",
+    color: "#3B82F6",
     paddingLeft: 2,
     paddingTop: 2,
   },
   // Manus-style floating plan bar
   floatingPlanBarWrapper: {
     borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
+    borderTopColor: "#E5E3DC",
   },
   floatingPlanExpandedPanel: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     paddingBottom: 12,
-    backgroundColor: "#111111",
+    backgroundColor: "#F5F4EF",
     borderBottomWidth: 1,
-    borderBottomColor: "#1e1e1e",
+    borderBottomColor: "#E5E3DC",
     maxHeight: 200,
   },
   floatingPlanExpandedSingle: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: "#111111",
+    backgroundColor: "#F5F4EF",
     borderBottomWidth: 1,
-    borderBottomColor: "#1e1e1e",
+    borderBottomColor: "#E5E3DC",
   },
   floatingPlanExpandedLabel: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#888888",
+    color: "#6B7280",
     fontStyle: "italic",
     lineHeight: 18,
   },
@@ -2807,15 +2834,15 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "rgba(76,175,80,0.12)",
+    backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderColor: "#22C55E",
     alignItems: "center",
     justifyContent: "center",
   },
   floatingPlanStepCheck: {
     fontSize: 8,
-    color: "#4CAF50",
+    color: "#22C55E",
     fontWeight: "700",
     lineHeight: 10,
   },
@@ -2823,15 +2850,15 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "rgba(224,92,92,0.1)",
+    backgroundColor: "rgba(239,68,68,0.1)",
     borderWidth: 1,
-    borderColor: "#e05c5c",
+    borderColor: "#EF4444",
     alignItems: "center",
     justifyContent: "center",
   },
   floatingPlanStepX: {
     fontSize: 8,
-    color: "#e05c5c",
+    color: "#EF4444",
     fontWeight: "700",
     lineHeight: 10,
   },
@@ -2840,14 +2867,14 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: "#555555",
+    borderColor: "#D1CFC8",
     alignItems: "center",
     justifyContent: "center",
   },
   floatingPlanStepClockInner: {
     width: 1,
     height: 4,
-    backgroundColor: "#555555",
+    backgroundColor: "#D1CFC8",
     borderRadius: 1,
     marginBottom: 1,
   },
@@ -2855,15 +2882,15 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "rgba(76,175,80,0.15)",
+    backgroundColor: "rgba(34,197,94,0.15)",
     borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderColor: "#22C55E",
     alignItems: "center",
     justifyContent: "center",
   },
   floatingPlanDoneCheck: {
     fontSize: 6,
-    color: "#4CAF50",
+    color: "#22C55E",
     fontWeight: "700",
     lineHeight: 8,
   },
@@ -2871,7 +2898,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#666666",
+    color: "#6B7280",
     lineHeight: 17,
   },
   floatingPlanBar: {
@@ -2880,7 +2907,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: "#141414",
+    backgroundColor: "#F0EEE6",
   },
   floatingPlanBarLeft: {
     flex: 1,
@@ -2892,21 +2919,21 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#3B82F6",
   },
   floatingPlanTitle: {
     flex: 1,
-    color: "#a0a0a0",
+    color: "#6B7280",
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
   floatingPlanCounter: {
-    color: "#666666",
+    color: "#9CA3AF",
     fontSize: 11,
     fontFamily: "Inter_400Regular",
   },
   floatingPlanTimer: {
-    color: "#555555",
+    color: "#9CA3AF",
     fontSize: 11,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
@@ -2924,13 +2951,13 @@ const styles = StyleSheet.create({
   taskCompletedHeaderText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    color: "#e8e8e8",
+    color: "#1A1A1A",
     letterSpacing: -0.2,
   },
   taskCompletedGoalText: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
-    color: "#d0d0d0",
+    color: "#374151",
     lineHeight: 21,
     marginTop: 4,
   },
@@ -2939,14 +2966,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
+    borderTopColor: "#E5E3DC",
     marginTop: 4,
     gap: 8,
   },
   starRatingLabel: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#888888",
+    color: "#9CA3AF",
   },
   starRatingStars: {
     flexDirection: "row",
@@ -2971,14 +2998,14 @@ const styles = StyleSheet.create({
   welcomeGreeting: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: "#e0e0e0",
+    color: "#1A1A1A",
     letterSpacing: -0.5,
     lineHeight: 34,
   },
   welcomeSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 16,
-    color: "#888888",
+    color: "#9CA3AF",
     lineHeight: 22,
   },
   suggestionScrollView: {
@@ -2991,17 +3018,17 @@ const styles = StyleSheet.create({
   },
   suggestionChip: {
     width: 160,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#E5E3DC",
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   suggestionChipText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#888888",
+    color: "#9CA3AF",
     lineHeight: 18,
   },
   toolsBadge: {
@@ -3011,7 +3038,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#444444",
+    backgroundColor: "#9CA3AF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3021,7 +3048,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   toolsBtnActive: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#E5E3DC",
   },
   inlineToolsBlock: {
     marginLeft: 16,
@@ -3034,9 +3061,9 @@ const styles = StyleSheet.create({
   reconnectErrorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(180,60,60,0.15)",
+    backgroundColor: "rgba(239,68,68,0.08)",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(180,60,60,0.25)",
+    borderBottomColor: "rgba(239,68,68,0.15)",
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 10,
@@ -3044,20 +3071,20 @@ const styles = StyleSheet.create({
   reconnectErrorText: {
     flex: 1,
     fontSize: 13,
-    color: "#e07070",
+    color: "#EF4444",
     fontFamily: "Inter_400Regular",
   },
   reconnectErrorDismiss: {
     fontSize: 14,
-    color: "#888888",
+    color: "#9CA3AF",
     fontWeight: "600",
   },
   sessionEndedBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F5F4EF",
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
+    borderBottomColor: "#E5E3DC",
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 10,
@@ -3065,15 +3092,15 @@ const styles = StyleSheet.create({
   sessionEndedText: {
     flex: 1,
     fontSize: 13,
-    color: "#888888",
+    color: "#9CA3AF",
     fontFamily: "Inter_400Regular",
   },
   shareUrlBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(100,160,240,0.08)",
+    backgroundColor: "rgba(59,130,246,0.06)",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(100,160,240,0.15)",
+    borderBottomColor: "rgba(59,130,246,0.12)",
     paddingHorizontal: 14,
     paddingVertical: 8,
     gap: 8,
@@ -3081,12 +3108,12 @@ const styles = StyleSheet.create({
   shareUrlText: {
     flex: 1,
     fontSize: 12,
-    color: "#7ab8f5",
+    color: "#3B82F6",
     fontFamily: "Inter_400Regular",
   },
   shareUrlCopy: {
     fontSize: 12,
-    color: "#7ab8f5",
+    color: "#3B82F6",
     fontWeight: "600",
     fontFamily: "Inter_500Medium",
   },

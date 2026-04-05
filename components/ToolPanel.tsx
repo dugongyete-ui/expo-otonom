@@ -337,14 +337,14 @@ export function ToolPanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#242424",
+    backgroundColor: "#F5F4EF",
   },
   collapsedContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 16,
-    backgroundColor: "#242424",
+    backgroundColor: "#F5F4EF",
   },
   header: {
     flexDirection: "row",
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
+    borderBottomColor: "#E5E3DC",
   },
   headerLeft: {
     flexDirection: "row",
@@ -363,10 +363,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#f3f4f6",
+    color: "#1A1A1A",
   },
   badge: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 1,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 10,
-    color: "#d1d5db",
+    color: "#6B7280",
   },
   collapseButton: {
     width: 28,
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
   },
   toolsList: {
     flex: 1,
@@ -404,8 +404,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   toolItemSelected: {
-    borderColor: "#3a3a3a",
-    backgroundColor: "#2a2a2a",
+    borderColor: "#E5E3DC",
+    backgroundColor: "#FFFFFF",
   },
   toolIcon: {
     width: 28,
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
   },
   toolInfo: {
     flex: 1,
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   toolName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#d1d5db",
+    color: "#374151",
   },
   toolStatusRow: {
     flexDirection: "row",
@@ -446,13 +446,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#a0a0a0",
+    color: "#9CA3AF",
     marginTop: 4,
   },
   emptyStateText: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#a0a0a0",
+    color: "#9CA3AF",
     textAlign: "center",
     lineHeight: 16,
   },
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   detailContainer: {
     flex: 1,
     borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
+    borderTopColor: "#E5E3DC",
   },
   detailHeaderBar: {
     flexDirection: "row",
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
+    borderBottomColor: "#E5E3DC",
     gap: 6,
   },
   jumpToLiveBtn: {
@@ -484,14 +484,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 100,
-    backgroundColor: "rgba(74,124,240,0.1)",
+    backgroundColor: "rgba(59,130,246,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(74,124,240,0.3)",
+    borderColor: "rgba(59,130,246,0.25)",
     marginRight: "auto",
   },
   jumpToLiveText: {
     fontSize: 11,
-    color: "#7aa0f0",
+    color: "#3B82F6",
     fontWeight: "600",
   },
   closeDetailBtn: {
@@ -500,6 +500,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
   },
 });

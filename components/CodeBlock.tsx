@@ -57,17 +57,17 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#242424",
+    backgroundColor: "#F5F4EF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#3a3a3a",
+    borderColor: "#E5E3DC",
     marginVertical: 8,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.03,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 1,
   },
   header: {
     flexDirection: "row",
@@ -76,13 +76,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
-    backgroundColor: "#2a2a2a",
+    borderBottomColor: "#E5E3DC",
+    backgroundColor: "#EBEBE3",
   },
   language: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#a0a0a0",
+    color: "#6B7280",
     textTransform: "lowercase",
   },
   copyButton: {
@@ -95,10 +95,10 @@ const styles = StyleSheet.create({
   copyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#8E8E93",
+    color: "#9CA3AF",
   },
   copiedText: {
-    color: "#a0a0a0",
+    color: "#6B7280",
   },
   codeScroll: {
     padding: 14,
@@ -107,6 +107,6 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
     fontSize: 12,
     lineHeight: 20,
-    color: "#c8c8c8",
+    color: "#374151",
   },
 });

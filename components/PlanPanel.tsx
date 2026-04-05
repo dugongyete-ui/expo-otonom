@@ -214,15 +214,15 @@ const iconStyles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "rgba(76,175,80,0.15)",
+    backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderColor: "#22C55E",
     alignItems: "center",
     justifyContent: "center",
   },
   successCheck: {
     fontSize: 8,
-    color: "#4CAF50",
+    color: "#22C55E",
     fontWeight: "700",
     lineHeight: 10,
   },
@@ -230,15 +230,15 @@ const iconStyles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "rgba(224,92,92,0.1)",
+    backgroundColor: "rgba(239,68,68,0.1)",
     borderWidth: 1,
-    borderColor: "#e05c5c",
+    borderColor: "#EF4444",
     alignItems: "center",
     justifyContent: "center",
   },
   failedX: {
     fontSize: 8,
-    color: "#e05c5c",
+    color: "#EF4444",
     fontWeight: "700",
     lineHeight: 10,
   },
@@ -294,19 +294,19 @@ const pillStyles = StyleSheet.create({
     gap: 7,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: "#141414",
+    backgroundColor: "#F5F4EF",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#242424",
+    borderColor: "#E5E3DC",
     marginBottom: 3,
   },
   pillCalling: {
-    borderColor: "#253050",
-    backgroundColor: "#111520",
+    borderColor: "rgba(59,130,246,0.25)",
+    backgroundColor: "rgba(59,130,246,0.05)",
   },
   pillError: {
-    borderColor: "#3a1f1f",
-    backgroundColor: "#150d0d",
+    borderColor: "rgba(239,68,68,0.2)",
+    backgroundColor: "rgba(239,68,68,0.04)",
   },
   iconWrap: {
     width: 14,
@@ -319,33 +319,33 @@ const pillStyles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#444444",
+    backgroundColor: "#D1CFC8",
   },
   checkChar: {
     fontSize: 9,
-    color: "#4a8a4a",
+    color: "#22C55E",
     fontWeight: "700",
   },
   errorChar: {
     fontSize: 9,
-    color: "#a06060",
+    color: "#EF4444",
     fontWeight: "700",
   },
   label: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#666666",
+    color: "#9CA3AF",
     flex: 1,
     lineHeight: 16,
   },
   labelCalling: {
-    color: "#7090c0",
+    color: "#3B82F6",
   },
   labelDone: {
-    color: "#555555",
+    color: "#9CA3AF",
   },
   labelError: {
-    color: "#907070",
+    color: "#EF4444",
   },
 });
 
@@ -382,7 +382,7 @@ const narrativeStyles = StyleSheet.create({
   text: {
     fontFamily: "Inter_400Regular",
     fontSize: 11.5,
-    color: "#808080",
+    color: "#9CA3AF",
     lineHeight: 17,
     paddingVertical: 3,
     paddingHorizontal: 2,
@@ -479,16 +479,16 @@ const stepStyles = StyleSheet.create({
     width: 1,
     flex: 1,
     minHeight: 8,
-    backgroundColor: "#252525",
+    backgroundColor: "#E5E3DC",
     borderRadius: 1,
     marginTop: 4,
     marginBottom: 0,
   },
   connectorDone: {
-    backgroundColor: "rgba(76,175,80,0.2)",
+    backgroundColor: "rgba(34,197,94,0.2)",
   },
   connectorRunning: {
-    backgroundColor: "rgba(74,124,240,0.3)",
+    backgroundColor: "rgba(59,130,246,0.25)",
   },
   rightCol: {
     flex: 1,
@@ -501,20 +501,20 @@ const stepStyles = StyleSheet.create({
   desc: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: "#c8c8c8",
+    color: "#374151",
     lineHeight: 19,
   },
   descPending: {
-    color: "#505050",
+    color: "#9CA3AF",
   },
   descDone: {
-    color: "#585858",
+    color: "#9CA3AF",
   },
   descFailed: {
-    color: "#a07070",
+    color: "#EF4444",
   },
   descRunning: {
-    color: "#c0c8e8",
+    color: "#1A1A1A",
   },
   activity: {
     marginTop: 5,
@@ -701,8 +701,8 @@ const collapsedStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#1e1e1e",
-    backgroundColor: "#0d0d0d",
+    borderTopColor: "#E5E3DC",
+    backgroundColor: "#F5F4EF",
     gap: 10,
   },
   leftSection: {
@@ -723,22 +723,22 @@ const collapsedStyles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "rgba(76,175,80,0.15)",
+    backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderColor: "#22C55E",
     alignItems: "center",
     justifyContent: "center",
   },
   doneCheck: {
     fontSize: 8,
-    color: "#4CAF50",
+    color: "#22C55E",
     fontWeight: "700",
     lineHeight: 10,
   },
   stepDesc: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#909090",
+    color: "#6B7280",
     flex: 1,
   },
   rightSection: {
@@ -750,11 +750,11 @@ const collapsedStyles = StyleSheet.create({
   progress: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: "#606060",
+    color: "#9CA3AF",
   },
   chevron: {
     fontSize: 12,
-    color: "#444444",
+    color: "#9CA3AF",
   },
 });
 
@@ -763,7 +763,7 @@ const collapsedStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0d0d0d",
+    backgroundColor: "#F5F4EF",
     position: "relative",
   },
   expandedPanel: {
@@ -777,7 +777,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#E5E3DC",
     gap: 8,
   },
   headerLeft: {
@@ -787,7 +787,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: "#d0d0d0",
+    color: "#1A1A1A",
     lineHeight: 20,
   },
   headerRight: {
@@ -799,11 +799,11 @@ const styles = StyleSheet.create({
   headerCounter: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#555555",
+    color: "#9CA3AF",
   },
   chevron: {
     fontSize: 12,
-    color: "#444444",
+    color: "#9CA3AF",
   },
   scrollArea: {
     flex: 1,
@@ -826,6 +826,6 @@ const styles = StyleSheet.create({
   thinkingLabel: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#5070a0",
+    color: "#6B7280",
   },
 });

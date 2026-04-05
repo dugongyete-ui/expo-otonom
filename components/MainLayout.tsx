@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   Modal,
   useWindowDimensions,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { LeftPanel } from "./LeftPanel";
 import { ChatPage } from "./ChatPage";
 import { ToolPanel } from "./ToolPanel";
@@ -16,11 +18,13 @@ import { BrowserPanel } from "./BrowserPanel";
 import { FilePanel } from "./FilePanel";
 import { PlanPanel } from "./PlanPanel";
 import { TakeOverView } from "./TakeOverView";
+import { ChatBox } from "./ChatBox";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CloseIcon } from "@/components/icons/SvgIcon";
 import { getToolCategory } from "@/lib/tool-constants";
 import type { VncSessionInfo } from "./ChatPage";
 import type { AgentPlan } from "@/lib/chat";
+import { useAuth } from "@/lib/auth-context";
 
 import type { ToolItem } from "./ToolPanel";
 
@@ -50,18 +54,26 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
   const [vncSession, setVncSession] = useState<VncSessionInfo | null>(null);
   const [externalToolId, setExternalToolId] = useState<string | null>(null);
   const [liveBrowserEvent, setLiveBrowserEvent] = useState<{ url?: string; screenshot_b64?: string; title?: string; ts: number } | null>(null);
-  // Tracks when the most recent browser tool_content screenshot arrived (React state for re-render consistency)
   const [toolBrowserEventTs, setToolBrowserEventTs] = useState<number>(0);
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [sseFiles, setSseFiles] = useState<Array<{ filename: string; download_url: string; sandbox_path?: string; mime?: string }>>([]);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+
+  // Home page input state (greeting page before first session)
+  const [homeInput, setHomeInput] = useState("");
+  // Persist the submitted home input so ChatPage can auto-send it as the first message
+  const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>(undefined);
 
   const isNarrowScreen = screenWidth < NARROW_BREAKPOINT;
   const isNarrowScreenRef = useRef(isNarrowScreen);
   useEffect(() => {
     isNarrowScreenRef.current = isNarrowScreen;
   }, [isNarrowScreen]);
+
+  // Home page state: show greeting when no session is active
+  const isHomePage = !sessionId;
 
   const toggleLeftPanel = useCallback(() => {
     setIsLeftPanelShow(v => !v);
@@ -71,9 +83,16 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     setSessionId(newSessionId);
   }, []);
 
+  const handleHomeSubmit = useCallback((submittedText?: string) => {
+    const text = submittedText ?? homeInput;
+    if (!text.trim()) return;
+    const newSessionId = `session_${Date.now()}`;
+    setChatInitialMessage(text.trim());
+    setSessionId(newSessionId);
+  }, [homeInput]);
+
   const toolsRef = useRef<ToolItem[]>([]);
   const handleToolsChange = useCallback((newTools: ToolItem[]) => {
-    // When tools are reset (cleared), reset browser event tracking state too
     if (newTools.length === 0 && toolsRef.current.length > 0) {
       setLiveBrowserEvent(null);
       setToolBrowserEventTs(0);
@@ -105,14 +124,12 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     setPlanStepNotifyMessages(stepNotifyMsgs);
     setPlanNotifyMessages(notifyMsgs);
     setIsPlanRunning(running);
-    // Auto-switch to Plan tab the first time a plan arrives (not on browser events)
     if (plan && !hasPlanAutoSwitchedRef.current && !isNarrowScreenRef.current) {
       hasPlanAutoSwitchedRef.current = true;
       setRightPanelMode("plan");
       setIsToolPanelVisible(true);
       setIsPlanPanelExpanded(true);
     }
-    // Reset auto-switch flag when plan is gone (new task will auto-switch again)
     if (!plan) {
       hasPlanAutoSwitchedRef.current = false;
     }
@@ -126,8 +143,6 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     const isNewTool = tools.length > prevToolsLenRef.current;
     prevToolsLenRef.current = tools.length;
 
-    // Always track screenshot recency regardless of screen width —
-    // this is needed for timestamp-based arbitration of lastBrowserEvent.
     const latestBrowserWithScreenshot = [...tools]
       .reverse()
       .find(t => {
@@ -137,13 +152,11 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     if (latestBrowserWithScreenshot) {
       const shot = latestBrowserWithScreenshot.tool_content?.screenshot_b64;
       if (shot !== prevBrowserScreenshotRef.current) {
-        // New screenshot arrived in tool_content — record timestamp in state to trigger re-render
         prevBrowserScreenshotRef.current = shot;
         setToolBrowserEventTs(Date.now());
       }
     }
 
-    // UI panel auto-switching is only relevant on wide screens
     if (isNarrowScreenRef.current) return;
 
     if (isNewTool && tools.length > 0) {
@@ -173,14 +186,10 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     })
     .pop()?.tool_content || null;
 
-  // Pick the most recently updated browser event source to avoid stale liveBrowserEvent winning.
-  // Both liveBrowserEvent.ts and toolBrowserEventTs are React state, so this runs synchronously
-  // during the render that follows whichever state update happened most recently.
   const lastBrowserEvent = (() => {
     if (!liveBrowserEvent && !rawToolBrowserEvent) return null;
     if (!liveBrowserEvent) return rawToolBrowserEvent;
     if (!rawToolBrowserEvent?.screenshot_b64) return liveBrowserEvent;
-    // Both have screenshots — pick the more recent one
     return liveBrowserEvent.ts >= toolBrowserEventTs
       ? liveBrowserEvent
       : rawToolBrowserEvent;
@@ -220,13 +229,11 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
     setExternalToolId(toolCallId);
     setRightPanelMode("tools");
     setIsToolPanelVisible(true);
-    // On narrow screens, open the tools modal so the selection is visible
     if (isNarrowScreenRef.current) {
       setShowToolsModal(true);
     }
   }, []);
 
-  // Take-over from ToolPanel's BrowserToolView uses the active VNC/E2B session id, not the chat sessionId
   const handleToolPanelTakeOver = useCallback(() => {
     const e2bId = vncSession?.e2bSessionId || sessionId;
     if (e2bId) handleTakeOver(e2bId);
@@ -240,6 +247,10 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
 
   const activeToolsCount = tools.filter(t => t.status === "calling").length;
   const totalToolsCount = tools.length;
+
+  // User display name
+  const userName = user?.fullname || user?.email?.split("@")[0] || "User";
+  const avatarLetter = userName.charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right", "bottom"]}>
@@ -263,33 +274,87 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
             <LeftPanel
               isOpen={isLeftPanelShow}
               onToggle={toggleLeftPanel}
-              onNewSession={handleNewSession}
+              onNewSession={(newId) => {
+                handleNewSession(newId);
+                setIsLeftPanelShow(false);
+              }}
             />
           </View>
         )}
 
-        {/* Chat Area - full width on narrow screens */}
+        {/* Main Content Area */}
         <View style={styles.chatArea}>
-          <ChatPage
-            sessionId={sessionId}
-            isAgentMode={isAgentMode}
-            onAgentModeChange={setIsAgentMode}
-            isLeftPanelShow={isLeftPanelShow}
-            onToggleLeftPanel={toggleLeftPanel}
-            onToolsChange={handleToolsChange}
-            onVncSessionChange={handleVncSessionChange}
-            onBrowserEventChange={handleBrowserEventChange}
-            onSessionFilesChange={setSseFiles}
-            onOpenTools={isNarrowScreen ? handleOpenTools : undefined}
-            toolsCount={totalToolsCount}
-            activeToolsCount={activeToolsCount}
-            onPlanChange={handlePlanChange}
-            onSelectTool={handleSelectTool}
-          />
+          {isHomePage ? (
+            /* Home Page - ai-manus greeting layout */
+            <View style={styles.homeContainer}>
+              {/* Top bar with sidebar toggle and user avatar */}
+              <View style={styles.homeTopBar}>
+                <TouchableOpacity
+                  style={styles.homeTopBarBtn}
+                  onPress={toggleLeftPanel}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="menu-outline" size={24} color="#1A1A1A" />
+                </TouchableOpacity>
+                <View style={styles.homeTopBarRight}>
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Greeting area */}
+              <ScrollView
+                style={styles.homeScroll}
+                contentContainerStyle={styles.homeScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.greetingBlock}>
+                  <Text style={styles.greetingText}>
+                    Hello, {userName}
+                  </Text>
+                  <Text style={styles.greetingSubText}>
+                    What can I do for you?
+                  </Text>
+                </View>
+
+                {/* ChatBox centered */}
+                <View style={styles.homeChatBoxWrap}>
+                  <ChatBox
+                    value={homeInput}
+                    onChangeText={setHomeInput}
+                    onSubmit={() => handleHomeSubmit(homeInput)}
+                    isLoading={false}
+                    isAgentMode={true}
+                    placeholder="Give Manus a task to work on..."
+                  />
+                </View>
+              </ScrollView>
+            </View>
+          ) : (
+            /* Chat Page */
+            <ChatPage
+              sessionId={sessionId}
+              isAgentMode={isAgentMode}
+              onAgentModeChange={setIsAgentMode}
+              isLeftPanelShow={isLeftPanelShow}
+              onToggleLeftPanel={toggleLeftPanel}
+              onToolsChange={handleToolsChange}
+              onVncSessionChange={handleVncSessionChange}
+              onBrowserEventChange={handleBrowserEventChange}
+              onSessionFilesChange={setSseFiles}
+              onOpenTools={isNarrowScreen ? handleOpenTools : undefined}
+              toolsCount={totalToolsCount}
+              activeToolsCount={activeToolsCount}
+              onPlanChange={handlePlanChange}
+              onSelectTool={handleSelectTool}
+              initialMessage={chatInitialMessage}
+            />
+          )}
         </View>
 
         {/* Right Panel - only on wide screens */}
-        {!isNarrowScreen && (
+        {!isNarrowScreen && !isHomePage && (
           <View style={[styles.toolPanel, { width: toolPanelWidth }]}>
             {rightPanelMode === "tools" ? (
               <ToolPanel
@@ -516,35 +581,102 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F0EEE6",
   },
   mainContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F0EEE6",
   },
   leftPanel: {
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F5F4EF",
     borderRightWidth: 1,
-    borderRightColor: "#2e2e2e",
+    borderRightColor: "#E5E3DC",
     overflow: "hidden",
   },
   chatArea: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F0EEE6",
     minWidth: 0,
   },
+  homeContainer: {
+    flex: 1,
+    backgroundColor: "#F0EEE6",
+  },
+  homeTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  homeTopBarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  homeTopBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  avatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#3B82F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarLetter: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  homeScroll: {
+    flex: 1,
+  },
+  homeScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 80,
+    paddingBottom: 32,
+    justifyContent: "flex-start",
+  },
+  greetingBlock: {
+    paddingLeft: 4,
+    marginBottom: 32,
+  },
+  greetingText: {
+    fontSize: 32,
+    lineHeight: 40,
+    color: "#1A1A1A",
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+  },
+  greetingSubText: {
+    fontSize: 32,
+    lineHeight: 40,
+    color: "#9CA3AF",
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+  },
+  homeChatBoxWrap: {
+    width: "100%",
+    maxWidth: 768,
+    alignSelf: "center",
+  },
   toolPanel: {
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F5F4EF",
     borderLeftWidth: 1,
-    borderLeftColor: "#2e2e2e",
+    borderLeftColor: "#E5E3DC",
     overflow: "hidden",
   },
   panelSwitcher: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#2e2e2e",
-    backgroundColor: "#1a1a1a",
+    borderTopColor: "#E5E3DC",
+    backgroundColor: "#F5F4EF",
   },
   switchTab: {
     flex: 1,
@@ -553,27 +685,27 @@ const styles = StyleSheet.create({
   },
   switchTabActive: {
     borderTopWidth: 2,
-    borderTopColor: "#555555",
+    borderTopColor: "#1A1A1A",
   },
   switchTabText: {
     fontSize: 11,
-    color: "#606060",
+    color: "#9CA3AF",
   },
   switchTabTextActive: {
-    color: "#d0d0d0",
+    color: "#1A1A1A",
   },
   toolsModalContainer: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F5F4EF",
   },
   toolsModalHeader: {
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#2e2e2e",
+    borderBottomColor: "#E5E3DC",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F5F4EF",
   },
   toolsModalTabs: {
     flex: 1,
@@ -586,15 +718,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalTabActive: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
   },
   modalTabText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#606060",
+    color: "#9CA3AF",
   },
   modalTabTextActive: {
-    color: "#d0d0d0",
+    color: "#1A1A1A",
   },
   toolsModalClose: {
     width: 36,
@@ -602,7 +734,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#E5E3DC",
     marginLeft: 8,
   },
   toolsModalContent: {
@@ -617,6 +749,6 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#4a7cf0",
+    backgroundColor: "#3B82F6",
   },
 });

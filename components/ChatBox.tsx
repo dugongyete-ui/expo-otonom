@@ -7,13 +7,14 @@ import {
   Platform,
   Image,
   ScrollView,
+  Text,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
-import { AddIcon, MicIcon, FlashIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
+import { AddIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
 
 interface ChatBoxProps {
   value: string;
@@ -25,6 +26,7 @@ interface ChatBoxProps {
   isWaitingForUser?: boolean;
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
+  placeholder?: string;
 }
 
 export function ChatBox({
@@ -37,6 +39,7 @@ export function ChatBox({
   isWaitingForUser = false,
   attachments = [],
   onAttachmentsChange,
+  placeholder,
 }: ChatBoxProps) {
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
@@ -44,9 +47,9 @@ export function ChatBox({
   const inputEditable = true;
   const canSend = (!isLoading || isWaitingForUser) && (value.trim().length > 0 || attachments.length > 0);
 
-  const placeholder = isWaitingForUser
-    ? "Ketik balasan Anda..."
-    : "Kirim pesan ke Dzeck";
+  const placeholderText = placeholder || (isWaitingForUser
+    ? "Type your reply..."
+    : "Give Manus a task to work on...");
 
   const handleAttachFile = useCallback(async () => {
     try {
@@ -84,8 +87,8 @@ export function ChatBox({
   const bottomPad = Platform.OS === "ios"
     ? Math.max(insets.bottom, 8)
     : insets.bottom > 0
-      ? insets.bottom + 16
-      : 32;
+      ? insets.bottom + 8
+      : 16;
 
   return (
     <View style={[styles.container, { paddingBottom: bottomPad }]}>
@@ -110,71 +113,65 @@ export function ChatBox({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(i)}
               >
-                <CloseCircleIcon size={18} color="#888888" />
+                <CloseCircleIcon size={18} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
           ))}
         </ScrollView>
       )}
 
-      <View style={[styles.inputWrapper, isWaitingForUser && styles.inputWrapperWaiting]}>
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor={COLORS.textPlaceholder}
-          value={value}
-          onChangeText={onChangeText}
-          multiline
-          maxLength={4000}
-          editable={inputEditable}
-          onSubmitEditing={Platform.OS === "web" ? onSubmit : undefined}
-          blurOnSubmit={false}
-        />
-      </View>
-
-      <View style={styles.toolbar}>
-        <View style={styles.toolbarLeft}>
-          <TouchableOpacity
-            onPress={handleAttachFile}
-            style={styles.toolbarBtn}
-            activeOpacity={0.6}
-          >
-            <AddIcon size={22} color={COLORS.iconMuted} />
-          </TouchableOpacity>
-          {isAgentMode && (
-            <View style={styles.modeIcon}>
-              <FlashIcon size={18} color="#888888" />
-            </View>
-          )}
+      {/* Main input box - rounded container like ai-manus */}
+      <View style={[styles.inputBox, isWaitingForUser && styles.inputBoxWaiting]}>
+        {/* Textarea */}
+        <View style={styles.inputWrapper}>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder={placeholderText}
+            placeholderTextColor="#9CA3AF"
+            value={value}
+            onChangeText={onChangeText}
+            multiline
+            maxLength={4000}
+            editable={inputEditable}
+            onSubmitEditing={Platform.OS === "web" ? onSubmit : undefined}
+            blurOnSubmit={false}
+          />
         </View>
 
-        <View style={styles.toolbarRight}>
-          {canSend ? (
-            <TouchableOpacity
-              onPress={onSubmit}
-              style={[styles.toolbarBtn]}
-              activeOpacity={0.6}
-            >
-              <View style={[styles.sendIconContainer]}>
-                <ArrowUpIcon size={16} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
-          ) : isLoading && !isWaitingForUser ? (
-            <TouchableOpacity onPress={onStop} style={styles.toolbarBtn} activeOpacity={0.6}>
-              <View style={styles.stopIcon}>
-                <StopIcon size={14} color={COLORS.stopIcon} />
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.toolbarBtn}
-              activeOpacity={0.6}
-              disabled={true}
-            >
-              <MicIcon size={20} color={COLORS.iconMuted} />
-            </TouchableOpacity>
-          )}
+        {/* Footer toolbar */}
+        <View style={styles.toolbar}>
+          {/* Left: paperclip attach */}
+          <TouchableOpacity
+            onPress={handleAttachFile}
+            style={styles.attachBtn}
+            activeOpacity={0.6}
+          >
+            <View style={styles.attachBtnInner}>
+              <Text style={styles.paperclipIcon}>📎</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Right: send / stop */}
+          <View style={styles.toolbarRight}>
+            {isLoading && !isWaitingForUser ? (
+              <TouchableOpacity onPress={onStop} style={styles.actionBtn} activeOpacity={0.8}>
+                <View style={styles.stopBtnInner}>
+                  <View style={styles.stopSquare} />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={canSend ? onSubmit : undefined}
+                style={styles.actionBtn}
+                activeOpacity={canSend ? 0.8 : 1}
+              >
+                <View style={[styles.sendBtnInner, !canSend && styles.sendBtnDisabled]}>
+                  <ArrowUpIcon size={16} color="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </View>
@@ -183,14 +180,13 @@ export function ChatBox({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.bgToolbar,
+    backgroundColor: "#F0EEE6",
     paddingHorizontal: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#1e1e1e",
+    paddingTop: 8,
   },
   attachmentBar: {
     maxHeight: 80,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   attachmentBarContent: {
     paddingVertical: 4,
@@ -209,9 +205,9 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 10,
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#3a3a3a",
+    borderColor: "#E5E3DC",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -219,79 +215,95 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6,
     right: -6,
-    backgroundColor: COLORS.bgToolbar,
+    backgroundColor: "#F0EEE6",
     borderRadius: 9,
   },
-  inputWrapper: {
-    backgroundColor: "#141414",
-    borderRadius: 20,
+  inputBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#2a2a2a",
-    paddingHorizontal: 16,
-    paddingVertical: Platform.OS === "ios" ? 10 : 8,
-    maxHeight: 120,
-    marginBottom: 6,
-    marginTop: 8,
+    borderColor: "rgba(0,0,0,0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-  inputWrapperWaiting: {
-    borderColor: "#3a3a3a",
-    backgroundColor: "rgba(255,255,255,0.03)",
+  inputBoxWaiting: {
+    borderColor: "#3B82F6",
+    borderWidth: 1.5,
+  },
+  inputWrapper: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    maxHeight: 120,
   },
   input: {
-    fontSize: 14,
-    color: COLORS.text,
+    fontSize: 15,
+    color: "#1A1A1A",
     maxHeight: 100,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingTop: 4,
   },
-  toolbarLeft: {
-    flexDirection: "row",
+  attachBtn: {
+    width: 32,
+    height: 32,
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+  },
+  attachBtnInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E3DC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paperclipIcon: {
+    fontSize: 14,
   },
   toolbarRight: {
     flexDirection: "row",
     alignItems: "center",
   },
-  toolbarBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-  },
-  modeIcon: {
-    marginLeft: 4,
+  actionBtn: {
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
   },
-  sendButtonDisabled: {
-    opacity: 0.4,
-  },
-  sendIconContainer: {
+  sendBtnInner: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#4A90D9",
+    backgroundColor: "#1A1A1A",
     alignItems: "center",
     justifyContent: "center",
   },
-  sendIconDisabled: {
-    backgroundColor: COLORS.sendDisabled,
-    opacity: 0.5,
+  sendBtnDisabled: {
+    backgroundColor: "#D1CFC8",
   },
-  stopIcon: {
+  stopBtnInner: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#2a2a2a",
-    borderWidth: 1,
-    borderColor: "#3a3a3a",
+    backgroundColor: "#1A1A1A",
     alignItems: "center",
     justifyContent: "center",
+  },
+  stopSquare: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: "#FFFFFF",
   },
 });
