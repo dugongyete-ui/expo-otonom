@@ -3404,9 +3404,13 @@ print(json.dumps(results))
       }
       return owner;
     }
-    // Fall through to MongoDB
+    // Fall through to MongoDB — deny by default if DB is unavailable
     const col = await getCollection("sessions");
-    if (!col) return "";
+    if (!col) {
+      const e: any = new Error("Unable to verify session ownership");
+      e.statusCode = 503;
+      throw e;
+    }
     const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
     if (!doc) {
       const e: any = new Error("Session not found");
@@ -3706,8 +3710,6 @@ asyncio.run(main())
       ).catch(() => {});
     }).catch(() => {});
 
-    // Map Python event dict to exact ai-manus SSE schema field names.
-    // ai-manus reference: backend/app/interfaces/schemas/event.py
     const mapEventToManusSchema = (evt: Record<string, any>): [string, Record<string, any>] => {
       const evtType: string = evt.type || "message";
       const base = {
@@ -3718,18 +3720,15 @@ asyncio.run(main())
         case "message":
           return [evtType, { ...base,
             role: evt.role || "assistant",
-            // ai-manus uses `content` not `message`
             content: evt.content ?? evt.message ?? "",
             attachments: evt.attachments || [],
           }];
         case "tool":
-          // ai-manus ToolEventData: name, function, args, content (result payload)
           return [evtType, { ...base,
             status: evt.status || "calling",
             name: evt.tool_name || evt.name || "",
             function: evt.function_name || evt.function || "",
             args: evt.function_args ?? evt.args ?? {},
-            // ai-manus uses `content` for the tool result payload
             content: evt.tool_content ?? (
               evt.function_result != null
                 ? (typeof evt.function_result === "object" && "message" in evt.function_result
@@ -3740,7 +3739,6 @@ asyncio.run(main())
             tool_call_id: evt.tool_call_id || null,
           }];
         case "plan":
-          // ai-manus PlanEventData: event_id, timestamp, status, steps (flattened from plan.steps)
           return [evtType, { ...base,
             status: evt.status || "creating",
             steps: (evt.plan?.steps ?? evt.steps ?? []).map((s: any) => ({
@@ -3748,32 +3746,27 @@ asyncio.run(main())
               description: s.description || "",
               status: s.status || "pending",
             })),
-            // Include full plan for consumers that need it
-            plan: evt.plan || null,
           }];
         case "step":
-          // ai-manus StepEventData: event_id, timestamp, status, id, description, status (flattened)
           return [evtType, { ...base,
             status: evt.status || "pending",
             id: evt.step?.id ?? evt.id ?? null,
             description: evt.step?.description ?? "",
-            // Include full step for consumers that need it
-            step: evt.step || null,
           }];
         case "title":
           return [evtType, { ...base, title: evt.title || "" }];
         case "error":
-          return [evtType, { ...base, error: evt.error || "", details: evt.details || null }];
+          return [evtType, { ...base, error: evt.error || "" }];
         case "done":
           return [evtType, { ...base, success: evt.success !== false }];
         case "wait":
           return [evtType, { ...base, prompt: evt.prompt || null }];
         case "thinking":
           return [evtType, { ...base, content: evt.content || "" }];
-        default:
-          // Unknown event type — pass through minus internal fields
+        default: {
           const { type: _t, id: _id, timestamp: _ts, ...rest } = evt;
           return [evtType, { ...base, ...rest }];
+        }
       }
     };
 
