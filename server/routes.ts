@@ -3761,6 +3761,11 @@ asyncio.run(main())
       }
     };
 
+    // Track whether the runner already emitted a `done` event or entered wait state.
+    // Prevents duplicate done SSE from the subprocess-close handler.
+    let runnerEmittedDone = false;
+    let runnerEnteredWait = false;
+
     let buf = "";
     proc.stdout.on("data", (chunk: Buffer) => {
       buf += chunk.toString();
@@ -3771,6 +3776,11 @@ asyncio.run(main())
         if (!line) continue;
         try {
           const evt = JSON.parse(line);
+          // Internal sentinel from manus_runner: runner already emitted done
+          if (evt.type === "_done_emitted") { runnerEmittedDone = true; continue; }
+          // Track wait state to suppress terminal done on subprocess close
+          if (evt.type === "wait") runnerEnteredWait = true;
+          if (evt.type === "done") runnerEmittedDone = true;
           const [evtType, payload] = mapEventToManusSchema(evt);
           sendSSE(evtType, payload);
         } catch {}
@@ -3784,17 +3794,12 @@ asyncio.run(main())
     proc.on("close", (code: number) => {
       v1Session.done = true;
       activeAgentSessions.delete(sessionId);
-      // Emit ai-manus done event
-      sendSSE("done", { event_id: null, timestamp: Math.floor(Date.now() / 1000), success: code === 0 });
+      // Only emit done if the runner did NOT already do so (prevents duplicate done events)
+      // Also skip done if runner entered wait state (session is paused, not completed)
+      if (!runnerEmittedDone && !runnerEnteredWait) {
+        sendSSE("done", { event_id: null, timestamp: Math.floor(Date.now() / 1000), success: code === 0 });
+      }
       try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
-      // Mark session completed in MongoDB
-      getCollection("sessions").then((col) => {
-        if (!col) return;
-        (col as any).updateOne(
-          { session_id: sessionId },
-          { $set: { status: code === 0 ? "completed" : "failed", updated_at: new Date() } },
-        ).catch(() => {});
-      }).catch(() => {});
     });
 
     res.on("close", () => {

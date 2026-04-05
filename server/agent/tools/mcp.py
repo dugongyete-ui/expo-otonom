@@ -416,3 +416,22 @@ class MCPTool(BaseTool):
     )
     def _mcp_call_tool(self, tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> ToolResult:
         return self._manager.call_tool(tool_name, arguments or {})
+
+    @tool(
+        name="mcp_tool",
+        description=(
+            "Call a specific MCP (Model Context Protocol) tool by name with arguments. "
+            "Alias for mcp_call_tool — use when the tool name is known. "
+            "MCP tools extend agent capabilities with external services."
+        ),
+        parameters={
+            "tool_name": {"type": "string", "description": "Name of the MCP tool to call"},
+            "arguments": {
+                "type": "object",
+                "description": "Arguments to pass to the MCP tool (key-value pairs)",
+            },
+        },
+        required=["tool_name"],
+    )
+    def _mcp_tool(self, tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> ToolResult:
+        return self._manager.call_tool(tool_name, arguments or {})
