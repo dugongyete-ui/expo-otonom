@@ -184,7 +184,7 @@ export function ToolPanel({
           <View style={styles.headerIconBox}>
             <Ionicons name="desktop-outline" size={13} color="#6B7280" />
           </View>
-          <Text style={styles.headerTitle}>Dzeck Computer</Text>
+          <Text style={styles.headerTitle}>Manus Computer</Text>
           {latestCallingTool && (
             <View style={styles.liveBadge}>
               <View style={styles.liveBadgeDot} />

@@ -287,23 +287,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
           {isHomePage ? (
             /* Home Page - ai-manus greeting layout */
             <View style={styles.homeContainer}>
-              {/* Top bar with sidebar toggle and user avatar */}
-              <View style={styles.homeTopBar}>
-                <TouchableOpacity
-                  style={styles.homeTopBarBtn}
-                  onPress={toggleLeftPanel}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="menu-outline" size={24} color="#1A1A1A" />
-                </TouchableOpacity>
-                <View style={styles.homeTopBarRight}>
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Greeting area */}
+              {/* Greeting area — clean, no top bar (ai-manus minimal home style) */}
               <ScrollView
                 style={styles.homeScroll}
                 contentContainerStyle={styles.homeScrollContent}
