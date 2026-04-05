@@ -8,8 +8,8 @@ UPDATING→SUMMARIZING→COMPLETED) as an async generator of raw event dicts.
 Session persistence matches ai-manus AgentTaskRunner lifecycle:
   - Title updates written to MongoDB on TitleEvent
   - Messages appended (not overwritten) on MessageEvent
-  - Status set to "waiting" on WaitEvent — finalize is skipped
-  - Event log persisted for replay via GET /sessions/:id
+  - Plan state persisted on WaitEvent — status="waiting", plan_state saved
+  - Plan state loaded on resume — flow resumes EXECUTING from saved plan
   - Status finalized to completed/failed only on true terminal exit
 
 Usage:
@@ -101,15 +101,35 @@ def _get_mongo_collection(collection_name: str = "sessions"):
         return None
 
 
+def _load_session_plan_state(session_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Load persisted plan state for a session (for wait/resume).
+    Returns the plan dict if status=waiting and plan_state is stored, else None.
+    """
+    try:
+        col = _get_mongo_collection("sessions")
+        if col is None:
+            return None
+        doc = col.find_one(
+            {"session_id": session_id, "status": "waiting"},
+            {"plan_state": 1, "_id": 0},
+        )
+        if doc and doc.get("plan_state"):
+            return doc["plan_state"]
+    except Exception as e:
+        logger.warning(f"[manus_runner] plan state load failed: {e}")
+    return None
+
+
 class _SessionPersistence:
     """
     AgentTaskRunner-equivalent: persists session state to MongoDB.
     Matches ai-manus AgentTaskRunner lifecycle:
-      - on_start: set status=running, persist user message
+      - on_start: set status=running, append user message
       - on_title: update title field
       - on_message: $push to chat_history (append, never overwrite)
+      - on_plan_wait: set status=waiting, persist plan_state for resume
       - on_event: accumulate event log for replay
-      - on_wait: set status=waiting — do NOT finalize
       - on_done: only called on true terminal exit (not on WaitEvent)
     """
 
@@ -131,15 +151,14 @@ class _SessionPersistence:
         try:
             col = self._get_col()
             if col is not None:
-                col.update_one(
-                    {"session_id": self._session_id},
-                    {**update_doc, "$set": {**update_doc.get("$set", {}), "updated_at": datetime.datetime.utcnow()}},
-                )
+                # Merge $set fields with updated_at
+                update_doc.setdefault("$set", {})
+                update_doc["$set"]["updated_at"] = datetime.datetime.utcnow()
+                col.update_one({"session_id": self._session_id}, update_doc)
         except Exception as e:
             logger.warning(f"[manus_runner] MongoDB update failed: {e}")
 
     def on_start(self, user_message: str) -> None:
-        # Push user message and set running status
         self._update({
             "$set": {"status": "running", "user_id": self._user_id},
             "$push": {"chat_history": {"role": "user", "content": user_message}},
@@ -149,26 +168,19 @@ class _SessionPersistence:
         self._update({"$set": {"title": title}})
 
     def on_message(self, content: str, role: str = "assistant") -> None:
-        # Append to chat_history — never overwrite
         self._update({
             "$push": {"chat_history": {"role": role, "content": content}},
         })
 
-    def on_wait(self) -> None:
-        # Pause state — do NOT proceed to on_done
+    def on_plan_wait(self, plan_state: Optional[Dict[str, Any]]) -> None:
+        """Persist waiting state and plan snapshot for resume."""
         self._waiting = True
-        self._update({"$set": {"status": "waiting"}})
-        # Flush accumulated event_log to DB so replay works
+        update: Dict[str, Any] = {"$set": {"status": "waiting"}}
+        if plan_state is not None:
+            update["$set"]["plan_state"] = plan_state
         if self._event_log:
-            try:
-                col = self._get_col()
-                if col is not None:
-                    col.update_one(
-                        {"session_id": self._session_id},
-                        {"$push": {"event_log": {"$each": self._event_log}}},
-                    )
-            except Exception as e:
-                logger.warning(f"[manus_runner] event_log flush failed: {e}")
+            update["$push"] = {"event_log": {"$each": self._event_log}}
+        self._update(update)
 
     def on_event(self, event_dict: Dict[str, Any]) -> None:
         self._event_log.append(event_dict)
@@ -177,23 +189,15 @@ class _SessionPersistence:
         return self._waiting
 
     def on_done(self, success: bool) -> None:
-        # Only called on true terminal exit (completed/failed), NOT on wait
-        final_events = self._event_log[-500:]  # cap at 500
-        try:
-            col = self._get_col()
-            if col is not None:
-                col.update_one(
-                    {"session_id": self._session_id},
-                    {
-                        "$set": {
-                            "status": "completed" if success else "failed",
-                            "updated_at": datetime.datetime.utcnow(),
-                        },
-                        "$push": {"event_log": {"$each": final_events}},
-                    },
-                )
-        except Exception as e:
-            logger.warning(f"[manus_runner] on_done persistence failed: {e}")
+        update: Dict[str, Any] = {
+            "$set": {
+                "status": "completed" if success else "failed",
+                "plan_state": None,  # clear persisted plan state on completion
+            },
+        }
+        if self._event_log:
+            update["$push"] = {"event_log": {"$each": self._event_log[-500:]}}
+        self._update(update)
 
 
 async def run_plan_act_flow_async(
@@ -205,10 +209,15 @@ async def run_plan_act_flow_async(
     """
     Run the ai-manus compatible PlanActFlow and yield raw event dicts.
 
+    Resume semantics (ai-manus AgentTaskRunner parity):
+    - If session_id has status=waiting and plan_state is stored, the flow
+      is restored to EXECUTING state with the saved plan, rather than
+      creating a new plan from scratch.
+
     Terminal behavior:
-    - WaitEvent: yields the event, persists "waiting" status, returns WITHOUT done event.
-      The route's on-close handler detects this via is_waiting() flag.
-    - DoneEvent from flow: yielded once; route's subprocess close handler does NOT re-emit done.
+    - WaitEvent: yields event, persists plan_state + status=waiting, returns.
+      No done event is emitted. Subsequent chat calls resume.
+    - DoneEvent: emitted exactly once by the flow; route does NOT re-emit.
     - Exception: yields error + done{success:false}, persists "failed".
 
     State machine: IDLE → PLANNING → EXECUTING → UPDATING → SUMMARIZING → COMPLETED
@@ -228,8 +237,19 @@ async def run_plan_act_flow_async(
         session_id=session_id,
     )
 
+    # Wait/resume: if session has persisted plan state, restore flow to EXECUTING
+    if session_id:
+        saved_plan_state = _load_session_plan_state(session_id)
+        if saved_plan_state is not None:
+            try:
+                from server.agent.models.plan import Plan
+                flow.plan = Plan.from_dict(saved_plan_state)
+                flow.status = AgentStatus.EXECUTING
+                logger.info(f"[manus_runner] Resumed session {session_id} from EXECUTING with saved plan")
+            except Exception as e:
+                logger.warning(f"[manus_runner] Could not restore plan state: {e}")
+
     success = True
-    emitted_done = False
     try:
         async for event in flow.run(message=user_message, attachments=attachments or []):
             event_dict = _event_to_dict(event)
@@ -242,30 +262,22 @@ async def run_plan_act_flow_async(
                 persistence.on_message(event.message, role=event.role)
             elif isinstance(event, WaitEvent):
                 yield event_dict
-                persistence.on_wait()
-                # Return immediately — do NOT finalize session as done
+                # Persist plan state for resume on next chat call
+                plan_state = flow.plan.to_dict() if flow.plan is not None else None
+                persistence.on_plan_wait(plan_state)
+                # Return without done event — session is paused, not completed
                 return
             elif isinstance(event, ErrorEvent):
                 success = False
-            elif isinstance(event, DoneEvent):
-                emitted_done = True
 
             yield event_dict
 
     except Exception as e:
         logger.exception(f"[manus_runner] Flow error: {e}")
         success = False
-        if not emitted_done:
-            yield {"type": "error", "error": str(e)}
-            yield {"type": "done", "success": False}
-            emitted_done = True
+        yield {"type": "error", "error": str(e)}
+        yield {"type": "done", "success": False}
     finally:
-        # Only finalize if we did NOT pause for user input (WaitEvent path returns early)
+        # Finalize only on true terminal exit — wait path returns early
         if not persistence.is_waiting():
             persistence.on_done(success)
-        # Signal to route handler whether done was already emitted by the flow
-        # (used to prevent duplicate done SSE from the subprocess-close handler)
-        # Write sentinel to stdout so route can detect it
-        if emitted_done:
-            import sys
-            print('{"type":"_done_emitted"}', flush=True)

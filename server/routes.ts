@@ -3723,25 +3723,41 @@ asyncio.run(main())
             attachments: evt.attachments || [],
           }];
         case "tool":
+          // ai-manus ToolEventData: name, function, args, content (result payload)
           return [evtType, { ...base,
             status: evt.status || "calling",
-            // ai-manus field names: name, function, args, result
             name: evt.tool_name || evt.name || "",
             function: evt.function_name || evt.function || "",
             args: evt.function_args ?? evt.args ?? {},
-            result: evt.function_result?.message ?? evt.function_result ?? evt.result ?? null,
+            // ai-manus uses `content` for the tool result payload
+            content: evt.tool_content ?? (
+              evt.function_result != null
+                ? (typeof evt.function_result === "object" && "message" in evt.function_result
+                    ? evt.function_result.message
+                    : evt.function_result)
+                : evt.result ?? null
+            ),
             tool_call_id: evt.tool_call_id || null,
-            tool_content: evt.tool_content || null,
           }];
         case "plan":
+          // ai-manus PlanEventData: event_id, timestamp, status, steps (flattened from plan.steps)
           return [evtType, { ...base,
             status: evt.status || "creating",
+            steps: (evt.plan?.steps ?? evt.steps ?? []).map((s: any) => ({
+              id: s.id || null,
+              description: s.description || "",
+              status: s.status || "pending",
+            })),
+            // Include full plan for consumers that need it
             plan: evt.plan || null,
-            step: evt.step || null,
           }];
         case "step":
+          // ai-manus StepEventData: event_id, timestamp, status, id, description, status (flattened)
           return [evtType, { ...base,
             status: evt.status || "pending",
+            id: evt.step?.id ?? evt.id ?? null,
+            description: evt.step?.description ?? "",
+            // Include full step for consumers that need it
             step: evt.step || null,
           }];
         case "title":
@@ -3761,10 +3777,12 @@ asyncio.run(main())
       }
     };
 
-    // Track whether the runner already emitted a `done` event or entered wait state.
-    // Prevents duplicate done SSE from the subprocess-close handler.
-    let runnerEmittedDone = false;
-    let runnerEnteredWait = false;
+    // Track whether the event stream already included a done or wait event.
+    // The manus_runner emits done exactly once via DoneEvent (for normal completion)
+    // or returns early without done (for wait state). We must not re-emit done
+    // from the subprocess close handler to avoid duplicate completion events.
+    let streamHadDone = false;
+    let streamHadWait = false;
 
     let buf = "";
     proc.stdout.on("data", (chunk: Buffer) => {
@@ -3776,11 +3794,9 @@ asyncio.run(main())
         if (!line) continue;
         try {
           const evt = JSON.parse(line);
-          // Internal sentinel from manus_runner: runner already emitted done
-          if (evt.type === "_done_emitted") { runnerEmittedDone = true; continue; }
-          // Track wait state to suppress terminal done on subprocess close
-          if (evt.type === "wait") runnerEnteredWait = true;
-          if (evt.type === "done") runnerEmittedDone = true;
+          // Track terminal event types before emitting to client
+          if (evt.type === "done") streamHadDone = true;
+          if (evt.type === "wait") streamHadWait = true;
           const [evtType, payload] = mapEventToManusSchema(evt);
           sendSSE(evtType, payload);
         } catch {}
@@ -3794,9 +3810,9 @@ asyncio.run(main())
     proc.on("close", (code: number) => {
       v1Session.done = true;
       activeAgentSessions.delete(sessionId);
-      // Only emit done if the runner did NOT already do so (prevents duplicate done events)
-      // Also skip done if runner entered wait state (session is paused, not completed)
-      if (!runnerEmittedDone && !runnerEnteredWait) {
+      // Emit done from subprocess close only if the stream did not already include one.
+      // (Normal flow emits done via DoneEvent; wait state returns without done.)
+      if (!streamHadDone && !streamHadWait) {
         sendSSE("done", { event_id: null, timestamp: Math.floor(Date.now() / 1000), success: code === 0 });
       }
       try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
