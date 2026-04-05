@@ -3,7 +3,6 @@ import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, Touch
 import { useLocalSearchParams } from "expo-router";
 import { ChatMessage as MessageComponent } from "./ChatMessage";
 import { ChatBox } from "./ChatBox";
-import { AgentPlanView } from "./AgentPlanView";
 import { ToolDetailModal } from "./ToolDetailModal";
 import {
   ShareIcon, LogOutIcon, EllipsisIcon,
@@ -404,6 +403,323 @@ const inlineToolStyles = StyleSheet.create({
     fontSize: 10,
     color: "#e05c5c",
     fontWeight: "700",
+  },
+});
+
+function InlinePlanStepStatus({ status }: { status: AgentPlanStep["status"] }) {
+  const pulseAnim = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    if (status === "running" || status === "started") {
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0.5, duration: 600, useNativeDriver: true }),
+        ])
+      );
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [status]);
+
+  if (status === "completed") {
+    return (
+      <View style={planStepStyles.iconDone}>
+        <Text style={planStepStyles.iconDoneCheck}>✓</Text>
+      </View>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <View style={planStepStyles.iconFailed}>
+        <Text style={planStepStyles.iconFailedText}>✕</Text>
+      </View>
+    );
+  }
+  if (status === "running" || status === "started") {
+    return (
+      <Animated.View style={[planStepStyles.iconRunning, { opacity: pulseAnim }]} />
+    );
+  }
+  return <View style={planStepStyles.iconPending} />;
+}
+
+function InlinePlanView({
+  plan,
+  notifyMessages,
+  stepNotifyMessages,
+}: {
+  plan: AgentPlan;
+  notifyMessages?: string[];
+  stepNotifyMessages?: { stepId: string; text: string }[];
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const isPlanRunning = plan.status === "running" || plan.steps.some(s => s.status === "running" || s.status === "started");
+  const isPlanDone = plan.status === "completed" || plan.steps.every(s => s.status === "completed" || s.status === "failed");
+  const completedCount = plan.steps.filter(s => s.status === "completed").length;
+
+  return (
+    <View style={planStepStyles.container}>
+      <TouchableOpacity
+        style={planStepStyles.header}
+        onPress={() => setExpanded(v => !v)}
+        activeOpacity={0.7}
+      >
+        <View style={planStepStyles.headerLeft}>
+          {isPlanRunning ? (
+            <View style={planStepStyles.headerDotWrap}>
+              <AnimatedPlanDot />
+            </View>
+          ) : isPlanDone ? (
+            <View style={planStepStyles.headerDotDone}><Text style={planStepStyles.headerDotDoneText}>✓</Text></View>
+          ) : (
+            <View style={planStepStyles.headerDotPending} />
+          )}
+          <Text style={planStepStyles.title} numberOfLines={2}>{plan.title}</Text>
+        </View>
+        <View style={planStepStyles.headerRight}>
+          <Text style={planStepStyles.progress}>{completedCount}/{plan.steps.length}</Text>
+          <Text style={planStepStyles.chevron}>{expanded ? "▲" : "▼"}</Text>
+        </View>
+      </TouchableOpacity>
+      {expanded && (
+        <View style={planStepStyles.stepsWrap}>
+          {plan.steps.map((step, i) => {
+            const stepNotifies = stepNotifyMessages?.filter(n => n.stepId === step.id) || [];
+            return (
+              <View key={step.id || i} style={planStepStyles.stepRow}>
+                <View style={planStepStyles.stepIconCol}>
+                  <InlinePlanStepStatus status={step.status} />
+                  {i < plan.steps.length - 1 && <View style={planStepStyles.stepLine} />}
+                </View>
+                <View style={planStepStyles.stepContent}>
+                  <Text style={[
+                    planStepStyles.stepText,
+                    step.status === "completed" && planStepStyles.stepTextDone,
+                    step.status === "failed" && planStepStyles.stepTextFailed,
+                    (step.status === "running" || step.status === "started") && planStepStyles.stepTextRunning,
+                  ]}>
+                    {step.description}
+                  </Text>
+                  {stepNotifies.length > 0 && (
+                    <View style={planStepStyles.notifyWrap}>
+                      {stepNotifies.map((n, ni) => (
+                        <Text key={ni} style={planStepStyles.notifyText}>{n.text}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {step.result && step.status === "completed" && (
+                    <Text style={planStepStyles.resultText} numberOfLines={2}>{step.result}</Text>
+                  )}
+                  {step.error && step.status === "failed" && (
+                    <Text style={planStepStyles.errorText} numberOfLines={2}>{step.error}</Text>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+          {notifyMessages && notifyMessages.length > 0 && (
+            <View style={planStepStyles.globalNotifyWrap}>
+              {notifyMessages.map((n, i) => (
+                <Text key={i} style={planStepStyles.globalNotifyText}>{n}</Text>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const planStepStyles = StyleSheet.create({
+  container: {
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 9,
+  },
+  headerDotWrap: {
+    width: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerDotDone: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerDotDoneText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  headerDotPending: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#D1D5DB",
+  },
+  title: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: "#1A1A1A",
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginLeft: 8,
+  },
+  progress: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#9CA3AF",
+  },
+  chevron: {
+    fontSize: 9,
+    color: "#9CA3AF",
+  },
+  stepsWrap: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  stepRow: {
+    flexDirection: "row",
+    paddingTop: 10,
+    minHeight: 32,
+  },
+  stepIconCol: {
+    width: 20,
+    alignItems: "center",
+  },
+  stepLine: {
+    flex: 1,
+    width: 1,
+    backgroundColor: "#E5E7EB",
+    marginTop: 4,
+    alignSelf: "center",
+  },
+  stepContent: {
+    flex: 1,
+    paddingLeft: 10,
+    paddingBottom: 4,
+  },
+  stepText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12.5,
+    color: "#6B7280",
+    lineHeight: 18,
+  },
+  stepTextDone: {
+    color: "#374151",
+  },
+  stepTextFailed: {
+    color: "#EF4444",
+  },
+  stepTextRunning: {
+    color: "#3B82F6",
+    fontFamily: "Inter_500Medium",
+  },
+  iconDone: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  iconDoneCheck: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  iconFailed: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  iconFailedText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  iconRunning: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#3B82F6",
+    marginTop: 3,
+  },
+  iconPending: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#D1D5DB",
+    marginTop: 3,
+  },
+  notifyWrap: {
+    marginTop: 4,
+    paddingLeft: 4,
+    borderLeftWidth: 2,
+    borderLeftColor: "#E5E7EB",
+  },
+  notifyText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#9CA3AF",
+    lineHeight: 16,
+  },
+  resultText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#22C55E",
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  errorText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#EF4444",
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  globalNotifyWrap: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 6,
+  },
+  globalNotifyText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: "#9CA3AF",
   },
 });
 
@@ -2139,14 +2455,10 @@ export function ChatPage({
                 {precedingText ? (
                   <Text style={styles.agentPrecedingText}>{precedingText}</Text>
                 ) : null}
-                <AgentPlanView
+                <InlinePlanView
                   plan={item.plan}
                   notifyMessages={item.notifyMessages}
                   stepNotifyMessages={item.stepNotifyMessages}
-                  thoughtStream={thoughtStream}
-                  onToolPress={(tool) => {
-                    setSelectedTool(tool);
-                  }}
                 />
               </View>
             );
