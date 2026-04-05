@@ -144,10 +144,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
     <View style={styles.container}>
       {/* Header with collapse button */}
       <View style={styles.header}>
-        <View style={styles.headerBrand}>
-          <View style={styles.brandMark} />
-          <Text style={styles.brandName}>Dzeck</Text>
-        </View>
+        <View style={styles.headerSpacer} />
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={18} color="#6B7280" />
         </TouchableOpacity>
@@ -346,24 +343,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 4,
   },
-  headerBrand: {
+  headerSpacer: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  brandMark: {
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-    backgroundColor: "#1A1A1A",
-  },
-  brandName: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#1A1A1A",
-    letterSpacing: 0.5,
   },
   toggleButton: {
     width: 28,

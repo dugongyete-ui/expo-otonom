@@ -312,7 +312,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
               >
                 <View style={styles.greetingBlock}>
                   <Text style={styles.greetingText}>Hello, {userName}</Text>
-                  <Text style={styles.greetingSubText}>What can I help you with?</Text>
+                  <Text style={styles.greetingSubText}>What can I do for you?</Text>
                 </View>
 
                 {/* ChatBox */}
@@ -323,30 +323,8 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                     onSubmit={() => handleHomeSubmit(homeInput)}
                     isLoading={false}
                     isAgentMode={true}
-                    placeholder="Berikan tugas untuk Dzeck..."
+                    placeholder="Give Manus a task to work on..."
                   />
-                </View>
-
-                {/* Suggestion chips */}
-                <View style={styles.suggestionsRow}>
-                  {[
-                    { icon: "search-outline" as const, label: "Riset topik" },
-                    { icon: "code-slash-outline" as const, label: "Tulis kode" },
-                    { icon: "document-text-outline" as const, label: "Buat laporan" },
-                    { icon: "globe-outline" as const, label: "Jelajahi web" },
-                  ].map((chip) => (
-                    <TouchableOpacity
-                      key={chip.label}
-                      style={styles.suggestionChip}
-                      onPress={() => {
-                        setHomeInput(chip.label + ": ");
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name={chip.icon} size={13} color="#6B7280" />
-                      <Text style={styles.suggestionChipText}>{chip.label}</Text>
-                    </TouchableOpacity>
-                  ))}
                 </View>
               </ScrollView>
             </View>
@@ -713,32 +691,6 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 720,
     alignSelf: "center",
-    marginBottom: 16,
-  },
-  suggestionsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    maxWidth: 720,
-    alignSelf: "center",
-    width: "100%",
-    marginTop: 4,
-  },
-  suggestionChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#ECEAE2",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E0DDD5",
-  },
-  suggestionChipText: {
-    fontSize: 13,
-    color: "#374151",
-    fontWeight: "500",
   },
   toolPanel: {
     backgroundColor: "#F5F4EF",

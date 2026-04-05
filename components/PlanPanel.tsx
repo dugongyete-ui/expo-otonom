@@ -427,7 +427,7 @@ function StepRow({
   const isDoneStep = step.status === "completed";
   const isFailed = step.status === "failed";
   const isPending = step.status === "pending";
-  const tools: StepToolEntry[] = (step as any).tools || [];
+  const tools: StepToolEntry[] = step.tools || [];
   const hasActivity = isRunning || isDoneStep || isFailed;
   const cleanNarratives = narratives.filter(t => {
     const c = cleanText(t) || "";

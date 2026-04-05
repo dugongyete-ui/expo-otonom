@@ -235,7 +235,7 @@ function ToolMessageCard({
   const displayInfo = getToolDisplayInfo(name);
   const icon: IonIconName = displayInfo.icon as IonIconName;
   const actionLabel = TOOL_FUNCTION_MAP[name] || displayInfo.label || name;
-  const args: Record<string, unknown> = functionArgs || (toolContent as any)?.input || {};
+  const args: Record<string, unknown> = functionArgs ?? {};
   const argVal = getToolPrimaryArg(name, args);
 
   return (
@@ -498,7 +498,7 @@ export function ChatMessageBubble({ message, onToolPress }: ChatMessageProps & {
   if (message.toolContent) {
     const ev = message.agentEvent as AgentEvent | undefined;
     const fnName = ev?.function_name || ev?.tool_name;
-    const fnArgs = (ev as any)?.function_args || (ev as any)?.input || {};
+    const fnArgs: Record<string, unknown> = ev?.function_args ?? {};
     const toolAsTool: StepTool = {
       tool_call_id: ev?.tool_call_id,
       name: ev?.tool_name,
