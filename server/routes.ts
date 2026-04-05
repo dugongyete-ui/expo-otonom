@@ -3390,38 +3390,39 @@ print(json.dumps(results))
   // These routes provide the exact ai-manus API shape at /api/v1/sessions/*
   // All routes enforce ownership BEFORE any side effects.
 
-  // Helper: verify session ownership against in-memory sessions + MongoDB.
-  // Returns the owning user_id string, or throws with appropriate HTTP status.
+  class HttpError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.statusCode = statusCode;
+    }
+  }
+
   async function _v1VerifyOwner(sessionId: string, requestingUserId: string): Promise<string> {
-    // Check live in-memory session first
     const liveSession = activeAgentSessions.get(sessionId);
     if (liveSession) {
-      const owner: string = (liveSession as any)._userId || "";
-      if (owner && requestingUserId && owner !== requestingUserId) {
-        const e: any = new Error("Access denied");
-        e.statusCode = 403;
-        throw e;
+      const owner: string = (liveSession as { _userId?: string })._userId ?? "";
+      // Fail-closed: if either side is missing, deny (session has unknown owner)
+      if (!owner || !requestingUserId || owner !== requestingUserId) {
+        throw new HttpError("Access denied", 403);
       }
       return owner;
     }
-    // Fall through to MongoDB — deny by default if DB is unavailable
     const col = await getCollection("sessions");
     if (!col) {
-      const e: any = new Error("Unable to verify session ownership");
-      e.statusCode = 503;
-      throw e;
+      throw new HttpError("Unable to verify session ownership", 503);
     }
-    const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+    const doc = await (col as { findOne: (q: object, opts: object) => Promise<{ user_id?: string } | null> }).findOne(
+      { session_id: sessionId },
+      { projection: { user_id: 1 } },
+    );
     if (!doc) {
-      const e: any = new Error("Session not found");
-      e.statusCode = 404;
-      throw e;
+      throw new HttpError("Session not found", 404);
     }
-    const owner: string = doc.user_id || "";
-    if (owner && requestingUserId && owner !== requestingUserId) {
-      const e: any = new Error("Access denied");
-      e.statusCode = 403;
-      throw e;
+    const owner: string = doc.user_id ?? "";
+    // Fail-closed: if owner field is missing or doesn't match, deny
+    if (!owner || !requestingUserId || owner !== requestingUserId) {
+      throw new HttpError("Access denied", 403);
     }
     return owner;
   }
