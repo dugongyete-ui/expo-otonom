@@ -19,7 +19,12 @@ Dzeck AI is a full-stack Expo/React Native AI agent application that runs autono
 - **Auth**: Custom JWT system (no Passport dependency)
 
 ### Python Agent (`server/agent/`)
-- **Flow**: `server/agent/flows/plan_act.py` — DzeckAgent with multi-step planning
+- **Flow**: `server/agent/flows/plan_act.py` — DzeckAgent (original) with multi-step planning
+- **ai-manus Flow**: `server/agent/flows/manus_flow.py` — PlanActFlow with exact AgentStatus states (IDLE→PLANNING→EXECUTING→UPDATING→SUMMARIZING→COMPLETED)
+- **Agents**: `server/agent/agents/` — BaseAgent, PlannerAgent, ExecutionAgent (ai-manus architecture)
+  - `base.py` — BaseAgent wrapping Cohere/Cerebras API (tool calling, retry, JSON parsing)
+  - `planner.py` — PlannerAgent: creates & updates plans, emits PlanEvent/TitleEvent
+  - `execution.py` — ExecutionAgent: executes steps with tools, emits StepEvent/ToolEvent
 - **Tools**: shell (E2B), browser (E2B Desktop), file (E2B + GridFS), search, desktop, todo, task
 - **Multi-agent**: WebAgent, CodeAgent, FilesAgent, DataAgent, general (routed by step type)
 - **Memory**: `server/agent/services/memory_service.py` — cross-session memory in MongoDB `agent_memory`
@@ -104,6 +109,16 @@ Auto-login logic lives exclusively in `AuthProvider` (`lib/auth-context.tsx`). `
 - Files: `GET /api/sessions/:id/files` → MongoDB `session_files` + GridFS download
 - Todos: `GET /api/sessions/:id/todos` → MongoDB `agent_todos`
 - Tasks: `GET /api/sessions/:id/tasks` → MongoDB `agent_tasks`
+
+## v1 Session API Routes (ai-manus compatible)
+Added at `/api/v1/sessions/*` matching ai-manus session_routes.py contract:
+- `PUT /api/v1/sessions` — Create new session (returns `{success, data: {session_id}}`)
+- `GET /api/v1/sessions` — List all sessions for user
+- `GET /api/v1/sessions/:id` — Get session details
+- `DELETE /api/v1/sessions/:id` — Delete session
+- `POST /api/v1/sessions/:id/stop` — Stop running session
+- `POST /api/v1/sessions/:id/clear_unread_message_count` — Clear unread count
+- `POST /api/v1/sessions/:id/chat` — SSE chat (delegates to `/api/agent` internally)
 
 ## E2B Sandbox Endpoints
 - `POST /api/e2b/sessions` — Create desktop sandbox

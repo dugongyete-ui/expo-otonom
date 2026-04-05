@@ -3386,6 +3386,196 @@ print(json.dumps(results))
     }
   });
 
+  // ─── v1 Session API routes — matching ai-manus session_routes.py contract ──
+  // These routes provide the exact ai-manus API shape at /api/v1/sessions/*
+  // They delegate to the same underlying session store and agent infrastructure.
+
+  // PUT /api/v1/sessions — create a new session
+  app.put("/api/v1/sessions", requireAuth, async (req: any, res: any) => {
+    const userId: string = req.user?.id || "anon";
+    const sessionId = randomUUID();
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        await (col as any).insertOne({
+          session_id: sessionId,
+          user_id: userId,
+          status: "pending",
+          title: null,
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+      }
+    } catch (err: any) {
+      console.warn("[v1/sessions] Failed to persist new session:", err.message);
+    }
+    res.json({ success: true, data: { session_id: sessionId } });
+  });
+
+  // GET /api/v1/sessions — list sessions for authenticated user
+  app.get("/api/v1/sessions", requireAuth, async (req: any, res: any) => {
+    const requestingUserId: string = req.user?.id || "";
+    try {
+      const col = await getCollection("sessions");
+      let sessions: any[] = [];
+      if (col) {
+        const query: Record<string, any> = {};
+        if (requestingUserId) query.user_id = requestingUserId;
+        const docs = await (col as any).find(query, {
+          projection: { _id: 0, session_id: 1, title: 1, status: 1, created_at: 1, updated_at: 1 },
+          sort: { created_at: -1 },
+          limit: 50,
+        } as any).toArray();
+        sessions = docs.map((d: any) => ({
+          session_id: d.session_id,
+          title: d.title || null,
+          status: d.status || "completed",
+          is_shared: false,
+          unread_message_count: 0,
+          latest_message: null,
+          latest_message_at: d.updated_at ? Math.floor(new Date(d.updated_at).getTime() / 1000) : null,
+        }));
+      }
+      res.json({ success: true, data: { sessions } });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/v1/sessions/:sessionId — get a single session
+  app.get("/api/v1/sessions/:sessionId", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    try {
+      const col = await getCollection("sessions");
+      let sessionDoc: any = null;
+      if (col) {
+        sessionDoc = await (col as any).findOne(
+          { session_id: sessionId },
+          { projection: { _id: 0 } },
+        );
+      }
+      if (!sessionDoc) {
+        return res.status(404).json({ success: false, error: "Session not found" });
+      }
+      if (requestingUserId && sessionDoc.user_id && sessionDoc.user_id !== requestingUserId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      res.json({
+        success: true,
+        data: {
+          session_id: sessionDoc.session_id,
+          title: sessionDoc.title || null,
+          status: sessionDoc.status || "completed",
+          is_shared: false,
+          events: [],
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // DELETE /api/v1/sessions/:sessionId — delete a session
+  app.delete("/api/v1/sessions/:sessionId", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const owner: string = (liveSession as any)._userId || "";
+      if (owner && requestingUserId && owner !== requestingUserId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      if (!liveSession.done) {
+        try { liveSession.proc.kill("SIGTERM"); } catch {}
+        liveSession.done = true;
+        _broadcastToSession(liveSession, "data: [DONE]\n\n");
+      }
+      activeAgentSessions.delete(sessionId);
+    }
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+        if (doc && requestingUserId && doc.user_id && doc.user_id !== requestingUserId) {
+          return res.status(403).json({ success: false, error: "Access denied" });
+        }
+        await (col as any).deleteOne({ session_id: sessionId });
+      }
+    } catch (err: any) {
+      console.warn("[v1/sessions] Delete from MongoDB failed:", err.message);
+    }
+    res.json({ success: true, data: null });
+  });
+
+  // POST /api/v1/sessions/:sessionId/stop — stop a running session
+  app.post("/api/v1/sessions/:sessionId/stop", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    try {
+      await redisSet(`agent:${sessionId}:stop`, "1");
+    } catch {}
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const owner: string = (liveSession as any)._userId || "";
+      if (owner && requestingUserId && owner !== requestingUserId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+      if (!liveSession.done) {
+        try { liveSession.proc.kill("SIGTERM"); } catch {}
+        liveSession.done = true;
+        _broadcastToSession(liveSession, `data: ${JSON.stringify({ type: "error", error: "Session stopped." })}\n\n`);
+        _broadcastToSession(liveSession, "data: [DONE]\n\n");
+      }
+    }
+    res.json({ success: true, data: null });
+  });
+
+  // POST /api/v1/sessions/:sessionId/clear_unread_message_count — clear unread count
+  app.post("/api/v1/sessions/:sessionId/clear_unread_message_count", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    try {
+      const col = await getCollection("sessions");
+      if (col) {
+        await (col as any).updateOne(
+          { session_id: sessionId },
+          { $set: { unread_message_count: 0, updated_at: new Date() } },
+        );
+      }
+    } catch {}
+    res.json({ success: true, data: null });
+  });
+
+  // POST /api/v1/sessions/:sessionId/chat — SSE chat stream (ai-manus compatible)
+  // Delegates to /api/agent by rewriting the request body and forwarding internally.
+  // The existing /api/agent handler is reused for consistent spawning behaviour.
+  app.post("/api/v1/sessions/:sessionId/chat", requireAuth, async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const { message, attachments, timestamp, event_id } = req.body || {};
+
+    if (!message && !attachments?.length) {
+      return res.status(400).json({ success: false, error: "message is required" });
+    }
+
+    // Rewrite body to the /api/agent format and dispatch internally.
+    // The /api/agent handler reads: { message, session_id, attachments, ... }
+    req.body = {
+      message: message || "",
+      session_id: sessionId,
+      attachments: attachments || [],
+      is_continuation: false,
+    };
+    req.url = "/api/agent";
+    req.path = "/api/agent";
+
+    // Dispatch to the /api/agent handler via Express's router
+    app.handle(req, res, () => {
+      res.status(500).json({ success: false, error: "Internal routing error" });
+    });
+  });
+
+  // ─── End v1 Session API routes ──────────────────────────────────────────────
+
   const httpServer = createServer(app);
 
   if (isE2BEnabled()) {
