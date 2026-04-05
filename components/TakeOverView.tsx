@@ -164,13 +164,13 @@ export function TakeOverView({
       {/* Browser session unavailable error */}
       {browserUnavailable ? (
         <View style={styles.unavailableContainer}>
-          <Ionicons name="alert-circle-outline" size={40} color="#888888" />
-          <Text style={styles.unavailableTitle}>Browser Session Unavailable</Text>
+          <Ionicons name="alert-circle-outline" size={40} color="#EF4444" />
+          <Text style={styles.unavailableTitle}>Sesi Browser Tidak Tersedia</Text>
           <Text style={styles.unavailableText}>
-            No active desktop session is connected to this agent. The browser takeover requires an E2B sandbox session.
+            Tidak ada sesi desktop aktif yang terhubung ke agen ini. Fitur takeover memerlukan sesi sandbox E2B.
           </Text>
           <TouchableOpacity style={styles.unavailableCloseButton} onPress={handleClose} activeOpacity={0.8}>
-            <Text style={styles.unavailableCloseText}>Close</Text>
+            <Text style={styles.unavailableCloseText}>Tutup</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -187,17 +187,20 @@ export function TakeOverView({
         />
       </View>
 
-      {/* Connection status */}
-      {vncConnected && (
-        <View style={styles.connectedBadge}>
-          <View style={styles.connectedDot} />
-          <Text style={styles.connectedText}>Interactive Mode</Text>
-        </View>
-      )}
+      {/* Connection status badge — top left */}
+      <View style={styles.connectedBadge}>
+        <View style={[
+          styles.connectedDot,
+          { backgroundColor: vncConnected ? "#22C55E" : "#F59E0B" },
+        ]} />
+        <Text style={styles.connectedText}>
+          {vncConnected ? "Mode Interaktif" : "Menghubungkan..."}
+        </Text>
+      </View>
 
-      {/* Pause indicator */}
+      {/* Pause indicator — top right */}
       <View style={styles.pauseBadge}>
-        <Ionicons name="pause-circle" size={14} color="#888888" />
+        <Ionicons name="pause-circle" size={14} color="#F59E0B" />
         <Text style={styles.pauseText}>Agent Dijeda</Text>
       </View>
 
@@ -209,7 +212,7 @@ export function TakeOverView({
           activeOpacity={0.8}
         >
           <Ionicons name="exit-outline" size={16} color="#ffffff" />
-          <Text style={styles.exitButtonText}>Exit Takeover</Text>
+          <Text style={styles.exitButtonText}>Keluar Takeover</Text>
         </TouchableOpacity>
       </View>
       </>

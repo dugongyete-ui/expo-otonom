@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, getToolCategory, TOOL_FUNCTION_MAP, getToolPrimaryArg } from "@/lib/tool-constants";
 import { ToolPanelContent } from "./ToolPanelContent";
@@ -177,13 +178,13 @@ export function ToolPanel({
   // Shared panel body used in both desktop (Animated.View) and mobile (Modal) paths
   const panelBody = (
     <>
-      {/* Header — ai-manus "Manus Computer" style */}
+      {/* Header — ai-manus "Manus Computer" equivalent for Dzeck */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.headerIconBox}>
-            <NativeIcon name="desktop-outline" size={13} color="#636366" />
+            <Ionicons name="desktop-outline" size={13} color="#6B7280" />
           </View>
-          <Text style={styles.headerTitle}>Agent Computer</Text>
+          <Text style={styles.headerTitle}>Dzeck Computer</Text>
           {latestCallingTool && (
             <View style={styles.liveBadge}>
               <View style={styles.liveBadgeDot} />

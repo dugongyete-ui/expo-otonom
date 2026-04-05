@@ -16,6 +16,7 @@ import {
   Linking,
   Image,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { NativeIcon } from "@/components/icons/SvgIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getApiBaseUrl, getStoredToken } from "@/lib/api-service";
@@ -193,29 +194,19 @@ export function FilePanel({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileIcon = (name: string): string => {
+  type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+  const getFileIconInfo = (name: string): { icon: IoniconName; color: string; bg: string } => {
     const ext = getFileExt(name);
-    const iconMap: Record<string, string> = {
-      py: "code-slash",
-      js: "code-slash",
-      ts: "code-slash",
-      tsx: "code-slash",
-      html: "code-slash",
-      css: "code-slash",
-      json: "document-text",
-      md: "document-text",
-      txt: "document-text",
-      png: "image",
-      jpg: "image",
-      jpeg: "image",
-      gif: "image",
-      svg: "image",
-      pdf: "document",
-      zip: "document",
-      tar: "document",
-      gz: "document",
-    };
-    return iconMap[ext] || "document";
+    const codeExts = new Set(["py", "js", "ts", "tsx", "jsx", "html", "css", "json", "sh", "bash", "yaml", "yml", "go", "rs", "java", "cpp", "c", "rb"]);
+    const imageExts = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
+    const docExts = new Set(["md", "txt", "rtf", "csv", "pdf"]);
+    const archiveExts = new Set(["zip", "tar", "gz", "bz2", "rar", "7z"]);
+    if (codeExts.has(ext)) return { icon: "code-slash-outline", color: "#3B82F6", bg: "rgba(59,130,246,0.08)" };
+    if (imageExts.has(ext)) return { icon: "image-outline", color: "#8B5CF6", bg: "rgba(139,92,246,0.08)" };
+    if (docExts.has(ext)) return { icon: "document-text-outline", color: "#22C55E", bg: "rgba(34,197,94,0.08)" };
+    if (archiveExts.has(ext)) return { icon: "archive-outline", color: "#F59E0B", bg: "rgba(245,158,11,0.08)" };
+    return { icon: "document-outline", color: "#9CA3AF", bg: "rgba(156,163,175,0.08)" };
   };
 
   const convertedSseFiles: SessionFile[] = sseFiles.map(f => ({
@@ -240,14 +231,14 @@ export function FilePanel({
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={closePreview} activeOpacity={0.7}>
-            <NativeIcon name="arrow-back" size={14} color="#636366" />
+            <Ionicons name="chevron-back" size={14} color="#6B7280" />
             <Text style={styles.backBtnText}>Files</Text>
           </TouchableOpacity>
           <View style={styles.previewHeaderCenter}>
             <Text style={styles.previewFileName} numberOfLines={1}>{previewFile.name}</Text>
           </View>
           <TouchableOpacity style={styles.downloadBtn} onPress={() => downloadFile(previewFile)} activeOpacity={0.7}>
-            <NativeIcon name="download" size={14} color="#636366" />
+            <Ionicons name="download-outline" size={14} color="#6B7280" />
           </TouchableOpacity>
         </View>
 
@@ -283,16 +274,23 @@ export function FilePanel({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <NativeIcon name="folder-open" size={14} color="#636366" />
+          <View style={styles.headerIconBox}>
+            <Ionicons name="folder-open-outline" size={13} color="#6B7280" />
+          </View>
           <Text style={styles.headerTitle}>Session Files</Text>
+          {displayFiles.length > 0 && (
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>{displayFiles.length}</Text>
+            </View>
+          )}
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconBtn} onPress={loadFiles} activeOpacity={0.7}>
-            <NativeIcon name="refresh" size={14} color="#636366" />
+            <Ionicons name="refresh-outline" size={14} color="#6B7280" />
           </TouchableOpacity>
           {onClose && (
             <TouchableOpacity style={styles.iconBtn} onPress={onClose} activeOpacity={0.7}>
-              <NativeIcon name="close" size={14} color="#636366" />
+              <Ionicons name="close" size={14} color="#6B7280" />
             </TouchableOpacity>
           )}
         </View>
@@ -300,62 +298,70 @@ export function FilePanel({
 
       <ScrollView
         style={styles.fileList}
-        showsVerticalScrollIndicator
-        contentContainerStyle={{ paddingBottom: insets.bottom }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
       >
         {loading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="small" color="#888888" />
+            <ActivityIndicator size="small" color="#9CA3AF" />
             <Text style={styles.loadingText}>Loading files...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorState}>
-            <NativeIcon name="alert-circle" size={20} color="#888888" />
+            <Ionicons name="alert-circle-outline" size={22} color="#EF4444" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : displayFiles.length === 0 ? (
           <View style={styles.emptyState}>
-            <NativeIcon name="folder-open" size={24} color="#8a8780" />
-            <Text style={styles.emptyText}>No files created yet</Text>
+            <Ionicons name="folder-open-outline" size={32} color="#D1CFC8" />
+            <Text style={styles.emptyTitle}>No files yet</Text>
+            <Text style={styles.emptyText}>Files created by the agent will appear here</Text>
           </View>
         ) : (
-          displayFiles.map((file, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.fileItem}
-              onPress={() => {
-                if (canPreview(file.name)) {
-                  openPreview(file);
-                } else {
-                  onFileSelect?.(file);
-                }
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.fileIcon}>
-                <NativeIcon name={getFileIcon(file.name)} size={14} color="#888888" />
-              </View>
-              <View style={styles.fileInfo}>
-                <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
-                {file.size !== undefined && (
-                  <Text style={styles.fileSize}>{formatSize(file.size)}</Text>
-                )}
-              </View>
-              {canPreview(file.name) && (
-                <NativeIcon name="eye" size={12} color="#8a8780" />
-              )}
+          displayFiles.map((file, index) => {
+            const fileIconInfo = getFileIconInfo(file.name);
+            return (
               <TouchableOpacity
-                style={styles.downloadBtnSmall}
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  downloadFile(file);
+                key={index}
+                style={styles.fileItem}
+                onPress={() => {
+                  if (canPreview(file.name)) {
+                    openPreview(file);
+                  } else {
+                    onFileSelect?.(file);
+                  }
                 }}
-                activeOpacity={0.7}
+                activeOpacity={0.75}
               >
-                <NativeIcon name="download" size={12} color="#636366" />
+                <View style={[styles.fileIcon, { backgroundColor: fileIconInfo.bg }]}>
+                  <Ionicons name={fileIconInfo.icon} size={14} color={fileIconInfo.color} />
+                </View>
+                <View style={styles.fileInfo}>
+                  <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+                  <View style={styles.fileMetaRow}>
+                    <Text style={styles.fileExt}>{getFileExt(file.name).toUpperCase()}</Text>
+                    {file.size !== undefined && (
+                      <Text style={styles.fileSize}>{formatSize(file.size)}</Text>
+                    )}
+                  </View>
+                </View>
+                {canPreview(file.name) && (
+                  <Ionicons name="eye-outline" size={13} color="#C4C2BA" />
+                )}
+                <TouchableOpacity
+                  style={styles.downloadBtnSmall}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    downloadFile(file);
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="download-outline" size={13} color="#9CA3AF" />
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -365,28 +371,49 @@ export function FilePanel({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#242424",
-    borderLeftWidth: 1,
-    borderLeftColor: "#e5e7eb",
+    backgroundColor: "#F5F4EF",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#E5E3DC",
+    backgroundColor: "#F5F4EF",
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  headerIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "#E5E3DC",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    color: "#242424",
+    color: "#1A1A1A",
+  },
+  headerBadge: {
+    backgroundColor: "#E5E3DC",
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  headerBadgeText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    color: "#6B7280",
   },
   headerRight: {
     flexDirection: "row",
@@ -394,11 +421,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   iconBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#E5E3DC",
   },
   fileList: {
     flex: 1,
@@ -407,83 +435,95 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0ede7",
+    borderBottomColor: "#EAE8E1",
   },
   fileIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  fileInfo: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  fileName: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12.5,
+    color: "#1A1A1A",
+    lineHeight: 16,
+  },
+  fileMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  fileExt: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: "#B0ADA5",
+    letterSpacing: 0.3,
+  },
+  fileSize: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: "#B0ADA5",
+  },
+  downloadBtnSmall: {
     width: 28,
     height: 28,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(90,200,250,0.12)",
-  },
-  fileInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  fileName: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-    color: "#242424",
-  },
-  fileSize: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 10,
-    color: "#6b7280",
-  },
-  eyeIcon: {
-    marginHorizontal: 2,
-  },
-  downloadBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2a2a2a",
-  },
-  downloadBtnSmall: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#ECEAE2",
+    flexShrink: 0,
   },
   loadingState: {
     alignItems: "center",
-    paddingVertical: 24,
-    gap: 8,
+    paddingVertical: 40,
+    gap: 10,
   },
   loadingText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#6b7280",
+    fontSize: 12,
+    color: "#9CA3AF",
   },
   errorState: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingVertical: 32,
     gap: 8,
+    paddingHorizontal: 24,
   },
   errorText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 11,
-    color: "#a0a0a0",
+    fontSize: 12,
+    color: "#EF4444",
     textAlign: "center",
-    paddingHorizontal: 16,
   },
   emptyState: {
     alignItems: "center",
-    paddingVertical: 32,
+    paddingVertical: 48,
     gap: 8,
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginTop: 4,
   },
   emptyText: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#6b7280",
+    color: "#B0ADA5",
+    textAlign: "center",
+    lineHeight: 18,
   },
   backBtn: {
     flexDirection: "row",
@@ -495,7 +535,15 @@ const styles = StyleSheet.create({
   backBtnText: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: "#6b7280",
+    color: "#6B7280",
+  },
+  downloadBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECEAE2",
   },
   previewHeaderCenter: {
     flex: 1,
@@ -505,16 +553,16 @@ const styles = StyleSheet.create({
   previewFileName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
-    color: "#242424",
+    color: "#1A1A1A",
   },
   previewArea: {
     flex: 1,
-    backgroundColor: "#f8f7f4",
+    backgroundColor: "#F5F4EF",
   },
   imageContainer: {
-    padding: 12,
+    padding: 16,
     alignItems: "center",
-    backgroundColor: "#242424",
+    backgroundColor: "#F0EEE6",
   },
   previewImage: {
     width: "100%",
@@ -526,16 +574,14 @@ const styles = StyleSheet.create({
   },
   markdownPreviewContainer: {
     padding: 16,
-    backgroundColor: "#242424",
   },
   textPreviewContainer: {
     padding: 16,
-    backgroundColor: "#242424",
   },
   previewText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "#242424",
+    color: "#374151",
     lineHeight: 22,
   },
 });

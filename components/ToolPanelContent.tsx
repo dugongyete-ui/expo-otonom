@@ -250,13 +250,22 @@ function ShellToolView({
           <View
             style={[
               styles.returnCodeBadge,
-              { backgroundColor: returnCode === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.04)" },
+              {
+                backgroundColor: returnCode === 0
+                  ? "rgba(34,197,94,0.12)"
+                  : "rgba(239,68,68,0.12)",
+              },
             ]}
           >
+            <Ionicons
+              name={returnCode === 0 ? "checkmark-circle-outline" : "close-circle-outline"}
+              size={10}
+              color={returnCode === 0 ? "#22C55E" : "#EF4444"}
+            />
             <Text
               style={[
                 styles.returnCodeText,
-                { color: returnCode === 0 ? "#888888" : "#666666" },
+                { color: returnCode === 0 ? "#22C55E" : "#EF4444" },
               ]}
             >
               exit {returnCode}
@@ -1470,7 +1479,7 @@ const styles = StyleSheet.create({
   shellPs1: {
     fontFamily: "monospace",
     fontSize: 12,
-    color: "#888888",
+    color: "#22C55E",
     fontWeight: "700",
   },
   shellCommandText: {
@@ -1539,10 +1548,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a2a2a",
   },
   returnCodeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     alignSelf: "flex-start",
-    borderRadius: 3,
+    borderRadius: 4,
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   returnCodeText: {
     fontFamily: "monospace",
