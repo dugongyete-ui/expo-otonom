@@ -14,7 +14,7 @@ import { CodeBlock } from "@/components/CodeBlock";
 import type { ChatMessage as ChatMessageType, AgentPlanStep, ToolContent, AgentEvent } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
 import { cleanText } from "@/lib/text-utils";
-import { getToolCategory } from "@/lib/tool-constants";
+import { getToolCategory, getToolDisplayInfo, getToolPrimaryArg, TOOL_FUNCTION_MAP } from "@/lib/tool-constants";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -223,73 +223,77 @@ type IonIconName = React.ComponentProps<typeof Ionicons>["name"];
 function ToolMessageCard({
   toolContent,
   functionName,
+  functionArgs,
   onPress,
 }: {
   toolContent?: ToolContent | null;
   functionName?: string;
+  functionArgs?: Record<string, unknown>;
   onPress?: () => void;
 }) {
   const name = functionName || toolContent?.type || "tool";
-  const category = getToolCategory(name);
-  const iconKey = TOOL_CATEGORY_ICONS[category] || "settings-outline";
-  const icon: IonIconName = iconKey as IonIconName;
+  const displayInfo = getToolDisplayInfo(name);
+  const icon: IonIconName = displayInfo.icon as IonIconName;
+  const actionLabel = TOOL_FUNCTION_MAP[name] || displayInfo.label || name;
+  const args: Record<string, unknown> = functionArgs || (toolContent as any)?.input || {};
+  const argVal = getToolPrimaryArg(name, args);
 
   return (
     <TouchableOpacity
-      style={toolCardStyles.card}
+      style={toolCardStyles.pill}
       onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
+      activeOpacity={onPress ? 0.75 : 1}
     >
-      <View style={toolCardStyles.iconBox}>
-        <Ionicons name={icon} size={13} color="#888888" />
+      <View style={toolCardStyles.pillIconWrap}>
+        <Ionicons name={icon} size={14} color="#374151" />
       </View>
-      <View style={toolCardStyles.info}>
-        <Text style={toolCardStyles.name} numberOfLines={1}>{name}</Text>
-        {category && (
-          <Text style={toolCardStyles.category}>{category}</Text>
-        )}
+      <View style={toolCardStyles.pillTextWrap}>
+        <Text style={toolCardStyles.pillAction} numberOfLines={1}>
+          {actionLabel}
+          {argVal ? (
+            <Text style={toolCardStyles.pillArg}>{" "}{argVal}</Text>
+          ) : null}
+        </Text>
       </View>
-      {onPress && <Ionicons name="chevron-forward" size={12} color="#505050" />}
     </TouchableOpacity>
   );
 }
 
 const toolCardStyles = StyleSheet.create({
-  card: {
+  pill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#F5F4EF",
-    borderRadius: 8,
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: "#E5E3DC",
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 4,
+    maxWidth: "100%",
   },
-  iconBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: "#FFFFFF",
+  pillIconWrap: {
+    width: 16,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  info: {
+  pillTextWrap: {
     flex: 1,
-    gap: 1,
     minWidth: 0,
   },
-  name: {
+  pillAction: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#374151",
+    lineHeight: 20,
+  },
+  pillArg: {
     fontFamily: "monospace",
     fontSize: 11,
-    color: "#374151",
-    fontWeight: "500",
-  },
-  category: {
-    fontSize: 10,
-    color: "#9CA3AF",
-    textTransform: "capitalize",
+    color: "#6B7280",
+    maxWidth: "100%",
   },
 });
 
@@ -301,6 +305,8 @@ interface StepTool {
   function_name?: string;
   status?: string;
   tool_content?: ToolContent;
+  function_args?: Record<string, unknown>;
+  input?: Record<string, unknown>;
 }
 
 function StepMessage({
@@ -369,6 +375,7 @@ function StepMessage({
                   key={tool.tool_call_id || i}
                   functionName={tool.function_name || tool.name}
                   toolContent={tool.tool_content}
+                  functionArgs={tool.function_args || tool.input}
                   onPress={onToolPress ? () => onToolPress(tool) : undefined}
                 />
               ))}
@@ -488,17 +495,20 @@ export function ChatMessageBubble({ message, onToolPress }: ChatMessageProps & {
   if (message.toolContent) {
     const ev = message.agentEvent as AgentEvent | undefined;
     const fnName = ev?.function_name || ev?.tool_name;
+    const fnArgs = (ev as any)?.function_args || (ev as any)?.input || {};
     const toolAsTool: StepTool = {
       tool_call_id: ev?.tool_call_id,
       name: ev?.tool_name,
       function_name: ev?.function_name,
       tool_content: message.toolContent,
+      function_args: fnArgs,
     };
     return (
       <View style={{ paddingHorizontal: 16, paddingVertical: 2 }}>
         <ToolMessageCard
           toolContent={message.toolContent}
           functionName={fnName}
+          functionArgs={fnArgs}
           onPress={onToolPress ? () => onToolPress(toolAsTool) : undefined}
         />
       </View>
