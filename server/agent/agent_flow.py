@@ -66,6 +66,10 @@ from server.agent.runner.agent_runner import (
     main,
 )
 
+# ── ai-manus compatible PlanActFlow (alongside original DzeckAgent) ──────────
+from server.agent.flows.manus_flow import PlanActFlow, AgentStatus
+from server.agent.runner.manus_runner import run_plan_act_flow_async
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()

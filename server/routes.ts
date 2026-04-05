@@ -3509,25 +3509,49 @@ print(json.dumps(results))
   });
 
   // POST /api/v1/sessions/:sessionId/stop — stop a running session
+  // Ownership is validated BEFORE any side effects (Redis write, process kill).
   app.post("/api/v1/sessions/:sessionId/stop", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
-    try {
-      await redisSet(`agent:${sessionId}:stop`, "1");
-    } catch {}
+
+    // --- Ownership check (in-memory session first, then MongoDB) ---
     const liveSession = activeAgentSessions.get(sessionId);
     if (liveSession) {
       const owner: string = (liveSession as any)._userId || "";
       if (owner && requestingUserId && owner !== requestingUserId) {
         return res.status(403).json({ success: false, error: "Access denied" });
       }
-      if (!liveSession.done) {
-        try { liveSession.proc.kill("SIGTERM"); } catch {}
-        liveSession.done = true;
-        _broadcastToSession(liveSession, `data: ${JSON.stringify({ type: "error", error: "Session stopped." })}\n\n`);
-        _broadcastToSession(liveSession, "data: [DONE]\n\n");
+    } else {
+      // No live session — verify ownership in MongoDB before writing to Redis
+      try {
+        const col = await getCollection("sessions");
+        if (col) {
+          const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+          if (!doc) {
+            return res.status(404).json({ success: false, error: "Session not found" });
+          }
+          const owner: string = doc.user_id || "";
+          if (owner && requestingUserId && owner !== requestingUserId) {
+            return res.status(403).json({ success: false, error: "Access denied" });
+          }
+        }
+      } catch (err: any) {
+        console.warn("[v1/sessions/stop] DB ownership check failed:", err.message);
       }
     }
+
+    // --- Ownership confirmed — now apply stop side effects ---
+    try {
+      await redisSet(`agent:${sessionId}:stop`, "1");
+    } catch {}
+
+    if (liveSession && !liveSession.done) {
+      try { liveSession.proc.kill("SIGTERM"); } catch {}
+      liveSession.done = true;
+      _broadcastToSession(liveSession, `data: ${JSON.stringify({ type: "error", error: "Session stopped." })}\n\n`);
+      _broadcastToSession(liveSession, "data: [DONE]\n\n");
+    }
+
     res.json({ success: true, data: null });
   });
 

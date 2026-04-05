@@ -147,9 +147,14 @@ class BaseAgent(ABC):
                 yield MessageEvent(message=text or "")
                 return
 
+            # Assign stable IDs to each tool call BEFORE building the assistant message,
+            # so the same ID is used in both the assistant message and the tool response.
+            for tc in tool_calls:
+                tc["_call_id"] = str(uuid.uuid4())[:8]
+
             messages.append({"role": "assistant", "content": text or "", "tool_calls": [
                 {
-                    "id": str(uuid.uuid4())[:8],
+                    "id": tc["_call_id"],
                     "type": "function",
                     "function": {"name": tc["name"], "arguments": json.dumps(tc["arguments"])},
                 }
@@ -160,7 +165,7 @@ class BaseAgent(ABC):
             for tc in tool_calls:
                 function_name = tc["name"]
                 function_args = tc["arguments"] if isinstance(tc["arguments"], dict) else {}
-                tool_call_id = str(uuid.uuid4())[:8]
+                tool_call_id = tc["_call_id"]  # Use the same ID assigned above
                 toolkit_name = self.get_toolkit_name(function_name)
 
                 yield ToolEvent(
