@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,10 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiService, getApiBaseUrl, getStoredToken } from "@/lib/api-service";
 import { t } from "@/lib/i18n";
@@ -141,8 +144,12 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
     <View style={styles.container}>
       {/* Header with collapse button */}
       <View style={styles.header}>
+        <View style={styles.headerBrand}>
+          <View style={styles.brandMark} />
+          <Text style={styles.brandName}>Dzeck</Text>
+        </View>
         <TouchableOpacity style={styles.toggleButton} onPress={onToggle} activeOpacity={0.7}>
-          <Text style={styles.panelLeftIcon}>⟵</Text>
+          <Ionicons name="chevron-back" size={18} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
@@ -152,9 +159,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         onPress={handleNewTask}
         activeOpacity={0.7}
       >
-        <View style={styles.newTaskIcon}>
-          <Text style={styles.newTaskIconText}>✎</Text>
-        </View>
+        <Ionicons name="pencil-outline" size={15} color="#1A1A1A" />
         <Text style={styles.newTaskButtonText}>{t("New Task")}</Text>
         <View style={styles.shortcutKeys}>
           <View style={styles.shortcutKey}><Text style={styles.shortcutKeyText}>⌘</Text></View>
@@ -176,7 +181,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
           </View>
         )}
         <View style={{ flex: 1 }} />
-        <Text style={styles.sectionChevron}>{isAllTasksCollapsed ? "⌄" : "⌃"}</Text>
+        <Ionicons name={isAllTasksCollapsed ? "chevron-down" : "chevron-up"} size={13} color="#9CA3AF" />
       </TouchableOpacity>
 
       {/* Sessions List */}
@@ -264,44 +269,65 @@ interface SessionItemProps {
   onDelete: () => void;
 }
 
+function RunningDot() {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.35, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return <Animated.View style={[styles.runningDotSmall, { opacity: pulseAnim }]} />;
+}
+
 function SessionItem({ session, isRunning, onSelect, onDelete }: SessionItemProps) {
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(mins / 60);
     const days = Math.floor(hours / 24);
 
-    if (hours < 1) return t("Just now");
+    if (mins < 2) return t("Just now");
+    if (mins < 60) return `${mins}m ago`;
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
+    return date.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
   };
 
   return (
     <TouchableOpacity
       style={styles.sessionItem}
       onPress={onSelect}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
     >
       <View style={styles.sessionItemContent}>
         <View style={styles.sessionItemTitleRow}>
-          {isRunning && (
-            <View style={styles.runningDotSmall} />
-          )}
+          {isRunning && <RunningDot />}
           <Text style={styles.sessionItemTitle} numberOfLines={1}>
             {session.title}
           </Text>
         </View>
+        {session.preview ? (
+          <Text style={styles.sessionItemPreview} numberOfLines={1}>{session.preview}</Text>
+        ) : null}
       </View>
-      <Text style={styles.sessionItemTime}>{formatTime(session.timestamp)}</Text>
-      <TouchableOpacity
-        style={styles.sessionItemAction}
-        onPress={onDelete}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.deleteIcon}>✕</Text>
-      </TouchableOpacity>
+      <View style={styles.sessionItemMeta}>
+        <Text style={styles.sessionItemTime}>{formatTime(session.timestamp)}</Text>
+        <TouchableOpacity
+          style={styles.sessionItemAction}
+          onPress={onDelete}
+          activeOpacity={0.7}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="trash-outline" size={13} color="#C4C2BA" />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -320,16 +346,31 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 4,
   },
+  headerBrand: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  brandMark: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: "#1A1A1A",
+  },
+  brandName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    letterSpacing: 0.5,
+  },
   toggleButton: {
     width: 28,
     height: 28,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-  },
-  panelLeftIcon: {
-    fontSize: 18,
-    color: "#6B7280",
   },
   newTaskButton: {
     flexDirection: "row",
@@ -338,19 +379,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 8,
     marginBottom: 4,
-    gap: 10,
+    gap: 8,
     height: 36,
-  },
-  newTaskIcon: {
-    width: 18,
-    height: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  newTaskIconText: {
-    fontSize: 16,
-    color: "#1A1A1A",
   },
   newTaskButtonText: {
     flex: 1,
@@ -390,11 +420,6 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontWeight: "500",
   },
-  sectionChevron: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    paddingHorizontal: 2,
-  },
   runningBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -419,9 +444,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 8,
     marginBottom: 1,
-    gap: 4,
+    gap: 6,
   },
   sessionItemContent: {
     flex: 1,
@@ -430,36 +455,44 @@ const styles = StyleSheet.create({
   sessionItemTitleRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
   },
   runningDotSmall: {
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     borderRadius: 3,
     backgroundColor: "#22C55E",
-    marginRight: 5,
     flexShrink: 0,
   },
   sessionItemTitle: {
-    color: "#374151",
+    color: "#1A1A1A",
     fontSize: 13,
-    fontWeight: "400",
+    fontWeight: "500",
     flex: 1,
+    lineHeight: 18,
   },
-  sessionItemTime: {
+  sessionItemPreview: {
     color: "#9CA3AF",
-    fontSize: 11,
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  sessionItemMeta: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 4,
     flexShrink: 0,
   },
+  sessionItemTime: {
+    color: "#B0ADA5",
+    fontSize: 10.5,
+  },
   sessionItemAction: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 4,
-  },
-  deleteIcon: {
-    fontSize: 11,
-    color: "#9CA3AF",
   },
   emptyState: {
     flex: 1,

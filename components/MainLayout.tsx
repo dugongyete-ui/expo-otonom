@@ -308,17 +308,14 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                 style={styles.homeScroll}
                 contentContainerStyle={styles.homeScrollContent}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
                 <View style={styles.greetingBlock}>
-                  <Text style={styles.greetingText}>
-                    Hello, {userName}
-                  </Text>
-                  <Text style={styles.greetingSubText}>
-                    What can I do for you?
-                  </Text>
+                  <Text style={styles.greetingText}>Hello, {userName}</Text>
+                  <Text style={styles.greetingSubText}>What can I help you with?</Text>
                 </View>
 
-                {/* ChatBox centered */}
+                {/* ChatBox */}
                 <View style={styles.homeChatBoxWrap}>
                   <ChatBox
                     value={homeInput}
@@ -326,8 +323,30 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                     onSubmit={() => handleHomeSubmit(homeInput)}
                     isLoading={false}
                     isAgentMode={true}
-                    placeholder="Give Manus a task to work on..."
+                    placeholder="Berikan tugas untuk Dzeck..."
                   />
+                </View>
+
+                {/* Suggestion chips */}
+                <View style={styles.suggestionsRow}>
+                  {[
+                    { icon: "search-outline" as const, label: "Riset topik" },
+                    { icon: "code-slash-outline" as const, label: "Tulis kode" },
+                    { icon: "document-text-outline" as const, label: "Buat laporan" },
+                    { icon: "globe-outline" as const, label: "Jelajahi web" },
+                  ].map((chip) => (
+                    <TouchableOpacity
+                      key={chip.label}
+                      style={styles.suggestionChip}
+                      onPress={() => {
+                        setHomeInput(chip.label + ": ");
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name={chip.icon} size={13} color="#6B7280" />
+                      <Text style={styles.suggestionChipText}>{chip.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </ScrollView>
             </View>
@@ -395,6 +414,7 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
             )}
             {isToolPanelVisible && (
               <View style={styles.panelSwitcher}>
+                {/* Tool panel tab switcher — ai-manus style tabs */}
                 <TouchableOpacity
                   style={[
                     styles.switchTab,
@@ -403,10 +423,17 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                   onPress={() => setRightPanelMode("tools")}
                   activeOpacity={0.7}
                 >
-                  <Text style={[
-                    styles.switchTabText,
-                    rightPanelMode === "tools" && styles.switchTabTextActive,
-                  ]}>Tools</Text>
+                  <View style={styles.switchTabInner}>
+                    <Ionicons
+                      name="terminal-outline"
+                      size={12}
+                      color={rightPanelMode === "tools" ? "#1A1A1A" : "#9CA3AF"}
+                    />
+                    <Text style={[
+                      styles.switchTabText,
+                      rightPanelMode === "tools" && styles.switchTabTextActive,
+                    ]}>Tools</Text>
+                  </View>
                 </TouchableOpacity>
                 {currentPlan && (
                   <TouchableOpacity
@@ -418,6 +445,11 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                     activeOpacity={0.7}
                   >
                     <View style={styles.switchTabInner}>
+                      <Ionicons
+                        name="list-outline"
+                        size={12}
+                        color={rightPanelMode === "plan" ? "#1A1A1A" : "#9CA3AF"}
+                      />
                       <Text style={[
                         styles.switchTabText,
                         rightPanelMode === "plan" && styles.switchTabTextActive,
@@ -434,10 +466,17 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                   onPress={() => setRightPanelMode("browser")}
                   activeOpacity={0.7}
                 >
-                  <Text style={[
-                    styles.switchTabText,
-                    rightPanelMode === "browser" && styles.switchTabTextActive,
-                  ]}>Browser</Text>
+                  <View style={styles.switchTabInner}>
+                    <Ionicons
+                      name="globe-outline"
+                      size={12}
+                      color={rightPanelMode === "browser" ? "#1A1A1A" : "#9CA3AF"}
+                    />
+                    <Text style={[
+                      styles.switchTabText,
+                      rightPanelMode === "browser" && styles.switchTabTextActive,
+                    ]}>Browser</Text>
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -447,10 +486,17 @@ export function MainLayout({ sessionId: initialSessionId, isAgentMode: isAgentMo
                   onPress={() => setRightPanelMode("files")}
                   activeOpacity={0.7}
                 >
-                  <Text style={[
-                    styles.switchTabText,
-                    rightPanelMode === "files" && styles.switchTabTextActive,
-                  ]}>Files</Text>
+                  <View style={styles.switchTabInner}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={12}
+                      color={rightPanelMode === "files" ? "#1A1A1A" : "#9CA3AF"}
+                    />
+                    <Text style={[
+                      styles.switchTabText,
+                      rightPanelMode === "files" && styles.switchTabTextActive,
+                    ]}>Files</Text>
+                  </View>
                 </TouchableOpacity>
               </View>
             )}
@@ -646,25 +692,53 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   greetingBlock: {
-    paddingLeft: 4,
-    marginBottom: 32,
+    paddingLeft: 2,
+    marginBottom: 28,
   },
   greetingText: {
-    fontSize: 32,
-    lineHeight: 40,
+    fontSize: 34,
+    lineHeight: 42,
     color: "#1A1A1A",
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+    letterSpacing: -0.5,
   },
   greetingSubText: {
-    fontSize: 32,
-    lineHeight: 40,
-    color: "#9CA3AF",
+    fontSize: 34,
+    lineHeight: 42,
+    color: "#C4C2BA",
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+    letterSpacing: -0.5,
   },
   homeChatBoxWrap: {
     width: "100%",
-    maxWidth: 768,
+    maxWidth: 720,
     alignSelf: "center",
+    marginBottom: 16,
+  },
+  suggestionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    maxWidth: 720,
+    alignSelf: "center",
+    width: "100%",
+    marginTop: 4,
+  },
+  suggestionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#ECEAE2",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E0DDD5",
+  },
+  suggestionChipText: {
+    fontSize: 13,
+    color: "#374151",
+    fontWeight: "500",
   },
   toolPanel: {
     backgroundColor: "#F5F4EF",

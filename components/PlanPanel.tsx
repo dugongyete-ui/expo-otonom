@@ -15,6 +15,7 @@ import {
   Easing,
   TouchableOpacity,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { AgentPlan } from "@/lib/chat";
 import { cleanText } from "@/lib/text-utils";
 
@@ -627,7 +628,9 @@ export function PlanPanel({
             {totalCount > 0 && (
               <Text style={collapsedStyles.progress}>{completedCount}/{totalCount}</Text>
             )}
-            <Animated.Text style={[collapsedStyles.chevron, { transform: [{ rotate: chevronRotate }] }]}>↑</Animated.Text>
+            <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+              <Ionicons name="chevron-up" size={14} color="#9CA3AF" />
+            </Animated.View>
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -650,14 +653,27 @@ export function PlanPanel({
           activeOpacity={0.8}
         >
           <View style={styles.headerLeft}>
+            <View style={styles.headerIconWrap}>
+              <Ionicons name="list-outline" size={13} color="#6B7280" />
+            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>{plan.title || "Task Progress"}</Text>
+            {planRunning && (
+              <View style={styles.headerLiveBadge}>
+                <View style={styles.headerLiveDot} />
+              </View>
+            )}
+            {allDone && (
+              <View style={styles.headerDoneBadge}>
+                <Ionicons name="checkmark" size={10} color="#22C55E" />
+              </View>
+            )}
           </View>
           <View style={styles.headerRight}>
             {totalCount > 0 && (
               <Text style={styles.headerCounter}>{completedCount}/{totalCount}</Text>
             )}
             {onToggleVisible && (
-              <Text style={styles.chevron}>↓</Text>
+              <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
             )}
           </View>
         </TouchableOpacity>
@@ -772,11 +788,8 @@ const collapsedStyles = StyleSheet.create({
     fontSize: 11,
     color: "#9CA3AF",
   },
-  chevron: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
 });
+
 
 // ─── Expanded panel styles ────────────────────────────────────────────────────
 
@@ -803,12 +816,53 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  headerIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "#E8E6DF",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  headerLiveBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(59,130,246,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  headerLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#3B82F6",
+  },
+  headerDoneBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(34,197,94,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
+    fontSize: 13,
     color: "#1A1A1A",
-    lineHeight: 20,
+    lineHeight: 18,
+    flex: 1,
   },
   headerRight: {
     flexDirection: "row",
@@ -818,10 +872,6 @@ const styles = StyleSheet.create({
   },
   headerCounter: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
-  chevron: {
     fontSize: 12,
     color: "#9CA3AF",
   },

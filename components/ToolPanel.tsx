@@ -12,7 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { NativeIcon } from "@/components/icons/SvgIcon";
-import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, getToolCategory, TOOL_FUNCTION_MAP } from "@/lib/tool-constants";
+import { TOOL_ICON_MAP as CONST_TOOL_ICON_MAP, getToolCategory, TOOL_FUNCTION_MAP, getToolPrimaryArg } from "@/lib/tool-constants";
 import { ToolPanelContent } from "./ToolPanelContent";
 import type { ToolContent } from "@/lib/chat";
 
@@ -177,12 +177,20 @@ export function ToolPanel({
   // Shared panel body used in both desktop (Animated.View) and mobile (Modal) paths
   const panelBody = (
     <>
-      {/* Header */}
+      {/* Header — ai-manus "Manus Computer" style */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <NativeIcon name="terminal-outline" size={14} color="#888888" />
-          <Text style={styles.headerTitle}>Tools</Text>
-          {completedTools.length > 0 && (
+          <View style={styles.headerIconBox}>
+            <NativeIcon name="desktop-outline" size={13} color="#636366" />
+          </View>
+          <Text style={styles.headerTitle}>Agent Computer</Text>
+          {latestCallingTool && (
+            <View style={styles.liveBadge}>
+              <View style={styles.liveBadgeDot} />
+              <Text style={styles.liveBadgeText}>Live</Text>
+            </View>
+          )}
+          {!latestCallingTool && completedTools.length > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{completedTools.length}</Text>
             </View>
@@ -214,43 +222,48 @@ export function ToolPanel({
         ) : (
           completedTools.map((tool) => {
             const fnName = tool.function_name || tool.name;
+            const displayLabel = TOOL_FUNCTION_MAP[fnName] || TOOL_FUNCTION_MAP[tool.name] || fnName;
+            const argVal = getToolPrimaryArg(fnName, tool.input || {});
+            const isSelected = selectedToolId === tool.tool_call_id;
             return (
               <TouchableOpacity
                 key={tool.tool_call_id}
                 style={[
                   styles.toolItem,
-                  selectedToolId === tool.tool_call_id && styles.toolItemSelected,
+                  isSelected && styles.toolItemSelected,
                 ]}
                 onPress={() => handleSelectTool(tool.tool_call_id)}
                 activeOpacity={0.7}
               >
-                <View style={styles.toolIcon}>
+                <View style={[styles.toolIcon, tool.status === "called" && styles.toolIconDone, tool.status === "error" && styles.toolIconError]}>
                   <NativeIcon
                     name={getToolIcon(fnName)}
-                    size={14}
-                    color="#636366"
+                    size={13}
+                    color={tool.status === "calling" ? "#4a7cf0" : tool.status === "error" ? "#e05c5c" : "#636366"}
                   />
                 </View>
                 <View style={styles.toolInfo}>
-                  <Text style={styles.toolName} numberOfLines={1}>
-                    {TOOL_FUNCTION_MAP[fnName] || TOOL_FUNCTION_MAP[tool.name] || fnName}
+                  <Text style={[styles.toolName, isSelected && styles.toolNameSelected]} numberOfLines={1}>
+                    {displayLabel}
                   </Text>
-                  <View style={styles.toolStatusRow}>
-                    {tool.status === "calling" && (
-                      <ActivityIndicator size="small" color="#4a7cf0" style={styles.spinner} />
-                    )}
-                    {tool.status === "called" && (
-                      <Text style={[styles.toolStatus, { color: "#4CAF50", marginRight: 2 }]}>✓</Text>
-                    )}
-                    {tool.status === "error" && (
-                      <Text style={[styles.toolStatus, { color: "#e05c5c", marginRight: 2 }]}>✕</Text>
-                    )}
-                    <Text style={[styles.toolStatus, { color: getStatusColor(tool.status) }]}>
-                      {getStatusLabel(tool.status)}
-                    </Text>
-                  </View>
+                  {argVal ? (
+                    <Text style={styles.toolArgVal} numberOfLines={1}>{argVal}</Text>
+                  ) : (
+                    <View style={styles.toolStatusRow}>
+                      {tool.status === "calling" && (
+                        <ActivityIndicator size="small" color="#4a7cf0" style={styles.spinner} />
+                      )}
+                      <Text style={[styles.toolStatus, { color: getStatusColor(tool.status) }]}>
+                        {getStatusLabel(tool.status)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(tool.status) }]} />
+                <View style={[
+                  styles.statusDot,
+                  { backgroundColor: getStatusColor(tool.status) },
+                  tool.status === "calling" && styles.statusDotPulsing,
+                ]} />
               </TouchableOpacity>
             );
           })
@@ -360,10 +373,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  headerIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "#E5E3DC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
     color: "#1A1A1A",
+  },
+  liveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(59,130,246,0.08)",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,0.2)",
+  },
+  liveBadgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#3B82F6",
+  },
+  liveBadgeText: {
+    fontSize: 10,
+    color: "#3B82F6",
+    fontFamily: "Inter_600SemiBold",
   },
   badge: {
     backgroundColor: "#E5E3DC",
@@ -420,10 +463,26 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  toolIconDone: {
+    backgroundColor: "rgba(34,197,94,0.08)",
+  },
+  toolIconError: {
+    backgroundColor: "rgba(239,68,68,0.08)",
+  },
   toolName: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
     color: "#374151",
+    lineHeight: 16,
+  },
+  toolNameSelected: {
+    color: "#1A1A1A",
+  },
+  toolArgVal: {
+    fontFamily: "monospace",
+    fontSize: 10.5,
+    color: "#9CA3AF",
+    lineHeight: 14,
   },
   toolStatusRow: {
     flexDirection: "row",
@@ -461,6 +520,9 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     flexShrink: 0,
+  },
+  statusDotPulsing: {
+    opacity: 0.8,
   },
   detailContainer: {
     flex: 1,
