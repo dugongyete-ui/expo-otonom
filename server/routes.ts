@@ -3388,9 +3388,41 @@ print(json.dumps(results))
 
   // ─── v1 Session API routes — matching ai-manus session_routes.py contract ──
   // These routes provide the exact ai-manus API shape at /api/v1/sessions/*
-  // They delegate to the same underlying session store and agent infrastructure.
+  // All routes enforce ownership BEFORE any side effects.
 
-  // PUT /api/v1/sessions — create a new session
+  // Helper: verify session ownership against in-memory sessions + MongoDB.
+  // Returns the owning user_id string, or throws with appropriate HTTP status.
+  async function _v1VerifyOwner(sessionId: string, requestingUserId: string): Promise<string> {
+    // Check live in-memory session first
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession) {
+      const owner: string = (liveSession as any)._userId || "";
+      if (owner && requestingUserId && owner !== requestingUserId) {
+        const e: any = new Error("Access denied");
+        e.statusCode = 403;
+        throw e;
+      }
+      return owner;
+    }
+    // Fall through to MongoDB
+    const col = await getCollection("sessions");
+    if (!col) return "";
+    const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
+    if (!doc) {
+      const e: any = new Error("Session not found");
+      e.statusCode = 404;
+      throw e;
+    }
+    const owner: string = doc.user_id || "";
+    if (owner && requestingUserId && owner !== requestingUserId) {
+      const e: any = new Error("Access denied");
+      e.statusCode = 403;
+      throw e;
+    }
+    return owner;
+  }
+
+  // PUT /api/v1/sessions — create a new session (ai-manus: returns session_id)
   app.put("/api/v1/sessions", requireAuth, async (req: any, res: any) => {
     const userId: string = req.user?.id || "anon";
     const sessionId = randomUUID();
@@ -3412,7 +3444,7 @@ print(json.dumps(results))
     res.json({ success: true, data: { session_id: sessionId } });
   });
 
-  // GET /api/v1/sessions — list sessions for authenticated user
+  // GET /api/v1/sessions — list sessions for the authenticated user
   app.get("/api/v1/sessions", requireAuth, async (req: any, res: any) => {
     const requestingUserId: string = req.user?.id || "";
     try {
@@ -3422,19 +3454,23 @@ print(json.dumps(results))
         const query: Record<string, any> = {};
         if (requestingUserId) query.user_id = requestingUserId;
         const docs = await (col as any).find(query, {
-          projection: { _id: 0, session_id: 1, title: 1, status: 1, created_at: 1, updated_at: 1 },
+          projection: { _id: 0, session_id: 1, title: 1, status: 1, created_at: 1, updated_at: 1, chat_history: 1 },
           sort: { created_at: -1 },
           limit: 50,
         } as any).toArray();
-        sessions = docs.map((d: any) => ({
-          session_id: d.session_id,
-          title: d.title || null,
-          status: d.status || "completed",
-          is_shared: false,
-          unread_message_count: 0,
-          latest_message: null,
-          latest_message_at: d.updated_at ? Math.floor(new Date(d.updated_at).getTime() / 1000) : null,
-        }));
+        sessions = docs.map((d: any) => {
+          const history: any[] = Array.isArray(d.chat_history) ? d.chat_history : [];
+          const latestMsg = history.filter((m: any) => m.role === "assistant").pop();
+          return {
+            session_id: d.session_id,
+            title: d.title || null,
+            status: d.status || "completed",
+            is_shared: false,
+            unread_message_count: 0,
+            latest_message: latestMsg?.content || null,
+            latest_message_at: d.updated_at ? Math.floor(new Date(d.updated_at).getTime() / 1000) : null,
+          };
+        });
       }
       res.json({ success: true, data: { sessions } });
     } catch (err: any) {
@@ -3442,25 +3478,29 @@ print(json.dumps(results))
     }
   });
 
-  // GET /api/v1/sessions/:sessionId — get a single session
+  // GET /api/v1/sessions/:sessionId — get a single session with events
   app.get("/api/v1/sessions/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
     try {
+      await _v1VerifyOwner(sessionId, requestingUserId);
       const col = await getCollection("sessions");
       let sessionDoc: any = null;
       if (col) {
-        sessionDoc = await (col as any).findOne(
-          { session_id: sessionId },
-          { projection: { _id: 0 } },
-        );
+        sessionDoc = await (col as any).findOne({ session_id: sessionId }, { projection: { _id: 0 } });
       }
       if (!sessionDoc) {
         return res.status(404).json({ success: false, error: "Session not found" });
       }
-      if (requestingUserId && sessionDoc.user_id && sessionDoc.user_id !== requestingUserId) {
-        return res.status(403).json({ success: false, error: "Access denied" });
-      }
+      // Map chat_history to ai-manus-style message events
+      const history: any[] = Array.isArray(sessionDoc.chat_history) ? sessionDoc.chat_history : [];
+      const events = history.map((m: any, i: number) => ({
+        event_id: `${sessionId}-${i}`,
+        timestamp: Math.floor(new Date(sessionDoc.created_at || Date.now()).getTime() / 1000) + i,
+        type: "message",
+        role: m.role || "assistant",
+        content: m.content || "",
+      }));
       res.json({
         success: true,
         data: {
@@ -3468,40 +3508,34 @@ print(json.dumps(results))
           title: sessionDoc.title || null,
           status: sessionDoc.status || "completed",
           is_shared: false,
-          events: [],
+          events,
         },
       });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+      const status = (err as any).statusCode || 500;
+      res.status(status).json({ success: false, error: err.message });
     }
   });
 
-  // DELETE /api/v1/sessions/:sessionId — delete a session
+  // DELETE /api/v1/sessions/:sessionId — delete a session (ownership enforced)
   app.delete("/api/v1/sessions/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
-    const liveSession = activeAgentSessions.get(sessionId);
-    if (liveSession) {
-      const owner: string = (liveSession as any)._userId || "";
-      if (owner && requestingUserId && owner !== requestingUserId) {
-        return res.status(403).json({ success: false, error: "Access denied" });
-      }
-      if (!liveSession.done) {
-        try { liveSession.proc.kill("SIGTERM"); } catch {}
-        liveSession.done = true;
-        _broadcastToSession(liveSession, "data: [DONE]\n\n");
-      }
-      activeAgentSessions.delete(sessionId);
+    try {
+      await _v1VerifyOwner(sessionId, requestingUserId);
+    } catch (err: any) {
+      return res.status((err as any).statusCode || 500).json({ success: false, error: err.message });
     }
+    const liveSession = activeAgentSessions.get(sessionId);
+    if (liveSession && !liveSession.done) {
+      try { liveSession.proc.kill("SIGTERM"); } catch {}
+      liveSession.done = true;
+      _broadcastToSession(liveSession, "data: [DONE]\n\n");
+    }
+    activeAgentSessions.delete(sessionId);
     try {
       const col = await getCollection("sessions");
-      if (col) {
-        const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
-        if (doc && requestingUserId && doc.user_id && doc.user_id !== requestingUserId) {
-          return res.status(403).json({ success: false, error: "Access denied" });
-        }
-        await (col as any).deleteOne({ session_id: sessionId });
-      }
+      if (col) await (col as any).deleteOne({ session_id: sessionId });
     } catch (err: any) {
       console.warn("[v1/sessions] Delete from MongoDB failed:", err.message);
     }
@@ -3513,51 +3547,33 @@ print(json.dumps(results))
   app.post("/api/v1/sessions/:sessionId/stop", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
-
-    // --- Ownership check (in-memory session first, then MongoDB) ---
-    const liveSession = activeAgentSessions.get(sessionId);
-    if (liveSession) {
-      const owner: string = (liveSession as any)._userId || "";
-      if (owner && requestingUserId && owner !== requestingUserId) {
-        return res.status(403).json({ success: false, error: "Access denied" });
-      }
-    } else {
-      // No live session — verify ownership in MongoDB before writing to Redis
-      try {
-        const col = await getCollection("sessions");
-        if (col) {
-          const doc = await (col as any).findOne({ session_id: sessionId }, { projection: { user_id: 1 } });
-          if (!doc) {
-            return res.status(404).json({ success: false, error: "Session not found" });
-          }
-          const owner: string = doc.user_id || "";
-          if (owner && requestingUserId && owner !== requestingUserId) {
-            return res.status(403).json({ success: false, error: "Access denied" });
-          }
-        }
-      } catch (err: any) {
-        console.warn("[v1/sessions/stop] DB ownership check failed:", err.message);
-      }
-    }
-
-    // --- Ownership confirmed — now apply stop side effects ---
+    // Ownership check first — no side effects until verified
     try {
-      await redisSet(`agent:${sessionId}:stop`, "1");
-    } catch {}
-
+      await _v1VerifyOwner(sessionId, requestingUserId);
+    } catch (err: any) {
+      return res.status((err as any).statusCode || 500).json({ success: false, error: err.message });
+    }
+    // Ownership confirmed — apply stop
+    try { await redisSet(`agent:${sessionId}:stop`, "1"); } catch {}
+    const liveSession = activeAgentSessions.get(sessionId);
     if (liveSession && !liveSession.done) {
       try { liveSession.proc.kill("SIGTERM"); } catch {}
       liveSession.done = true;
       _broadcastToSession(liveSession, `data: ${JSON.stringify({ type: "error", error: "Session stopped." })}\n\n`);
       _broadcastToSession(liveSession, "data: [DONE]\n\n");
     }
-
     res.json({ success: true, data: null });
   });
 
-  // POST /api/v1/sessions/:sessionId/clear_unread_message_count — clear unread count
+  // POST /api/v1/sessions/:sessionId/clear_unread_message_count — ownership enforced
   app.post("/api/v1/sessions/:sessionId/clear_unread_message_count", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
+    const requestingUserId: string = req.user?.id || "";
+    try {
+      await _v1VerifyOwner(sessionId, requestingUserId);
+    } catch (err: any) {
+      return res.status((err as any).statusCode || 500).json({ success: false, error: err.message });
+    }
     try {
       const col = await getCollection("sessions");
       if (col) {
@@ -3570,31 +3586,161 @@ print(json.dumps(results))
     res.json({ success: true, data: null });
   });
 
-  // POST /api/v1/sessions/:sessionId/chat — SSE chat stream (ai-manus compatible)
-  // Delegates to /api/agent by rewriting the request body and forwarding internally.
-  // The existing /api/agent handler is reused for consistent spawning behaviour.
+  // POST /api/v1/sessions/:sessionId/chat — ai-manus compatible SSE chat
+  // Spawns the manus_runner (PlanActFlow) Python subprocess and emits
+  // ai-manus SSE framing: event: <type>\ndata: <json>\n\n
   app.post("/api/v1/sessions/:sessionId/chat", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
-    const { message, attachments, timestamp, event_id } = req.body || {};
+    const requestingUserId: string = req.user?.id || "";
+    const { message, attachments } = req.body || {};
 
-    if (!message && !attachments?.length) {
+    if (!message) {
       return res.status(400).json({ success: false, error: "message is required" });
     }
 
-    // Rewrite body to the /api/agent format and dispatch internally.
-    // The /api/agent handler reads: { message, session_id, attachments, ... }
-    req.body = {
-      message: message || "",
-      session_id: sessionId,
-      attachments: attachments || [],
-      is_continuation: false,
-    };
-    req.url = "/api/agent";
-    req.path = "/api/agent";
+    // Ownership check — must happen before starting any subprocess
+    try {
+      await _v1VerifyOwner(sessionId, requestingUserId);
+    } catch (err: any) {
+      return res.status((err as any).statusCode || 500).json({ success: false, error: err.message });
+    }
 
-    // Dispatch to the /api/agent handler via Express's router
-    app.handle(req, res, () => {
-      res.status(500).json({ success: false, error: "Internal routing error" });
+    // Reject if session is already running
+    const existingSession = activeAgentSessions.get(sessionId);
+    if (existingSession && !existingSession.done) {
+      return res.status(409).json({ success: false, error: "Session is already running" });
+    }
+
+    // ai-manus SSE framing: event: <type>\ndata: <json>\n\n
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const sendSSE = (evtType: string, data: Record<string, any>) => {
+      try { res.write(`event: ${evtType}\ndata: ${JSON.stringify(data)}\n\n`); } catch {}
+    };
+
+    const { apiKey, agentModel } = getCerebrasConfig();
+    if (!apiKey) {
+      sendSSE("error", { event_id: null, timestamp: Math.floor(Date.now() / 1000), error: "COHERE_API_KEY not configured" });
+      try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
+      return;
+    }
+
+    // Spawn the manus_runner module (PlanActFlow) as a Python subprocess
+    const proc = spawn("python3", ["-u", "-c", `
+import sys, json, asyncio
+sys.stdout.reconfigure(line_buffering=True)
+from server.agent.runner.manus_runner import run_plan_act_flow_async
+
+async def main():
+    data = json.loads(sys.stdin.read())
+    async for evt in run_plan_act_flow_async(
+        user_message=data['message'],
+        attachments=data.get('attachments', []),
+        session_id=data['session_id'],
+        user_id=data.get('user_id', 'auto-user'),
+    ):
+        print(json.dumps(evt, default=str))
+
+asyncio.run(main())
+`], {
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        COHERE_API_KEY: apiKey,
+        COHERE_AGENT_MODEL: agentModel,
+        PYTHONPATH: process.cwd(),
+        PYTHONUNBUFFERED: "1",
+        DZECK_SESSION_ID: sessionId,
+        DZECK_USER_ID: requestingUserId,
+      },
+    });
+
+    proc.stdin.write(JSON.stringify({
+      message,
+      attachments: attachments || [],
+      session_id: sessionId,
+      user_id: requestingUserId,
+    }));
+    proc.stdin.end();
+
+    // Register in activeAgentSessions for concurrency tracking
+    const v1Session: any = {
+      proc,
+      done: false,
+      startedAt: Date.now(),
+      eventQueue: [],
+      clients: new Set([res]),
+      stderrBuffer: "",
+      _userId: requestingUserId,
+      _sessionId: sessionId,
+      _userMessage: message,
+      _title: null,
+      _mongoSyncing: false,
+    };
+    activeAgentSessions.set(sessionId, v1Session);
+
+    // Mark session running in MongoDB
+    getCollection("sessions").then((col) => {
+      if (!col) return;
+      (col as any).updateOne(
+        { session_id: sessionId },
+        { $set: { status: "running", user_id: requestingUserId, updated_at: new Date() } },
+        { upsert: false },
+      ).catch(() => {});
+    }).catch(() => {});
+
+    let buf = "";
+    proc.stdout.on("data", (chunk: Buffer) => {
+      buf += chunk.toString();
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try {
+          const evt = JSON.parse(line);
+          const evtType: string = evt.type || "message";
+          // ai-manus SSE schema: event: <type> + data: { event_id, timestamp, ...fields }
+          const { type: _t, id, timestamp, ...rest } = evt;
+          sendSSE(evtType, {
+            event_id: id || null,
+            timestamp: timestamp ? Math.floor(timestamp) : Math.floor(Date.now() / 1000),
+            ...rest,
+          });
+        } catch {}
+      }
+    });
+
+    proc.stderr.on("data", (chunk: Buffer) => {
+      v1Session.stderrBuffer = ((v1Session.stderrBuffer || "") + chunk.toString()).slice(-2000);
+    });
+
+    proc.on("close", (code: number) => {
+      v1Session.done = true;
+      activeAgentSessions.delete(sessionId);
+      // Emit ai-manus done event
+      sendSSE("done", { event_id: null, timestamp: Math.floor(Date.now() / 1000), success: code === 0 });
+      try { res.write("data: [DONE]\n\n"); res.end(); } catch {}
+      // Mark session completed in MongoDB
+      getCollection("sessions").then((col) => {
+        if (!col) return;
+        (col as any).updateOne(
+          { session_id: sessionId },
+          { $set: { status: code === 0 ? "completed" : "failed", updated_at: new Date() } },
+        ).catch(() => {});
+      }).catch(() => {});
+    });
+
+    res.on("close", () => {
+      if (!v1Session.done) {
+        try { proc.kill("SIGTERM"); } catch {}
+      }
+      activeAgentSessions.delete(sessionId);
     });
   });
 
