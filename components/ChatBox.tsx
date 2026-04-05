@@ -14,7 +14,7 @@ import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatAttachment } from "@/lib/chat";
 import { COLORS } from "@/lib/theme";
-import { AddIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
+import { PaperclipIcon, ArrowUpIcon, StopIcon, CloseCircleIcon, DocumentIcon } from "@/components/icons/SvgIcon";
 
 interface ChatBoxProps {
   value: string;
@@ -148,7 +148,7 @@ export function ChatBox({
             activeOpacity={0.6}
           >
             <View style={styles.attachBtnInner}>
-              <Text style={styles.paperclipIcon}>📎</Text>
+              <PaperclipIcon size={18} color="#9CA3AF" />
             </View>
           </TouchableOpacity>
 
@@ -267,9 +267,6 @@ const styles = StyleSheet.create({
     borderColor: "#E5E3DC",
     alignItems: "center",
     justifyContent: "center",
-  },
-  paperclipIcon: {
-    fontSize: 14,
   },
   toolbarRight: {
     flexDirection: "row",

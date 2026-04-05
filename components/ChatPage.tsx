@@ -467,7 +467,7 @@ export function ChatPage({
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [activeModel, setActiveModel] = useState(DEFAULT_MODEL_FALLBACK);
   const { locale, changeLocale } = useI18n();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [attachments, setAttachments] = useState<any[]>([]);
   const [e2bStatus, setE2bStatus] = useState<"checking" | "connected" | "error">("checking");
   const [taskCompleted, setTaskCompleted] = useState(false);
@@ -1857,12 +1857,15 @@ export function ChatPage({
     <View style={styles.welcomeContainer}>
       <View style={styles.welcomeContent}>
         <Text style={styles.welcomeGreeting}>
-          {locale === "id" ? "Halo, selamat datang" : "Hello, welcome"}
+          {(() => {
+            const firstName = user?.fullname?.trim().split(/\s+/)[0] || null;
+            return locale === "id"
+              ? `Halo, ${firstName ?? "selamat datang"}`
+              : `Hello, ${firstName ?? "welcome"}`;
+          })()}
         </Text>
         <Text style={styles.welcomeSubtitle}>
-          {locale === "id"
-            ? isAgentMode ? "Apa yang ingin dikerjakan?" : "Apa yang ingin kamu tanyakan?"
-            : isAgentMode ? "What do you want to accomplish?" : "What do you want to ask?"}
+          {locale === "id" ? "Apa yang bisa saya bantu?" : "What can I do for you?"}
         </Text>
       </View>
       <ScrollView
@@ -2303,8 +2306,10 @@ export function ChatPage({
             <View style={styles.taskCompletedWrap}>
               {/* Only show goal description - clean and minimal */}
               <View style={styles.taskCompletedHeaderSection}>
-                <CheckCircleIcon size={20} color="#4CAF50" />
-                <Text style={styles.taskCompletedHeaderText}>Tugas telah selesai</Text>
+                <CheckCircleIcon size={20} color="#22C55E" />
+                <Text style={styles.taskCompletedHeaderText}>
+                  {locale === "id" ? "Tugas telah selesai" : "Task completed"}
+                </Text>
               </View>
               {taskFinalNarrative && (
                 <Text style={styles.taskCompletedGoalText}>{taskFinalNarrative}</Text>
@@ -2312,7 +2317,9 @@ export function ChatPage({
               {/* Star rating - minimal and clean */}
               <View style={styles.starRatingRow}>
                 <Text style={styles.starRatingLabel}>
-                  {starRating > 0 ? "Terima kasih atas rating Anda" : "Bagaimana hasil kerjanya?"}
+                  {starRating > 0
+                    ? (locale === "id" ? "Terima kasih atas rating Anda" : "Thank you for your rating")
+                    : (locale === "id" ? "Bagaimana hasil kerjanya?" : "How was the result?")}
                 </Text>
                 <View style={styles.starRatingStars}>
                   {[1, 2, 3, 4, 5].map(n => (
@@ -2328,8 +2335,8 @@ export function ChatPage({
                       }}
                     >
                       <StarIcon
-                        size={20}
-                        color={n <= starRating ? "#f5a623" : "#444444"}
+                        size={22}
+                        color={n <= starRating ? "#F59E0B" : "#D1CFC8"}
                         filled={n <= starRating}
                       />
                     </TouchableOpacity>
@@ -2380,9 +2387,9 @@ export function ChatPage({
                       </View>
                       <Text style={[
                         styles.floatingPlanStepText,
-                        isRunning && { color: "#c8c8c8" },
-                        isDone && { color: "#505050" },
-                        isFailed && { color: "#c07070" },
+                        isRunning && { color: "#1A1A1A", fontFamily: "Inter_500Medium" },
+                        isDone && { color: "#9CA3AF" },
+                        isFailed && { color: "#EF4444" },
                       ]} numberOfLines={2}>{step.description}</Text>
                     </View>
                   );

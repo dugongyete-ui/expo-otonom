@@ -44,6 +44,7 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isAllTasksCollapsed, setIsAllTasksCollapsed] = useState(false);
 
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
@@ -161,8 +162,12 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
         </View>
       </TouchableOpacity>
 
-      {/* All Tasks label */}
-      <View style={styles.sectionHeader}>
+      {/* All Tasks label - collapsible like ai-manus */}
+      <TouchableOpacity
+        style={styles.sectionHeader}
+        onPress={() => setIsAllTasksCollapsed(v => !v)}
+        activeOpacity={0.7}
+      >
         <Text style={styles.sectionHeaderText}>{t("All Tasks")}</Text>
         {runningCount > 0 && (
           <View style={styles.runningBadge}>
@@ -170,34 +175,38 @@ export function LeftPanel({ isOpen, onToggle, onNewSession }: LeftPanelProps) {
             <Text style={styles.runningBadgeText}>{runningCount}</Text>
           </View>
         )}
-      </View>
+        <View style={{ flex: 1 }} />
+        <Text style={styles.sectionChevron}>{isAllTasksCollapsed ? "⌄" : "⌃"}</Text>
+      </TouchableOpacity>
 
       {/* Sessions List */}
-      {isLoading && sessions.length === 0 ? (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="small" color="#9CA3AF" />
-        </View>
-      ) : sessions.length > 0 ? (
-        <ScrollView
-          style={styles.sessionsList}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
-        >
-          {sessions.map((session) => (
-            <SessionItem
-              key={session.session_id}
-              session={session}
-              isRunning={isSessionActuallyRunning(session)}
-              onSelect={() => handleSessionSelect(session.session_id)}
-              onDelete={() => handleDeleteSession(session.session_id)}
-            />
-          ))}
-        </ScrollView>
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateIcon}>💬</Text>
-          <Text style={styles.emptyStateText}>{t("Create a task to get started")}</Text>
-        </View>
+      {!isAllTasksCollapsed && (
+        isLoading && sessions.length === 0 ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="small" color="#9CA3AF" />
+          </View>
+        ) : sessions.length > 0 ? (
+          <ScrollView
+            style={styles.sessionsList}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
+          >
+            {sessions.map((session) => (
+              <SessionItem
+                key={session.session_id}
+                session={session}
+                isRunning={isSessionActuallyRunning(session)}
+                onSelect={() => handleSessionSelect(session.session_id)}
+                onDelete={() => handleDeleteSession(session.session_id)}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateIcon}>💬</Text>
+            <Text style={styles.emptyStateText}>{t("Create a task to get started")}</Text>
+          </View>
+        )
       )}
 
       {/* Clear History Button */}
@@ -380,6 +389,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
     fontWeight: "500",
+  },
+  sectionChevron: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    paddingHorizontal: 2,
   },
   runningBadge: {
     flexDirection: "row",

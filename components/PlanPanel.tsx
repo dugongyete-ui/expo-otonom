@@ -184,13 +184,13 @@ function ClockIcon({ size = 14, color = "#888888" }: { size?: number; color?: st
 
 // ─── Step status icon ─────────────────────────────────────────────────────────
 
-function StepStatusIcon({ status }: { status: string }) {
+function StepStatusIcon({ status, index = 0 }: { status: string; index?: number }) {
   const isRunning = status === "running";
   const isDone = status === "completed";
   const isFailed = status === "failed";
 
   if (isRunning) {
-    return <Spinner size={14} color="#4a7cf0" />;
+    return <Spinner size={14} color="#3B82F6" />;
   }
   if (isDone) {
     return (
@@ -206,7 +206,11 @@ function StepStatusIcon({ status }: { status: string }) {
       </View>
     );
   }
-  return <ClockIcon size={14} color="#666666" />;
+  return (
+    <View style={iconStyles.pendingCircle}>
+      <Text style={iconStyles.pendingNum}>{index + 1}</Text>
+    </View>
+  );
 }
 
 const iconStyles = StyleSheet.create({
@@ -241,6 +245,22 @@ const iconStyles = StyleSheet.create({
     color: "#EF4444",
     fontWeight: "700",
     lineHeight: 10,
+  },
+  pendingCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#F5F4EF",
+    borderWidth: 1,
+    borderColor: "#D1CFC8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pendingNum: {
+    fontSize: 7,
+    color: "#9CA3AF",
+    fontWeight: "700",
+    lineHeight: 9,
   },
 });
 
@@ -417,7 +437,7 @@ function StepRow({
     <View style={stepStyles.row}>
       <View style={stepStyles.leftCol}>
         <View style={stepStyles.iconWrap}>
-          <StepStatusIcon status={step.status} />
+          <StepStatusIcon status={step.status} index={index} />
         </View>
         {!isLast && (
           <View style={[

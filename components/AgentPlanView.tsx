@@ -138,7 +138,7 @@ function buildToolLabel(fnName: string, args: Record<string, unknown>): string {
 
 // ─── Animated helpers ────────────────────────────────────────────────────────
 
-function SpinnerIcon({ size = 11 }: { size?: number }) {
+function SpinnerIcon({ size = 10 }: { size?: number }) {
   const rotAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const anim = Animated.loop(
@@ -152,7 +152,7 @@ function SpinnerIcon({ size = 11 }: { size?: number }) {
     <Animated.View style={{ transform: [{ rotate }] }}>
       <View style={{
         width: size, height: size, borderRadius: size / 2,
-        borderWidth: 1.5, borderColor: "#7090c8", borderTopColor: "transparent",
+        borderWidth: 1.5, borderColor: "#3B82F6", borderTopColor: "transparent",
       }} />
     </Animated.View>
   );
@@ -236,66 +236,66 @@ const pillStyles = StyleSheet.create({
   pill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#181818",
+    backgroundColor: "#F5F4EF",
     borderWidth: 1,
-    borderColor: "#242424",
+    borderColor: "#E5E3DC",
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    marginBottom: 5,
+    paddingVertical: 6,
+    marginBottom: 4,
     gap: 9,
   },
   pillCalling: {
-    borderColor: "#2a3a58",
-    backgroundColor: "#141820",
+    borderColor: "rgba(59,130,246,0.25)",
+    backgroundColor: "rgba(59,130,246,0.04)",
   },
   pillError: {
-    borderColor: "#382020",
-    backgroundColor: "#160f0f",
+    borderColor: "rgba(239,68,68,0.2)",
+    backgroundColor: "rgba(239,68,68,0.03)",
   },
   statusDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#222222",
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#E5E3DC",
     borderWidth: 1,
-    borderColor: "#303030",
+    borderColor: "#D1CFC8",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   statusDotCalling: {
-    borderColor: "#3a5890",
-    backgroundColor: "#111828",
+    borderColor: "rgba(59,130,246,0.4)",
+    backgroundColor: "rgba(59,130,246,0.06)",
   },
   statusDotError: {
-    borderColor: "#502828",
-    backgroundColor: "#1a0f0f",
+    borderColor: "rgba(239,68,68,0.3)",
+    backgroundColor: "rgba(239,68,68,0.05)",
   },
   checkChar: {
-    fontSize: 9,
-    color: "#606060",
+    fontSize: 8,
+    color: "#22C55E",
     fontWeight: "700",
-    lineHeight: 11,
+    lineHeight: 10,
   },
   errorChar: {
-    fontSize: 9,
-    color: "#906060",
+    fontSize: 8,
+    color: "#EF4444",
     fontWeight: "700",
-    lineHeight: 11,
+    lineHeight: 10,
   },
   label: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    color: "#686868",
+    fontSize: 12.5,
+    color: "#6B7280",
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   labelCalling: {
-    color: "#8090b8",
+    color: "#3B82F6",
   },
   labelError: {
-    color: "#906868",
+    color: "#EF4444",
   },
 });
 
@@ -352,10 +352,10 @@ function NarrativeLine({ text, animDelay = 0 }: { text: string; animDelay?: numb
 const narStyles = StyleSheet.create({
   text: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13.5,
-    color: "#b0b0b0",
-    lineHeight: 20,
-    paddingVertical: 6,
+    fontSize: 13,
+    color: "#9CA3AF",
+    lineHeight: 19,
+    paddingVertical: 4,
     paddingHorizontal: 2,
   },
 });
@@ -376,7 +376,7 @@ function PhaseSpinner() {
     <Animated.View style={{ transform: [{ rotate }] }}>
       <View style={{
         width: 10, height: 10, borderRadius: 5,
-        borderWidth: 1.5, borderColor: "#5b8def", borderTopColor: "transparent",
+        borderWidth: 1.5, borderColor: "#3B82F6", borderTopColor: "transparent",
       }} />
     </Animated.View>
   );
@@ -399,11 +399,11 @@ function ThinkingRow() {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 }}>
       <Animated.View style={{
-        width: 7, height: 7, borderRadius: 3.5,
-        backgroundColor: "#4a7cf0", opacity: pulseAnim,
+        width: 6, height: 6, borderRadius: 3,
+        backgroundColor: "#3B82F6", opacity: pulseAnim,
       }} />
-      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#5a78b8" }}>
-        Sedang berpikir
+      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12.5, color: "#9CA3AF" }}>
+        Sedang berpikir...
       </Text>
     </View>
   );
@@ -416,7 +416,7 @@ export function AgentGoalMessage({ message }: { message: string }) {
 }
 
 const goalStyles = StyleSheet.create({
-  text: { fontFamily: "Inter_400Regular", fontSize: 14, color: "#c0c0c0", lineHeight: 21, paddingVertical: 4 },
+  text: { fontFamily: "Inter_400Regular", fontSize: 13.5, color: "#374151", lineHeight: 20, paddingVertical: 4 },
 });
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -586,48 +586,59 @@ export function AgentPlanView({
 const planStyles = StyleSheet.create({
   container: {
     marginVertical: 4,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E3DC",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 6,
-    paddingRight: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingRight: 12,
   },
   phaseCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#F5F4EF",
     borderWidth: 1.5,
-    borderColor: "#333333",
+    borderColor: "#D1CFC8",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   phaseCircleRunning: {
-    borderColor: "#4a7cf0",
-    backgroundColor: "rgba(74,124,240,0.09)",
+    borderColor: "#3B82F6",
+    backgroundColor: "rgba(59,130,246,0.06)",
   },
   phaseCircleDone: {
-    borderColor: "#4CAF50",
-    backgroundColor: "rgba(76,175,80,0.09)",
+    borderColor: "#22C55E",
+    backgroundColor: "rgba(34,197,94,0.06)",
   },
   phaseCheck: {
     fontSize: 10,
-    color: "#5CAF5C",
+    color: "#22C55E",
     fontWeight: "700",
     lineHeight: 14,
   },
   phaseTitle: {
     fontFamily: "Inter_500Medium",
-    fontSize: 14,
-    color: "#d5d5d5",
-    lineHeight: 20,
+    fontSize: 13.5,
+    color: "#1A1A1A",
+    lineHeight: 19,
     flex: 1,
   },
   phaseTitleDone: {
-    color: "#888888",
+    color: "#6B7280",
   },
   headerRight: {
     flexDirection: "row",
@@ -638,23 +649,27 @@ const planStyles = StyleSheet.create({
   counter: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: "#555555",
+    color: "#9CA3AF",
   },
   chevron: {
-    fontSize: 11,
-    color: "#555555",
+    fontSize: 12,
+    color: "#9CA3AF",
   },
   body: {
     flexDirection: "row",
-    paddingLeft: 9,
-    marginTop: 2,
-    marginBottom: 4,
+    paddingLeft: 12,
+    paddingRight: 12,
+    marginTop: 0,
+    marginBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F0EEE6",
+    paddingTop: 8,
   },
   leftBorder: {
     width: 1.5,
-    backgroundColor: "#252525",
+    backgroundColor: "#E5E3DC",
     borderRadius: 1,
-    marginRight: 14,
+    marginRight: 12,
     flexShrink: 0,
   },
   content: {
