@@ -2126,9 +2126,62 @@ def image_view(path: str) -> ToolResult:
 # --- BrowserTool class (Manus pattern) ---
 
 class BrowserTool:
-    """Browser tool class wrapping all browser functions."""
+    """
+    Browser tool class wrapping all browser functions.
+    Conforms to the BaseTool interface: has_function() and invoke_function()
+    so that BaseAgent can dispatch tool calls through this toolkit without
+    inheriting from BaseTool (avoids rewriting the 2200-line module).
+    """
 
     name: str = "browser"
+
+    # Map of function name → module-level callable.  Built lazily on first access.
+    _BROWSER_FUNCS = None
+
+    @classmethod
+    def _get_func_map(cls):
+        if cls._BROWSER_FUNCS is None:
+            import sys
+            mod = sys.modules[__name__]
+            cls._BROWSER_FUNCS = {
+                fname: getattr(mod, fname)
+                for fname in [
+                    "browser_navigate", "browser_view", "browser_click",
+                    "browser_input", "browser_move_mouse", "browser_press_key",
+                    "browser_scroll_down", "browser_scroll_up",
+                    "browser_select_option", "browser_console_exec",
+                    "browser_console_view", "browser_save_image",
+                    "browser_restart", "browser_screenshot",
+                    "browser_tab_list", "browser_tab_new", "browser_tab_close",
+                    "browser_tab_switch", "browser_drag", "browser_file_upload",
+                ]
+                if hasattr(mod, fname)
+            }
+        return cls._BROWSER_FUNCS
+
+    def has_function(self, function_name: str) -> bool:
+        """Check if a browser function name is handled by this toolkit."""
+        return function_name in self._get_func_map()
+
+    async def invoke_function(self, function_name: str, **kwargs):
+        """Dispatch a browser function call and return a ToolResult."""
+        import asyncio, inspect
+        func_map = self._get_func_map()
+        if function_name not in func_map:
+            from server.agent.models.tool_result import ToolResult
+            return ToolResult(success=False, message=f"Unknown browser function: {function_name}")
+        fn = func_map[function_name]
+        import inspect as _inspect
+        sig = _inspect.signature(fn)
+        filtered = {k: v for k, v in kwargs.items() if k in sig.parameters}
+        try:
+            result = fn(**filtered)
+            if asyncio.iscoroutine(result):
+                return await result
+            return result
+        except Exception as e:
+            from server.agent.models.tool_result import ToolResult
+            return ToolResult(success=False, message=f"Browser error: {e}")
 
     def get_tools(self) -> list:
         return [

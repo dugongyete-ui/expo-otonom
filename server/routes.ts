@@ -3479,6 +3479,7 @@ print(json.dumps(results))
   });
 
   // GET /api/v1/sessions/:sessionId — get a single session with events
+  // Returns event_log (if persisted by manus_runner) or falls back to chat_history
   app.get("/api/v1/sessions/:sessionId", requireAuth, async (req: any, res: any) => {
     const { sessionId } = req.params;
     const requestingUserId: string = req.user?.id || "";
@@ -3492,15 +3493,26 @@ print(json.dumps(results))
       if (!sessionDoc) {
         return res.status(404).json({ success: false, error: "Session not found" });
       }
-      // Map chat_history to ai-manus-style message events
-      const history: any[] = Array.isArray(sessionDoc.chat_history) ? sessionDoc.chat_history : [];
-      const events = history.map((m: any, i: number) => ({
-        event_id: `${sessionId}-${i}`,
-        timestamp: Math.floor(new Date(sessionDoc.created_at || Date.now()).getTime() / 1000) + i,
-        type: "message",
-        role: m.role || "assistant",
-        content: m.content || "",
-      }));
+      // Prefer event_log (persisted by manus_runner AgentTaskRunner parity);
+      // fall back to mapping chat_history to message events for backward compat.
+      let events: any[];
+      if (Array.isArray(sessionDoc.event_log) && sessionDoc.event_log.length > 0) {
+        events = sessionDoc.event_log.map((e: any, i: number) => ({
+          event_id: e.id || `${sessionId}-${i}`,
+          timestamp: e.timestamp ? Math.floor(e.timestamp) : Math.floor(new Date(sessionDoc.created_at || Date.now()).getTime() / 1000) + i,
+          ...e,
+        }));
+      } else {
+        const history: any[] = Array.isArray(sessionDoc.chat_history) ? sessionDoc.chat_history : [];
+        const baseTs = Math.floor(new Date(sessionDoc.created_at || Date.now()).getTime() / 1000);
+        events = history.map((m: any, i: number) => ({
+          event_id: `${sessionId}-${i}`,
+          timestamp: baseTs + i,
+          type: "message",
+          role: m.role || "assistant",
+          content: m.content || m.message || "",
+        }));
+      }
       res.json({
         success: true,
         data: {
@@ -3694,6 +3706,61 @@ asyncio.run(main())
       ).catch(() => {});
     }).catch(() => {});
 
+    // Map Python event dict to exact ai-manus SSE schema field names.
+    // ai-manus reference: backend/app/interfaces/schemas/event.py
+    const mapEventToManusSchema = (evt: Record<string, any>): [string, Record<string, any>] => {
+      const evtType: string = evt.type || "message";
+      const base = {
+        event_id: evt.id || null,
+        timestamp: evt.timestamp ? Math.floor(evt.timestamp) : Math.floor(Date.now() / 1000),
+      };
+      switch (evtType) {
+        case "message":
+          return [evtType, { ...base,
+            role: evt.role || "assistant",
+            // ai-manus uses `content` not `message`
+            content: evt.content ?? evt.message ?? "",
+            attachments: evt.attachments || [],
+          }];
+        case "tool":
+          return [evtType, { ...base,
+            status: evt.status || "calling",
+            // ai-manus field names: name, function, args, result
+            name: evt.tool_name || evt.name || "",
+            function: evt.function_name || evt.function || "",
+            args: evt.function_args ?? evt.args ?? {},
+            result: evt.function_result?.message ?? evt.function_result ?? evt.result ?? null,
+            tool_call_id: evt.tool_call_id || null,
+            tool_content: evt.tool_content || null,
+          }];
+        case "plan":
+          return [evtType, { ...base,
+            status: evt.status || "creating",
+            plan: evt.plan || null,
+            step: evt.step || null,
+          }];
+        case "step":
+          return [evtType, { ...base,
+            status: evt.status || "pending",
+            step: evt.step || null,
+          }];
+        case "title":
+          return [evtType, { ...base, title: evt.title || "" }];
+        case "error":
+          return [evtType, { ...base, error: evt.error || "", details: evt.details || null }];
+        case "done":
+          return [evtType, { ...base, success: evt.success !== false }];
+        case "wait":
+          return [evtType, { ...base, prompt: evt.prompt || null }];
+        case "thinking":
+          return [evtType, { ...base, content: evt.content || "" }];
+        default:
+          // Unknown event type — pass through minus internal fields
+          const { type: _t, id: _id, timestamp: _ts, ...rest } = evt;
+          return [evtType, { ...base, ...rest }];
+      }
+    };
+
     let buf = "";
     proc.stdout.on("data", (chunk: Buffer) => {
       buf += chunk.toString();
@@ -3704,14 +3771,8 @@ asyncio.run(main())
         if (!line) continue;
         try {
           const evt = JSON.parse(line);
-          const evtType: string = evt.type || "message";
-          // ai-manus SSE schema: event: <type> + data: { event_id, timestamp, ...fields }
-          const { type: _t, id, timestamp, ...rest } = evt;
-          sendSSE(evtType, {
-            event_id: id || null,
-            timestamp: timestamp ? Math.floor(timestamp) : Math.floor(Date.now() / 1000),
-            ...rest,
-          });
+          const [evtType, payload] = mapEventToManusSchema(evt);
+          sendSSE(evtType, payload);
         } catch {}
       }
     });
